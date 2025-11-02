@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<Shell
+    x:Class="HealthHelper.AppShell"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:pages="clr-namespace:HealthHelper.Pages"
+    Title="HealthHelper">
+
+    <FlyoutItem Title="Diet Tracker">
+        <ShellContent
+            Icon="{StaticResource IconCamera}"
+            ContentTemplate="{DataTemplate pages:MainPage}"
+            Route="today" />
+    </FlyoutItem>
+
+    <FlyoutItem Title="Settings">
+        <ShellContent
+            Icon="{StaticResource IconSettings}"
+            ContentTemplate="{DataTemplate pages:SettingsPage}"
+            Route="settings" />
+    </FlyoutItem>
+
+    <!-- Hidden ShellContent registrations provide routable endpoints without appearing in the flyout. -->
+    <ShellContent
+        Route="week"
+        ContentTemplate="{DataTemplate pages:WeekViewPage}"
+        IsVisible="False" />
+
+    <ShellContent
+        Route="month"
+        ContentTemplate="{DataTemplate pages:MonthViewPage}"
+        IsVisible="False" />
+
+    <ShellContent
+        Route="year"
+        ContentTemplate="{DataTemplate pages:YearViewPage}"
+        IsVisible="False" />
+
+    <ShellContent
+        Route="day"
+        ContentTemplate="{DataTemplate pages:DayDetailPage}"
+        IsVisible="False" />
+
+</Shell>

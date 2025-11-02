@@ -1,6 +1,6 @@
 <Solution>
   <Project Path="HealthHelper.ServiceDefaults/HealthHelper.ServiceDefaults.csproj" />
-  <Project Path="HealthHelper/HealthHelper.csproj">
+  <Project Path="HealthHelper/WellnessWingman.csproj">
     <Deploy Solution="Debug|*" />
   </Project>
   <Project Path="HealthHelper.Tests/HealthHelper.Tests.csproj" />
