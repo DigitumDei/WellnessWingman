@@ -47,7 +47,7 @@ var entries = await _context.TrackedEntries
 ## Files Changed
 
 **Modified**:
-- `HealthHelper/Data/SqliteTrackedEntryRepository.cs`
+- `WellnessWingman/Data/SqliteTrackedEntryRepository.cs`
   - Added `.AsNoTracking()` to `GetByDayAsync()`
   - Added `.AsNoTracking()` to `GetByIdAsync()`
 

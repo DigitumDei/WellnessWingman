@@ -1,6 +1,6 @@
-# HealthHelper
+# WellnessWingman
 
-HealthHelper is a .NET MAUI companion app that lets you capture day-to-day health data while keeping full control over your information. Large Language Models (LLMs) generate insights, summaries, and coaching suggestions locally on your device or through user-supplied APIs—HealthHelper never ships sensitive data to a managed cloud.
+WellnessWingman is a .NET MAUI companion app that lets you capture day-to-day health data while keeping full control over your information. Large Language Models (LLMs) generate insights, summaries, and coaching suggestions locally on your device or through user-supplied APIs—WellnessWingman never ships sensitive data to a managed cloud.
 
 ## Vision
 
@@ -19,15 +19,15 @@ HealthHelper is a .NET MAUI companion app that lets you capture day-to-day healt
 1. Install the .NET 10 preview workload for MAUI (see `.config/dotnet-tools.json` once available).
 2. Restore dependencies:
    ```bash
-   dotnet restore HealthHelper.slnx
+   dotnet restore WellnessWingman.slnx
    ```
 3. Build the solution:
    ```bash
-   dotnet build HealthHelper.slnx
+   dotnet build WellnessWingman.slnx
    ```
 4. Run the MAUI app on your preferred target (example for Android):
    ```bash
-   dotnet build HealthHelper/HealthHelper.csproj -t:Run -f net10.0-android
+   dotnet build WellnessWingman/WellnessWingman.csproj -t:Run -f net10.0-android
    ```
 
 ## Privacy Notes

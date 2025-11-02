@@ -51,7 +51,7 @@ Refresh entire meal list from database
 Photo appears in UI
 ```
 
-**File**: `HealthHelper/Pages/MainPage.xaml.cs:35-107` (`TakePhotoButton_Clicked`)
+**File**: `WellnessWingman/Pages/MainPage.xaml.cs:35-107` (`TakePhotoButton_Clicked`)
 
 ## Desired Flow (Asynchronous)
 
@@ -88,7 +88,7 @@ UI: Update entry to show "Completed" state and enable clicking
 ### 1. Database Schema Changes
 
 #### 1.1 Add ProcessingStatus to TrackedEntry Model
-**File**: `HealthHelper/Models/TrackedEntry.cs`
+**File**: `WellnessWingman/Models/TrackedEntry.cs`
 
 Add a new property to track analysis processing state:
 ```csharp
@@ -113,16 +113,16 @@ public enum ProcessingStatus
 - Decide how the migration backfills existing data. The TODO assumes historical rows are truly "complete"; if any past analysis failed silently, we may want to log and review before force-marking them as `Completed`.
 
 #### 1.2 Create Database Migration
-**File**: `HealthHelper/Migrations/[timestamp]_AddProcessingStatusToTrackedEntry.cs`
+**File**: `WellnessWingman/Migrations/[timestamp]_AddProcessingStatusToTrackedEntry.cs`
 
 - Add `ProcessingStatus` column (integer) with default value 0 (Pending)
 - Existing entries should default to `Completed` since they were processed before this feature
-- Update `HealthHelperDbContextModelSnapshot.cs`
+- Update `WellnessWingmanDbContextModelSnapshot.cs`
 
 ### 2. UI Model Changes
 
 #### 2.1 Update MealPhoto Model
-**File**: `HealthHelper/Models/MealPhoto.cs`
+**File**: `WellnessWingman/Models/MealPhoto.cs`
 
 Add processing status to the UI model:
 ```csharp
@@ -147,7 +147,7 @@ public class MealPhoto
 ### 3. ViewModel Updates
 
 #### 3.1 Update MealLogViewModel
-**File**: `HealthHelper/PageModels/MealLogViewModel.cs`
+**File**: `WellnessWingman/PageModels/MealLogViewModel.cs`
 
 **Changes needed**:
 1. Add method to insert a single entry without full reload:
@@ -221,7 +221,7 @@ public class MealPhoto
 ### 4. Background Processing
 
 #### 4.1 Create Background Analysis Service
-**File**: `HealthHelper/Services/Analysis/BackgroundAnalysisService.cs`
+**File**: `WellnessWingman/Services/Analysis/BackgroundAnalysisService.cs`
 
 Create a service to manage background analysis tasks:
 
@@ -317,7 +317,7 @@ public class EntryStatusChangedEventArgs : EventArgs
 - Persist queue to disk so tasks survive app restarts?
 
 #### 4.2 Update ITrackedEntryRepository
-**File**: `HealthHelper/Data/ITrackedEntryRepository.cs` and implementations
+**File**: `WellnessWingman/Data/ITrackedEntryRepository.cs` and implementations
 
 Add methods to update processing status:
 ```csharp
@@ -357,7 +357,7 @@ public async Task<TrackedEntry?> GetByIdAsync(int entryId)
 ### 5. Wire Up Background Processing
 
 #### 5.1 Update MainPage Photo Capture Flow
-**File**: `HealthHelper/Pages/MainPage.xaml.cs`
+**File**: `WellnessWingman/Pages/MainPage.xaml.cs`
 
 Refactor `TakePhotoButton_Clicked` to be non-blocking:
 
@@ -439,7 +439,7 @@ private async void TakePhotoButton_Clicked(object sender, EventArgs e)
 - Pass a `CancellationToken` from a page-level source into `_backgroundAnalysisService.QueueEntryAsync` so pending work cancels cleanly when the UI is torn down.
 
 #### 5.2 Subscribe to Status Updates
-**File**: `HealthHelper/Pages/MainPage.xaml.cs`
+**File**: `WellnessWingman/Pages/MainPage.xaml.cs`
 
 Subscribe to background service events in constructor:
 
@@ -474,7 +474,7 @@ private async void OnEntryStatusChanged(object? sender, EntryStatusChangedEventA
 Don't forget to unsubscribe in page disposal/cleanup.
 
 #### 5.3 Register Background Service
-**File**: `HealthHelper/MauiProgram.cs`
+**File**: `WellnessWingman/MauiProgram.cs`
 
 ```csharp
 builder.Services.AddSingleton<IBackgroundAnalysisService, BackgroundAnalysisService>();
@@ -485,7 +485,7 @@ builder.Services.AddSingleton<IBackgroundAnalysisService, BackgroundAnalysisServ
 ### 6. UI Visual Updates
 
 #### 6.1 Update XAML Template
-**File**: `HealthHelper/Pages/MainPage.xaml`
+**File**: `WellnessWingman/Pages/MainPage.xaml`
 
 Update the `CollectionView.ItemTemplate` to show processing status:
 
@@ -543,7 +543,7 @@ Update the `CollectionView.ItemTemplate` to show processing status:
 ```
 
 #### 6.2 Create Value Converters
-**File**: `HealthHelper/Converters/ProcessingStatusConverters.cs`
+**File**: `WellnessWingman/Converters/ProcessingStatusConverters.cs`
 
 ```csharp
 public class InvertedBoolConverter : IValueConverter
@@ -605,7 +605,7 @@ Register converters in App.xaml resources.
 ### 7. Retry Failed Analyses
 
 #### 7.1 Add Retry Command to MealLogViewModel
-**File**: `HealthHelper/PageModels/MealLogViewModel.cs`
+**File**: `WellnessWingman/PageModels/MealLogViewModel.cs`
 
 ```csharp
 [RelayCommand]
@@ -629,7 +629,7 @@ private async Task RetryAnalysis(MealPhoto meal)
 Retries remain user initiated only; if we later add automated retries we will need additional state (attempt counts, backoff timers).
 
 #### 7.2 Update CollectionView SelectionChanged
-**File**: `HealthHelper/Pages/MainPage.xaml.cs`
+**File**: `WellnessWingman/Pages/MainPage.xaml.cs`
 
 ```csharp
 private async void MealsCollection_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -736,24 +736,24 @@ private async void MealsCollection_SelectionChanged(object sender, SelectionChan
 ## Files to Create/Modify Summary
 
 ### New Files
-- `HealthHelper/Models/ProcessingStatus.cs` - Enum
-- `HealthHelper/Services/Analysis/BackgroundAnalysisService.cs` - Background service
-- `HealthHelper/Services/Analysis/EntryStatusChangedEventArgs.cs` - Event args
-- `HealthHelper/Converters/ProcessingStatusConverters.cs` - UI converters
-- `HealthHelper/Migrations/[timestamp]_AddProcessingStatusToTrackedEntry.cs` - Migration
-- `HealthHelper/Migrations/[timestamp]_AddProcessingStatusToTrackedEntry.Designer.cs` - Migration designer
+- `WellnessWingman/Models/ProcessingStatus.cs` - Enum
+- `WellnessWingman/Services/Analysis/BackgroundAnalysisService.cs` - Background service
+- `WellnessWingman/Services/Analysis/EntryStatusChangedEventArgs.cs` - Event args
+- `WellnessWingman/Converters/ProcessingStatusConverters.cs` - UI converters
+- `WellnessWingman/Migrations/[timestamp]_AddProcessingStatusToTrackedEntry.cs` - Migration
+- `WellnessWingman/Migrations/[timestamp]_AddProcessingStatusToTrackedEntry.Designer.cs` - Migration designer
 
 ### Modified Files
-- `HealthHelper/Models/TrackedEntry.cs` - Add ProcessingStatus property
-- `HealthHelper/Models/MealPhoto.cs` - Add ProcessingStatus and IsClickable
-- `HealthHelper/PageModels/MealLogViewModel.cs` - Add AddPendingEntryAsync, UpdateEntryStatusAsync, RetryAnalysisCommand
-- `HealthHelper/Data/ITrackedEntryRepository.cs` - Add UpdateProcessingStatusAsync, GetByIdAsync
-- `HealthHelper/Data/SqliteTrackedEntryRepository.cs` - Implement new methods
-- `HealthHelper/Pages/MainPage.xaml.cs` - Refactor photo capture, subscribe to events
-- `HealthHelper/Pages/MainPage.xaml` - Update UI template with processing indicators
-- `HealthHelper/MauiProgram.cs` - Register BackgroundAnalysisService
-- `HealthHelper/App.xaml` - Register value converters
-- `HealthHelper/Migrations/HealthHelperDbContextModelSnapshot.cs` - Update snapshot
+- `WellnessWingman/Models/TrackedEntry.cs` - Add ProcessingStatus property
+- `WellnessWingman/Models/MealPhoto.cs` - Add ProcessingStatus and IsClickable
+- `WellnessWingman/PageModels/MealLogViewModel.cs` - Add AddPendingEntryAsync, UpdateEntryStatusAsync, RetryAnalysisCommand
+- `WellnessWingman/Data/ITrackedEntryRepository.cs` - Add UpdateProcessingStatusAsync, GetByIdAsync
+- `WellnessWingman/Data/SqliteTrackedEntryRepository.cs` - Implement new methods
+- `WellnessWingman/Pages/MainPage.xaml.cs` - Refactor photo capture, subscribe to events
+- `WellnessWingman/Pages/MainPage.xaml` - Update UI template with processing indicators
+- `WellnessWingman/MauiProgram.cs` - Register BackgroundAnalysisService
+- `WellnessWingman/App.xaml` - Register value converters
+- `WellnessWingman/Migrations/WellnessWingmanDbContextModelSnapshot.cs` - Update snapshot
 
 ## Estimated Effort
 

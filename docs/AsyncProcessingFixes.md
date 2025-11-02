@@ -58,7 +58,7 @@ public async Task<IEnumerable<TrackedEntry>> GetByDayAsync(DateTime date)
 
 ### 1. Retry State Persistence Fix
 
-**File**: `HealthHelper/PageModels/MealLogViewModel.cs`
+**File**: `WellnessWingman/PageModels/MealLogViewModel.cs`
 
 **Change**: Added database update before queueing retry:
 
@@ -97,7 +97,7 @@ private async Task RetryAnalysis(MealPhoto meal)
 
 ### 2. Stale Entry Recovery Service
 
-**File**: `HealthHelper/Services/Analysis/StaleEntryRecoveryService.cs` (NEW)
+**File**: `WellnessWingman/Services/Analysis/StaleEntryRecoveryService.cs` (NEW)
 
 **Purpose**: Detect and recover entries stuck in "Processing" state from previous app sessions.
 
@@ -163,7 +163,7 @@ public App(ILogger<App> logger, IServiceProvider serviceProvider)
 }
 ```
 
-**Service Registration**: `HealthHelper/MauiProgram.cs`
+**Service Registration**: `WellnessWingman/MauiProgram.cs`
 
 ```csharp
 builder.Services.AddScoped<IStaleEntryRecoveryService, StaleEntryRecoveryService>();
@@ -177,7 +177,7 @@ builder.Services.AddScoped<IStaleEntryRecoveryService, StaleEntryRecoveryService
 
 ### 3. Cancellation Token Support
 
-**File**: `HealthHelper/Services/Analysis/BackgroundAnalysisService.cs`
+**File**: `WellnessWingman/Services/Analysis/BackgroundAnalysisService.cs`
 
 **Change**: Added `CancellationToken` parameter and cancellation checks at key points:
 
@@ -272,7 +272,7 @@ public class BackgroundAnalysisService : IBackgroundAnalysisService
 
 ### 4. Entity Framework Change Tracking Fix
 
-**File**: `HealthHelper/Data/SqliteTrackedEntryRepository.cs`
+**File**: `WellnessWingman/Data/SqliteTrackedEntryRepository.cs`
 
 **Problem**: EF Core's change tracker caches entities in memory. When multiple DbContext instances exist (scoped for each request), or when the same context is reused across multiple queries, EF returns the cached entity instead of querying the database.
 
@@ -351,7 +351,7 @@ public async Task<TrackedEntry?> GetByIdAsync(int entryId)
 
 **Issue**: `App` constructor originally injected `IStaleEntryRecoveryService` directly, but the service was registered as `Scoped`. Singleton classes cannot depend on scoped services.
 
-**File**: `HealthHelper/App.xaml.cs`
+**File**: `WellnessWingman/App.xaml.cs`
 
 **Fix**: Inject `IServiceProvider` and create a scope manually:
 
@@ -384,14 +384,14 @@ public App(ILogger<App> logger, IServiceProvider serviceProvider)
 ## Files Changed Summary
 
 ### New Files (1)
-- `HealthHelper/Services/Analysis/StaleEntryRecoveryService.cs` - Stale entry recovery service
+- `WellnessWingman/Services/Analysis/StaleEntryRecoveryService.cs` - Stale entry recovery service
 
 ### Modified Files (5)
-- `HealthHelper/App.xaml.cs` - Added stale entry recovery on startup, fixed service lifetime
-- `HealthHelper/MauiProgram.cs` - Registered `IStaleEntryRecoveryService`
-- `HealthHelper/PageModels/MealLogViewModel.cs` - Fixed retry persistence bug
-- `HealthHelper/Services/Analysis/BackgroundAnalysisService.cs` - Added cancellation token support
-- `HealthHelper/Pages/MainPage.xaml.cs` - Removed unused `IAnalysisOrchestrator` dependency
+- `WellnessWingman/App.xaml.cs` - Added stale entry recovery on startup, fixed service lifetime
+- `WellnessWingman/MauiProgram.cs` - Registered `IStaleEntryRecoveryService`
+- `WellnessWingman/PageModels/MealLogViewModel.cs` - Fixed retry persistence bug
+- `WellnessWingman/Services/Analysis/BackgroundAnalysisService.cs` - Added cancellation token support
+- `WellnessWingman/Pages/MainPage.xaml.cs` - Removed unused `IAnalysisOrchestrator` dependency
 
 ## Testing Recommendations
 
@@ -455,16 +455,16 @@ public App(ILogger<App> logger, IServiceProvider serviceProvider)
 
 ```bash
 # Check for compilation errors
-dotnet build HealthHelper/HealthHelper.csproj
+dotnet build WellnessWingman/WellnessWingman.csproj
 
 # Search for any remaining TODOs
-rg "TODO|FIXME|HACK" HealthHelper/
+rg "TODO|FIXME|HACK" WellnessWingman/
 
 # Verify all new service registrations
-rg "AddScoped|AddSingleton|AddTransient" HealthHelper/MauiProgram.cs
+rg "AddScoped|AddSingleton|AddTransient" WellnessWingman/MauiProgram.cs
 
 # Check for unhandled cancellation tokens
-rg "ProcessEntryAsync\(" HealthHelper/ -A 2
+rg "ProcessEntryAsync\(" WellnessWingman/ -A 2
 ```
 
 ## Commit Message Recommendation

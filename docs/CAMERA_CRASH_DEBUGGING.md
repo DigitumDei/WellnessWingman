@@ -140,7 +140,7 @@ Look for:
 ```xml
 <application android:allowBackup="true">
   <activity
-    android:name="com.companyname.healthhelper.MainActivity"
+    android:name="com.digitumdei.wellnesswingman.MainActivity"
     android:configChanges="orientation|screenSize|keyboardHidden"
     android:launchMode="singleTask">
   </activity>
@@ -218,13 +218,13 @@ Add to project file:
 If still no logs, check Android logcat for native crashes:
 
 ```bash
-adb logcat | grep -i "healthhelper\|crash\|fatal"
+adb logcat | grep -i "wellnesswingman\|crash\|fatal"
 ```
 
 Look for:
 - `FATAL EXCEPTION`
 - `AndroidRuntime`
-- `Process: com.companyname.healthhelper`
+- `Process: com.digitumdei.wellnesswingman`
 
 ## What to Report Back
 

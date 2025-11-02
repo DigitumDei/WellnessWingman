@@ -1,4 +1,4 @@
-# HealthHelper Architecture
+# WellnessWingman Architecture
 
 ```mermaid
 erDiagram
@@ -92,7 +92,7 @@ classDiagram
 ```
 
 ## Purpose & Scope
-HealthHelper is a cross-platform .NET MAUI app that captures wellbeing signals (meals today, exercise and sleep tomorrow), enriches them with user-selected LLM insights, and surfaces daily summaries. This doc outlines system layers, data flow, and extensibility points so enhancements preserve the capture → analysis → summary pipeline.
+WellnessWingman is a cross-platform .NET MAUI app that captures wellbeing signals (meals today, exercise and sleep tomorrow), enriches them with user-selected LLM insights, and surfaces daily summaries. This doc outlines system layers, data flow, and extensibility points so enhancements preserve the capture → analysis → summary pipeline.
 
 ## Layered Application Structure
 - **UI Layer**: `Pages/` houses XAML views and `PageModels/` supplies presentation logic (e.g., `MainPage` + `EntryLogViewModel`). The home feed binds to a single `ObservableCollection<TrackedEntryCard>` that mixes pending captures, meals, exercise sessions, and other cards while a template selector renders the right visual for each type.
@@ -150,11 +150,11 @@ HealthHelper is a cross-platform .NET MAUI app that captures wellbeing signals (
   7. Creating type-specific validator
 - **Imports & Integrations**: Support gallery imports, HealthKit/Google Fit bridges, share intents (implemented), or CSV ingestion that route through the same `Unknown` → LLM classification pipeline.
 - **Provider Catalog**: Maintain a configurable provider registry (JSON or embedded configuration) enumerating endpoints, default models, and supported capabilities.
-- **Sync & Backup**: Reserve `HealthHelper.Sync` for optional cloud backups; ensure serialised data redacts sensitive information.
-- **Testing**: Build `HealthHelper.Tests/` with mocks for repositories, media adapters, and `ILLmClient` to validate orchestration, classification logic, and relational integrity without external calls. Unit tests verify payload transitions and enum conversions.
+- **Sync & Backup**: Reserve `WellnessWingman.Sync` for optional cloud backups; ensure serialised data redacts sensitive information.
+- **Testing**: Build `WellnessWingman.Tests/` with mocks for repositories, media adapters, and `ILLmClient` to validate orchestration, classification logic, and relational integrity without external calls. Unit tests verify payload transitions and enum conversions.
 
 ## Operational Considerations
-- Keep `ApplicationId` in `HealthHelper.csproj` aligned with manifest package identifiers to avoid deployment failures.
+- Keep `ApplicationId` in `WellnessWingman.csproj` aligned with manifest package identifiers to avoid deployment failures.
 - Document keystore management, IDE “Distribute” signing steps, and publish commands so Release artifacts remain reproducible.
 - Provide storage management UX (delete entries, re-run analyses with new providers) and signal when summaries are recomputed after provider changes.
-- Manage SQLite connections through dependency injection scopes: register a single `HealthHelperDbContext` (or SQLite connection factory) in `MauiProgram` and resolve repositories per scope so they share the same unit of work during a user action. This pattern avoids `database is locked` errors by letting the platform coordinate transactions.
+- Manage SQLite connections through dependency injection scopes: register a single `WellnessWingmanDbContext` (or SQLite connection factory) in `MauiProgram` and resolve repositories per scope so they share the same unit of work during a user action. This pattern avoids `database is locked` errors by letting the platform coordinate transactions.

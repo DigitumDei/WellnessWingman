@@ -12,7 +12,7 @@
   - [x] Create a `TrackedEntry` model in memory with the correct `BlobPath` and metadata.
 - [x] Implement SQLite persistence layer:
   - [x] Add EF Core SQLite NuGet packages to the project.
-  - [x] Define `HealthHelperDbContext` with `DbSet`s for `TrackedEntry`, `EntryAnalysis`, and `DailySummary`.
+  - [x] Define `WellnessWingmanDbContext` with `DbSet`s for `TrackedEntry`, `EntryAnalysis`, and `DailySummary`.
   - [x] Configure entity relationships and payload serialization in `OnModelCreating`.
   - [x] Implement the `ITrackedEntryRepository`, `IEntryAnalysisRepository`, and `IDailySummaryRepository` interfaces.
   - [x] Set up automatic database creation/migration on app startup.

@@ -54,7 +54,7 @@ public class MainActivity : MauiAppCompatActivity
     android:allowBackup="true"
     android:icon="@mipmap/appicon"
     android:supportsRtl="true"
-    android:label="Health Helper"
+    android:label="Wellness Wingman"
     android:largeHeap="true">  <!-- ← Added this -->
     <!-- ... -->
 </application>

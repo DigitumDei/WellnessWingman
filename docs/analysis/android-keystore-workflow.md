@@ -76,7 +76,7 @@ jobs:
           dotnet-version: "8.0.x"
 
       - name: Restore dependencies
-        run: dotnet restore HealthHelper.slnx
+        run: dotnet restore WellnessWingman.slnx
 
       - name: Materialize Android keystore
         shell: bash
@@ -87,7 +87,7 @@ jobs:
 
       - name: Build signed Android package
         run: |
-          dotnet publish HealthHelper/HealthHelper.csproj \
+          dotnet publish WellnessWingman/WellnessWingman.csproj \
             -f net8.0-android \
             -c Release \
             -p:AndroidKeyStore=true \
