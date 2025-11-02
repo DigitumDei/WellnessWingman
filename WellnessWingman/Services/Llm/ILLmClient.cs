@@ -1,7 +1,7 @@
-using HealthHelper.Models;
+using WellnessWingman.Models;
 using System.Threading.Tasks;
 
-namespace HealthHelper.Services.Llm;
+namespace WellnessWingman.Services.Llm;
 
 public interface ILLmClient
 {

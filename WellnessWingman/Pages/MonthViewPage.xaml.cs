@@ -1,4 +1,4 @@
-namespace HealthHelper.Pages;
+namespace WellnessWingman.Pages;
 
 public partial class MonthViewPage : ContentPage
 {

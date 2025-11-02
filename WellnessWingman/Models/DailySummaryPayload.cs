@@ -1,7 +1,7 @@
 using System;
 using System.Text.Json.Serialization;
 
-namespace HealthHelper.Models;
+namespace WellnessWingman.Models;
 
 public class DailySummaryPayload : IEntryPayload
 {

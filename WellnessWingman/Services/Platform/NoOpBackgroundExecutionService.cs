@@ -1,4 +1,4 @@
-namespace HealthHelper.Services.Platform;
+namespace WellnessWingman.Services.Platform;
 
 /// <summary>
 /// No-op implementation of IBackgroundExecutionService for desktop platforms (Windows/Mac).

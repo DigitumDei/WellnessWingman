@@ -2,16 +2,16 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
 
-namespace HealthHelper.Data;
+namespace WellnessWingman.Data;
 
-public class DesignTimeDbContextFactory : IDesignTimeDbContextFactory<HealthHelperDbContext>
+public class DesignTimeDbContextFactory : IDesignTimeDbContextFactory<WellnessWingmanDbContext>
 {
-    public HealthHelperDbContext CreateDbContext(string[] args)
+    public WellnessWingmanDbContext CreateDbContext(string[] args)
     {
-        var optionsBuilder = new DbContextOptionsBuilder<HealthHelperDbContext>();
+        var optionsBuilder = new DbContextOptionsBuilder<WellnessWingmanDbContext>();
         // Use a dummy database name for design-time purposes.
-        optionsBuilder.UseSqlite("Data Source=healthhelper_design.db3");
+        optionsBuilder.UseSqlite("Data Source=wellnesswingman_design.db3");
 
-        return new HealthHelperDbContext(optionsBuilder.Options);
+        return new WellnessWingmanDbContext(optionsBuilder.Options);
     }
 }

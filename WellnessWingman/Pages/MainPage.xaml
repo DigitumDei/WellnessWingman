@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
-             xmlns:pageModels="clr-namespace:HealthHelper.PageModels"
-             xmlns:models="clr-namespace:HealthHelper.Models"
-             xmlns:templates="clr-namespace:HealthHelper.Pages.Templates"
-             xmlns:gestures="clr-namespace:HealthHelper.Utilities.Gestures"
-             x:Class="HealthHelper.Pages.MainPage"
+             xmlns:pageModels="clr-namespace:WellnessWingman.PageModels"
+             xmlns:models="clr-namespace:WellnessWingman.Models"
+             xmlns:templates="clr-namespace:WellnessWingman.Pages.Templates"
+             xmlns:gestures="clr-namespace:WellnessWingman.Utilities.Gestures"
+             x:Class="WellnessWingman.Pages.MainPage"
              x:Name="MainPageRoot"
              x:DataType="pageModels:EntryLogViewModel"
              Title="Diet Tracker">

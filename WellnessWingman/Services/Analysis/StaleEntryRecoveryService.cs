@@ -1,11 +1,11 @@
 using System;
 using System.Linq;
 using System.Threading.Tasks;
-using HealthHelper.Data;
-using HealthHelper.Models;
+using WellnessWingman.Data;
+using WellnessWingman.Models;
 using Microsoft.Extensions.Logging;
 
-namespace HealthHelper.Services.Analysis;
+namespace WellnessWingman.Services.Analysis;
 
 /// <summary>
 /// Service to recover entries that were left in Processing state due to app shutdown

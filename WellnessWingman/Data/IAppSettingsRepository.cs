@@ -1,6 +1,6 @@
-using HealthHelper.Models;
+using WellnessWingman.Models;
 
-namespace HealthHelper.Data;
+namespace WellnessWingman.Data;
 
 public interface IAppSettingsRepository
 {

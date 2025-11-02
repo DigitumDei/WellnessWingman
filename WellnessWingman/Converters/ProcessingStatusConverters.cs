@@ -1,7 +1,7 @@
-using HealthHelper.Models;
+using WellnessWingman.Models;
 using System.Globalization;
 
-namespace HealthHelper.Converters;
+namespace WellnessWingman.Converters;
 
 public class InvertedBoolConverter : IValueConverter
 {

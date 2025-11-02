@@ -7,13 +7,13 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using HealthHelper.Data;
-using HealthHelper.Models;
+using WellnessWingman.Data;
+using WellnessWingman.Models;
 using Microsoft.Extensions.Logging;
 using Microsoft.Maui.ApplicationModel;
 using Microsoft.Maui.Storage;
 
-namespace HealthHelper.PageModels;
+namespace WellnessWingman.PageModels;
 
 [QueryProperty(nameof(Exercise), "Exercise")]
 public partial class ExerciseDetailViewModel : ObservableObject

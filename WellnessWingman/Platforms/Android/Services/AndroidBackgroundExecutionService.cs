@@ -1,10 +1,10 @@
 using Android.Content;
 using Android.Content.PM;
 using AndroidX.Core.Content;
-using HealthHelper.Services.Platform;
+using WellnessWingman.Services.Platform;
 using Microsoft.Maui.ApplicationModel;
 
-namespace HealthHelper.Platforms.Android.Services;
+namespace WellnessWingman.Platforms.Android.Services;
 
 /// <summary>
 /// Android implementation of IBackgroundExecutionService.

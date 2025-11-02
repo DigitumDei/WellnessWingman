@@ -1,7 +1,7 @@
 ﻿using ObjCRuntime;
 using UIKit;
 
-namespace HealthHelper;
+namespace WellnessWingman;
 
 public class Program
 {

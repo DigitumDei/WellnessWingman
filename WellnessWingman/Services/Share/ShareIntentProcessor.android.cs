@@ -3,13 +3,13 @@ using System.IO;
 using Android.Content;
 using Android.Database;
 using Android.Provider;
-using HealthHelper.Utilities;
+using WellnessWingman.Utilities;
 using Microsoft.Maui.ApplicationModel;
 using Microsoft.Maui.Storage;
 using Microsoft.Extensions.Logging;
 using Java.Lang;
 
-namespace HealthHelper.Services.Share;
+namespace WellnessWingman.Services.Share;
 
 public sealed class ShareIntentProcessor : IShareIntentProcessor
 {

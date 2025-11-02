@@ -1,4 +1,4 @@
-namespace HealthHelper.Services.Platform;
+namespace WellnessWingman.Services.Platform;
 
 /// <summary>
 /// No-op implementation for platforms that don't require notification permissions

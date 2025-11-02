@@ -4,7 +4,7 @@ using Android.Content.PM;
 using Android.OS;
 using AndroidX.Core.App;
 
-namespace HealthHelper.Platforms.Android.Services;
+namespace WellnessWingman.Platforms.Android.Services;
 
 /// <summary>
 /// Android foreground service that ensures LLM analysis completes even when

@@ -1,7 +1,7 @@
 using System;
 using System.Globalization;
 
-namespace HealthHelper.Pages;
+namespace WellnessWingman.Pages;
 
 [QueryProperty(nameof(TargetDate), "Date")]
 public partial class DayDetailPage : ContentPage

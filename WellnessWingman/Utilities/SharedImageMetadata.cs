@@ -1,4 +1,4 @@
-namespace HealthHelper.Utilities;
+namespace WellnessWingman.Utilities;
 
 public sealed class SharedImageMetadata
 {

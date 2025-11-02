@@ -3,7 +3,7 @@ using Android;
 using Android.Content.PM;
 using AndroidX.Core.Content;
 
-namespace HealthHelper.Platforms.Android.Permissions;
+namespace WellnessWingman.Platforms.Android.Permissions;
 
 /// <summary>
 /// Custom permission for POST_NOTIFICATIONS on Android 13+ (API 33+).

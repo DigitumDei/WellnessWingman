@@ -1,4 +1,4 @@
-namespace HealthHelper.Services.Navigation;
+namespace WellnessWingman.Services.Navigation;
 
 public enum HistoricalViewLevel
 {

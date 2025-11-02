@@ -1,9 +1,9 @@
 
 using System;
 using System.Collections.Generic;
-using HealthHelper.Models;
+using WellnessWingman.Models;
 
-namespace HealthHelper.Data;
+namespace WellnessWingman.Data;
 
 public interface ITrackedEntryRepository
 {

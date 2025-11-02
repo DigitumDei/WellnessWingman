@@ -1,4 +1,4 @@
-namespace HealthHelper.Services.Media;
+namespace WellnessWingman.Services.Media;
 
 public enum CameraCaptureStatus
 {

@@ -2,7 +2,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
-namespace HealthHelper.Migrations
+namespace WellnessWingman.Migrations
 {
     /// <inheritdoc />
     public partial class AddSchemaVersionToEntryAnalysis : Migration

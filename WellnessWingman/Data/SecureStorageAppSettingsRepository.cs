@@ -2,11 +2,11 @@ using System;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading.Tasks;
-using HealthHelper.Models;
+using WellnessWingman.Models;
 using Microsoft.Maui.ApplicationModel;
 using Microsoft.Maui.Storage;
 
-namespace HealthHelper.Data;
+namespace WellnessWingman.Data;
 
 public class SecureStorageAppSettingsRepository : IAppSettingsRepository
 {

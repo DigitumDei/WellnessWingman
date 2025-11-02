@@ -1,8 +1,8 @@
 using System.Collections.Generic;
-using HealthHelper.Pages;
+using WellnessWingman.Pages;
 using Microsoft.Maui.ApplicationModel;
 
-namespace HealthHelper.Services.Share;
+namespace WellnessWingman.Services.Share;
 
 public sealed class ShareNavigationService : IShareNavigationService
 {

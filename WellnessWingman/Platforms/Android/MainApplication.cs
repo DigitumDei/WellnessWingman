@@ -1,7 +1,7 @@
 ﻿using Android.App;
 using Android.Runtime;
 
-namespace HealthHelper;
+namespace WellnessWingman;
 
 [Application]
 public class MainApplication : MauiApplication

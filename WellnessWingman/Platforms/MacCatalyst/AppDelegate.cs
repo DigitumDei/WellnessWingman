@@ -1,6 +1,6 @@
 ﻿using Foundation;
 
-namespace HealthHelper;
+namespace WellnessWingman;
 
 [Register("AppDelegate")]
 public class AppDelegate : MauiUIApplicationDelegate

@@ -1,8 +1,8 @@
 using System.Threading;
 using System.Threading.Tasks;
-using HealthHelper.Models;
+using WellnessWingman.Models;
 
-namespace HealthHelper.Services.Share;
+namespace WellnessWingman.Services.Share;
 
 public interface ISharedImageImportService
 {

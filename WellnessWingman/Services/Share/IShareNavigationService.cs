@@ -1,4 +1,4 @@
-namespace HealthHelper.Services.Share;
+namespace WellnessWingman.Services.Share;
 
 public interface IShareNavigationService
 {

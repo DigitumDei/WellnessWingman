@@ -1,4 +1,4 @@
-namespace HealthHelper.Models;
+namespace WellnessWingman.Models;
 
 public enum LlmProvider
 {

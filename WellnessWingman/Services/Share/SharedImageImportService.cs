@@ -1,14 +1,14 @@
 using System.IO;
-using HealthHelper.Data;
-using HealthHelper.Models;
-using HealthHelper.Services.Analysis;
-using HealthHelper.Services.Media;
-using HealthHelper.Utilities;
+using WellnessWingman.Data;
+using WellnessWingman.Models;
+using WellnessWingman.Services.Analysis;
+using WellnessWingman.Services.Media;
+using WellnessWingman.Utilities;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Maui.Storage;
 
-namespace HealthHelper.Services.Share;
+namespace WellnessWingman.Services.Share;
 
 public sealed class SharedImageImportService : ISharedImageImportService
 {

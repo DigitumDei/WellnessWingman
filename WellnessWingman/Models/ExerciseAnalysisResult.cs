@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace HealthHelper.Models;
+namespace WellnessWingman.Models;
 
 public class ExerciseAnalysisResult
 {

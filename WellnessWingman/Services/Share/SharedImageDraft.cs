@@ -1,8 +1,8 @@
 using System.IO;
-using HealthHelper.Utilities;
+using WellnessWingman.Utilities;
 using Microsoft.Maui.Storage;
 
-namespace HealthHelper.Services.Share;
+namespace WellnessWingman.Services.Share;
 
 public sealed class SharedImageDraft
 {

@@ -4,11 +4,11 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using HealthHelper.Data;
-using HealthHelper.Models;
+using WellnessWingman.Data;
+using WellnessWingman.Models;
 using Microsoft.Extensions.Logging;
 
-namespace HealthHelper.Services.Analysis;
+namespace WellnessWingman.Services.Analysis;
 
 /// <summary>
 /// Aggregates daily summaries into a weekly summary view.

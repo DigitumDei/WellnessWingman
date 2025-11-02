@@ -1,8 +1,8 @@
 using System.Collections.Generic;
-using HealthHelper.PageModels;
+using WellnessWingman.PageModels;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace HealthHelper.Pages;
+namespace WellnessWingman.Pages;
 
 public partial class WeekViewPage : ContentPage, IQueryAttributable
 {

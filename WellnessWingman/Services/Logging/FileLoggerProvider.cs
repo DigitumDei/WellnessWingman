@@ -4,7 +4,7 @@ using System.IO;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 
-namespace HealthHelper.Services.Logging;
+namespace WellnessWingman.Services.Logging;
 
 public sealed class FileLoggerProvider : ILoggerProvider
 {

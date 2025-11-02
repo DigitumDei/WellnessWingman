@@ -1,6 +1,6 @@
 using System;
 
-namespace HealthHelper.Utilities;
+namespace WellnessWingman.Utilities;
 
 /// <summary>
 /// Provides helpers for normalizing timestamps between UTC and the local timezone.

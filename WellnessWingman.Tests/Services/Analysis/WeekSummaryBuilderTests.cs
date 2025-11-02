@@ -3,13 +3,13 @@ using System.Globalization;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
-using HealthHelper.Data;
-using HealthHelper.Models;
-using HealthHelper.Services.Analysis;
+using WellnessWingman.Data;
+using WellnessWingman.Models;
+using WellnessWingman.Services.Analysis;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
-namespace HealthHelper.Tests.Services.Analysis;
+namespace WellnessWingman.Tests.Services.Analysis;
 
 public class WeekSummaryBuilderTests
 {

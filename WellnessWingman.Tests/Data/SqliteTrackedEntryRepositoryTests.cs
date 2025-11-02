@@ -1,17 +1,16 @@
-using System.Linq;
-using System.Text.Json;
-using HealthHelper.Data;
-using HealthHelper.Models;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
+using WellnessWingman.Data;
+using WellnessWingman.Models;
 using Xunit;
 
-namespace HealthHelper.Tests.Data;
+namespace WellnessWingman.Tests.Data;
 
 public sealed class SqliteTrackedEntryRepositoryTests : IDisposable
 {
     private readonly SqliteConnection _connection;
-    private readonly HealthHelperDbContext _context;
+    private readonly WellnessWingmanDbContext _context;
     private readonly SqliteTrackedEntryRepository _repository;
 
     public SqliteTrackedEntryRepositoryTests()
@@ -19,11 +18,11 @@ public sealed class SqliteTrackedEntryRepositoryTests : IDisposable
         _connection = new SqliteConnection("Filename=:memory:");
         _connection.Open();
 
-        var options = new DbContextOptionsBuilder<HealthHelperDbContext>()
+        var options = new DbContextOptionsBuilder<WellnessWingmanDbContext>()
             .UseSqlite(_connection)
             .Options;
 
-        _context = new HealthHelperDbContext(options);
+        _context = new WellnessWingmanDbContext(options);
         _context.Database.EnsureCreated();
 
         _repository = new SqliteTrackedEntryRepository(_context);

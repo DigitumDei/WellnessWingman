@@ -2,7 +2,7 @@ using System;
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 
-namespace HealthHelper.Services.Navigation;
+namespace WellnessWingman.Services.Navigation;
 
 /// <summary>
 /// Tracks the currently displayed historical view and maintains the breadcrumb stack

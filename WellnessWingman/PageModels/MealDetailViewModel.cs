@@ -7,14 +7,14 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using HealthHelper.Data;
-using HealthHelper.Models;
-using HealthHelper.Services.Analysis;
+using WellnessWingman.Data;
+using WellnessWingman.Models;
+using WellnessWingman.Services.Analysis;
 using Microsoft.Extensions.Logging;
 using Microsoft.Maui.ApplicationModel;
 using Microsoft.Maui.Storage;
 
-namespace HealthHelper.PageModels;
+namespace WellnessWingman.PageModels;
 
 [QueryProperty(nameof(Meal), "Meal")]
 public partial class MealDetailViewModel : ObservableObject

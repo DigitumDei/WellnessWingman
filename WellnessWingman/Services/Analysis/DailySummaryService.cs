@@ -4,13 +4,13 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using HealthHelper.Data;
-using HealthHelper.Models;
-using HealthHelper.Services.Llm;
-using HealthHelper.Utilities;
+using WellnessWingman.Data;
+using WellnessWingman.Models;
+using WellnessWingman.Services.Llm;
+using WellnessWingman.Utilities;
 using Microsoft.Extensions.Logging;
 
-namespace HealthHelper.Services.Analysis;
+namespace WellnessWingman.Services.Analysis;
 
 public interface IDailySummaryService
 {

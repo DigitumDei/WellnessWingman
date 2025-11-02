@@ -5,7 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Maui.Storage;
 
-namespace HealthHelper.Services.Media;
+namespace WellnessWingman.Services.Media;
 
 public sealed class FilePendingPhotoStore : IPendingPhotoStore
 {

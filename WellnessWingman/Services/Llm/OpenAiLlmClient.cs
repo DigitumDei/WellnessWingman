@@ -5,14 +5,14 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
-using HealthHelper.Models;
-using HealthHelper.Utilities;
+using WellnessWingman.Models;
+using WellnessWingman.Utilities;
 using Microsoft.Extensions.Logging;
 using Microsoft.Maui.Storage;
 using OpenAI;
 using OpenAI.Chat;
 
-namespace HealthHelper.Services.Llm;
+namespace WellnessWingman.Services.Llm;
 
 public class OpenAiLlmClient : ILLmClient
 {

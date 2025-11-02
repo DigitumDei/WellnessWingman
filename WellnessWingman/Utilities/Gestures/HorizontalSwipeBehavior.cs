@@ -1,6 +1,6 @@
 using System.Windows.Input;
 
-namespace HealthHelper.Utilities.Gestures;
+namespace WellnessWingman.Utilities.Gestures;
 
 public class HorizontalSwipeBehavior : Behavior<View>
 {

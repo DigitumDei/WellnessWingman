@@ -1,6 +1,6 @@
-using HealthHelper.Models;
+using WellnessWingman.Models;
 
-namespace HealthHelper.Services.Analysis;
+namespace WellnessWingman.Services.Analysis;
 
 public class EntryStatusChangedEventArgs : EventArgs
 {

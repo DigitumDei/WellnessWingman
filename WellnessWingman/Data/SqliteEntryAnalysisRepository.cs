@@ -1,15 +1,15 @@
 
-using HealthHelper.Models;
-using HealthHelper.Utilities;
+using WellnessWingman.Models;
+using WellnessWingman.Utilities;
 using Microsoft.EntityFrameworkCore;
 
-namespace HealthHelper.Data;
+namespace WellnessWingman.Data;
 
 public class SqliteEntryAnalysisRepository : IEntryAnalysisRepository
 {
-    private readonly HealthHelperDbContext _context;
+    private WellnessWingmanDbContext _context;
 
-    public SqliteEntryAnalysisRepository(HealthHelperDbContext context)
+    public SqliteEntryAnalysisRepository(WellnessWingmanDbContext context)
     {
         _context = context;
     }

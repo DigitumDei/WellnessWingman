@@ -1,21 +1,16 @@
-using System;
-using System.Collections.Generic;
-using System.Collections.ObjectModel;
-using System.Globalization;
-using System.Linq;
-using System.Text.Json;
-using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using HealthHelper.Data;
-using HealthHelper.Models;
-using HealthHelper.Services.Analysis;
-using HealthHelper.Services.Platform;
-using HealthHelper.Utilities;
+using WellnessWingman.Data;
+using WellnessWingman.Services.Analysis;
+using WellnessWingman.Services.Platform;
+using WellnessWingman.Utilities;
 using Microsoft.Extensions.Logging;
-using Microsoft.Maui.ApplicationModel;
+using System.Collections.ObjectModel;
+using System.Globalization;
+using System.Text.Json;
+using WellnessWingman.Models;
 
-namespace HealthHelper.PageModels;
+namespace WellnessWingman.PageModels;
 
 [QueryProperty(nameof(SummaryEntryId), "SummaryEntryId")]
 public partial class DailySummaryViewModel : ObservableObject

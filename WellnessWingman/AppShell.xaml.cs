@@ -1,6 +1,6 @@
-using HealthHelper.Pages;
+using WellnessWingman.Pages;
 
-namespace HealthHelper;
+namespace WellnessWingman;
 
 public partial class AppShell : Shell
 {

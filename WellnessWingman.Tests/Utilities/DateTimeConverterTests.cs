@@ -1,7 +1,7 @@
-using HealthHelper.Utilities;
+using WellnessWingman.Utilities;
 using Xunit;
 
-namespace HealthHelper.Tests.Utilities;
+namespace WellnessWingman.Tests.Utilities;
 
 public class DateTimeConverterTests
 {

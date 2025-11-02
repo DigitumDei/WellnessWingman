@@ -5,7 +5,7 @@ using Android.Provider;
 using Microsoft.Extensions.Logging;
 using FileProvider = Microsoft.Maui.Storage.FileProvider;
 
-namespace HealthHelper.Services.Media;
+namespace WellnessWingman.Services.Media;
 
 public sealed class AndroidCameraCaptureService : ICameraCaptureService
 {

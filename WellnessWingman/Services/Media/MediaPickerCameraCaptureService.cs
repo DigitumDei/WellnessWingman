@@ -5,7 +5,7 @@ using System.Threading.Tasks;
 using Microsoft.Maui.ApplicationModel;
 using Microsoft.Maui.Media;
 
-namespace HealthHelper.Services.Media;
+namespace WellnessWingman.Services.Media;
 
 public sealed class MediaPickerCameraCaptureService : ICameraCaptureService
 {

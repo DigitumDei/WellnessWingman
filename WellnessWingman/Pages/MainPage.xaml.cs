@@ -1,12 +1,12 @@
-using HealthHelper.Data;
-using HealthHelper.Models;
-using HealthHelper.Services.Analysis;
-using HealthHelper.Services.Media;
-using HealthHelper.Services.Platform;
-using HealthHelper.Utilities;
+using WellnessWingman.Data;
+using WellnessWingman.Models;
+using WellnessWingman.Services.Analysis;
+using WellnessWingman.Services.Media;
+using WellnessWingman.Services.Platform;
+using WellnessWingman.Utilities;
 using Microsoft.Extensions.Logging;
 
-namespace HealthHelper.Pages;
+namespace WellnessWingman.Pages;
 
 public partial class MainPage : ContentPage
 {

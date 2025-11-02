@@ -1,4 +1,4 @@
-namespace HealthHelper.Services.Navigation;
+namespace WellnessWingman.Services.Navigation;
 
 /// <summary>
 /// Provides Shell-based navigation entry points between the historical views of the app.

@@ -1,8 +1,8 @@
 using System;
 using CommunityToolkit.Mvvm.ComponentModel;
-using HealthHelper.Utilities;
+using WellnessWingman.Utilities;
 
-namespace HealthHelper.Models;
+namespace WellnessWingman.Models;
 
 public partial class DailySummaryCard : ObservableObject
 {

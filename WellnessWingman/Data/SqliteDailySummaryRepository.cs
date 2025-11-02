@@ -1,14 +1,14 @@
 
-using HealthHelper.Models;
+using WellnessWingman.Models;
 using Microsoft.EntityFrameworkCore;
 
-namespace HealthHelper.Data;
+namespace WellnessWingman.Data;
 
 public class SqliteDailySummaryRepository : IDailySummaryRepository
 {
-    private readonly HealthHelperDbContext _context;
+    private readonly WellnessWingmanDbContext _context;
 
-    public SqliteDailySummaryRepository(HealthHelperDbContext context)
+    public SqliteDailySummaryRepository(WellnessWingmanDbContext context)
     {
         _context = context;
     }

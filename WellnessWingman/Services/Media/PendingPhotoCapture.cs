@@ -3,7 +3,7 @@ using System.IO;
 using System.Text.Json.Serialization;
 using Microsoft.Maui.Storage;
 
-namespace HealthHelper.Services.Media;
+namespace WellnessWingman.Services.Media;
 
 public sealed class PendingPhotoCapture
 {

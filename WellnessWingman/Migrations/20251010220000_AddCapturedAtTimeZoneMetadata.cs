@@ -2,7 +2,7 @@
 
 #nullable disable
 
-namespace HealthHelper.Migrations
+namespace WellnessWingman.Migrations
 {
     /// <inheritdoc />
     public partial class AddCapturedAtTimeZoneMetadata : Migration

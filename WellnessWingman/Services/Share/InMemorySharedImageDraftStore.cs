@@ -1,6 +1,6 @@
 using System.Collections.Concurrent;
 
-namespace HealthHelper.Services.Share;
+namespace WellnessWingman.Services.Share;
 
 public sealed class InMemorySharedImageDraftStore : ISharedImageDraftStore
 {

@@ -1,15 +1,15 @@
-using HealthHelper.Models;
-using HealthHelper.Utilities;
+using WellnessWingman.Models;
+using WellnessWingman.Utilities;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
 
-namespace HealthHelper.Data;
+namespace WellnessWingman.Data;
 
 public class SqliteTrackedEntryRepository : ITrackedEntryRepository
 {
-    private readonly HealthHelperDbContext _context;
+    WellnessWingmanDbContext _context;
 
-    public SqliteTrackedEntryRepository(HealthHelperDbContext context)
+    public SqliteTrackedEntryRepository(WellnessWingmanDbContext context)
     {
         _context = context;
     }

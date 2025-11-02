@@ -3,12 +3,12 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using HealthHelper.Services.Share;
-using HealthHelper.Utilities;
+using WellnessWingman.Services.Share;
+using WellnessWingman.Utilities;
 using Microsoft.Extensions.Logging;
 using Microsoft.Maui.Controls;
 
-namespace HealthHelper.PageModels;
+namespace WellnessWingman.PageModels;
 
 [QueryProperty(nameof(DraftId), "DraftId")]
 public partial class ShareEntryViewModel : ObservableObject

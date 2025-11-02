@@ -3,12 +3,12 @@ using System.Collections.ObjectModel;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using HealthHelper.Data;
-using HealthHelper.Models;
-using HealthHelper.Services.Logging;
+using WellnessWingman.Data;
+using WellnessWingman.Models;
+using WellnessWingman.Services.Logging;
 using Microsoft.Extensions.Logging;
 
-namespace HealthHelper.PageModels;
+namespace WellnessWingman.PageModels;
 
 public partial class SettingsViewModel : ObservableObject
 {

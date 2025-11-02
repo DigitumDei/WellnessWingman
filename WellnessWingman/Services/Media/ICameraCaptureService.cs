@@ -1,7 +1,7 @@
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace HealthHelper.Services.Media;
+namespace WellnessWingman.Services.Media;
 
 public interface ICameraCaptureService
 {

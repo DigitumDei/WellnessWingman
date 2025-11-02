@@ -2,11 +2,11 @@ using Android.App;
 using Android.Content;
 using Android.Content.PM;
 using Android.OS;
-using HealthHelper.Services.Share;
+using WellnessWingman.Services.Share;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Maui.Controls;
 
-namespace HealthHelper;
+namespace WellnessWingman;
 
 [Activity(
     Theme = "@style/Maui.SplashTheme",

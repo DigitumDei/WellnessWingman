@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace HealthHelper.Models;
+namespace WellnessWingman.Models;
 
 /// <summary>
 /// Represents a summary of tracked activity for a single day.

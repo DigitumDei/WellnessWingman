@@ -1,20 +1,20 @@
 using System.IO;
 using CommunityToolkit.Maui;
-using HealthHelper.Data;
-using HealthHelper.PageModels;
-using HealthHelper.Pages;
-using HealthHelper.Services.Analysis;
-using HealthHelper.Services.Logging;
-using HealthHelper.Services.Media;
-using HealthHelper.Services.Navigation;
-using HealthHelper.Services.Llm;
-using HealthHelper.Services.Share;
-using HealthHelper.Services.Platform;
+using WellnessWingman.Data;
+using WellnessWingman.PageModels;
+using WellnessWingman.Pages;
+using WellnessWingman.Services.Analysis;
+using WellnessWingman.Services.Logging;
+using WellnessWingman.Services.Media;
+using WellnessWingman.Services.Navigation;
+using WellnessWingman.Services.Llm;
+using WellnessWingman.Services.Share;
+using WellnessWingman.Services.Platform;
 using Microsoft.Maui.Storage;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
-namespace HealthHelper;
+namespace WellnessWingman;
 
 public static class MauiProgram
 {
@@ -33,7 +33,7 @@ public static class MauiProgram
             });
 
         var logsDirectory = Path.Combine(FileSystem.AppDataDirectory, "logs");
-        var logFilePath = Path.Combine(logsDirectory, "healthhelper.log");
+        var logFilePath = Path.Combine(logsDirectory, "wellnesswingman.log");
         const long maxLogFileSize = 1024 * 1024; // 1 MB
 
         builder.Logging.AddConsole();
@@ -43,8 +43,8 @@ public static class MauiProgram
         builder.Logging.AddDebug();
 #endif
 
-        string dbPath = Path.Combine(FileSystem.AppDataDirectory, "healthhelper.db3");
-        builder.Services.AddDbContext<HealthHelperDbContext>(options => options.UseSqlite($"Filename={dbPath}"));
+        string dbPath = Path.Combine(FileSystem.AppDataDirectory, "wellnesswingman.db3");
+        builder.Services.AddDbContext<WellnessWingmanDbContext>(options => options.UseSqlite($"Filename={dbPath}"));
 
         builder.Services.AddScoped<ITrackedEntryRepository, SqliteTrackedEntryRepository>();
         builder.Services.AddScoped<IEntryAnalysisRepository, SqliteEntryAnalysisRepository>();
@@ -60,12 +60,12 @@ public static class MauiProgram
         builder.Services.AddSingleton<IPhotoResizer, AndroidPhotoResizer>();
         builder.Services.AddSingleton<ICameraCaptureService, AndroidCameraCaptureService>();
         builder.Services.AddScoped<IShareIntentProcessor, ShareIntentProcessor>();
-        builder.Services.AddSingleton<IBackgroundExecutionService, HealthHelper.Platforms.Android.Services.AndroidBackgroundExecutionService>();
-        builder.Services.AddSingleton<INotificationPermissionService, HealthHelper.Platforms.Android.Services.AndroidNotificationPermissionService>();
+        builder.Services.AddSingleton<IBackgroundExecutionService, WellnessWingman.Platforms.Android.Services.AndroidBackgroundExecutionService>();
+        builder.Services.AddSingleton<INotificationPermissionService, WellnessWingman.Platforms.Android.Services.AndroidNotificationPermissionService>();
 #elif IOS
         builder.Services.AddSingleton<IPhotoResizer, NoOpPhotoResizer>();
         builder.Services.AddSingleton<ICameraCaptureService, MediaPickerCameraCaptureService>();
-        builder.Services.AddSingleton<IBackgroundExecutionService, HealthHelper.Platforms.iOS.Services.IOSBackgroundExecutionService>();
+        builder.Services.AddSingleton<IBackgroundExecutionService, WellnessWingman.Platforms.iOS.Services.IOSBackgroundExecutionService>();
         builder.Services.AddSingleton<INotificationPermissionService, NoOpNotificationPermissionService>();
 #else
         builder.Services.AddSingleton<IPhotoResizer, NoOpPhotoResizer>();
@@ -116,7 +116,7 @@ public static class MauiProgram
         // Run migrations
         using (var scope = app.Services.CreateScope())
         {
-            var dbContext = scope.ServiceProvider.GetRequiredService<HealthHelperDbContext>();
+            var dbContext = scope.ServiceProvider.GetRequiredService<WellnessWingmanDbContext>();
             dbContext.Database.Migrate();
         }
 

@@ -1,17 +1,17 @@
 
-using HealthHelper.Models;
+using WellnessWingman.Models;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
 
-namespace HealthHelper.Data;
+namespace WellnessWingman.Data;
 
-public class HealthHelperDbContext : DbContext
+public class WellnessWingmanDbContext : DbContext
 {
     public DbSet<TrackedEntry> TrackedEntries { get; set; }
     public DbSet<EntryAnalysis> EntryAnalyses { get; set; }
     public DbSet<DailySummary> DailySummaries { get; set; }
 
-    public HealthHelperDbContext(DbContextOptions<HealthHelperDbContext> options)
+    public WellnessWingmanDbContext(DbContextOptions<WellnessWingmanDbContext> options)
         : base(options)
     {
     }

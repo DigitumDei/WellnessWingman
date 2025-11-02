@@ -6,7 +6,7 @@ using Android.Graphics;
 using AndroidX.ExifInterface.Media;
 using Microsoft.Extensions.Logging;
 
-namespace HealthHelper.Services.Media;
+namespace WellnessWingman.Services.Media;
 
 public sealed class AndroidPhotoResizer : IPhotoResizer
 {

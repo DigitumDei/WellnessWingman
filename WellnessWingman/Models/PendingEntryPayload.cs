@@ -1,4 +1,4 @@
-namespace HealthHelper.Models;
+namespace WellnessWingman.Models;
 
 /// <summary>
 /// Temporary payload used while an entry is awaiting unified analysis classification.

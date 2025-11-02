@@ -1,6 +1,6 @@
 using System;
 
-namespace HealthHelper.Services.Platform;
+namespace WellnessWingman.Services.Platform;
 
 /// <summary>
 /// Platform-specific service for managing background task execution.

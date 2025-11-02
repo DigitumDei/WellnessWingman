@@ -3,7 +3,7 @@ using System.Globalization;
 using AndroidX.ExifInterface.Media;
 using Android.Util;
 
-namespace HealthHelper.Utilities;
+namespace WellnessWingman.Utilities;
 
 public static partial class ImageMetadataExtractor
 {
@@ -73,7 +73,7 @@ public static partial class ImageMetadataExtractor
         }
         catch (Exception ex)
         {
-            Log.Warn("HealthHelper.Metadata", $"Failed to read EXIF metadata from {absolutePath}: {ex}");
+            Log.Warn("WellnessWingman.Metadata", $"Failed to read EXIF metadata from {absolutePath}: {ex}");
         }
     }
 }

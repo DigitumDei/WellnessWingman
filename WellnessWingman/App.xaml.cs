@@ -1,10 +1,10 @@
 ﻿using System;
 using System.Threading.Tasks;
-using HealthHelper.Services.Analysis;
+using WellnessWingman.Services.Analysis;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
-namespace HealthHelper;
+namespace WellnessWingman;
 
 public partial class App : Application
 {

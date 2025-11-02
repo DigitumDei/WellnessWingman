@@ -4,7 +4,7 @@ using System.Threading.Tasks;
 using Microsoft.Maui.ApplicationModel.DataTransfer;
 using MauiShare = Microsoft.Maui.ApplicationModel.DataTransfer.Share;
 
-namespace HealthHelper.Services.Logging;
+namespace WellnessWingman.Services.Logging;
 
 public interface ILogFileService
 {
@@ -35,14 +35,14 @@ public sealed class LogFileService : ILogFileService
             await MauiShare.RequestAsync(new ShareTextRequest
             {
                 Text = "No diagnostics log entries yet.",
-                Title = "HealthHelper Diagnostics Log"
+                Title = "WellnessWingman Diagnostics Log"
             });
             return;
         }
 
         await MauiShare.RequestAsync(new ShareFileRequest
         {
-            Title = "HealthHelper Diagnostics Log",
+            Title = "WellnessWingman Diagnostics Log",
             File = new ShareFile(_logFilePath)
         });
     }

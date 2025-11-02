@@ -1,8 +1,8 @@
 
 using System.ComponentModel.DataAnnotations.Schema;
-using HealthHelper.Utilities;
+using WellnessWingman.Utilities;
 
-namespace HealthHelper.Models;
+namespace WellnessWingman.Models;
 
 public class TrackedEntry
 {

@@ -1,2 +1,2 @@
-[assembly: XmlnsDefinition("http://schemas.microsoft.com/dotnet/maui/global", "HealthHelper")]
-[assembly: XmlnsDefinition("http://schemas.microsoft.com/dotnet/maui/global", "HealthHelper.Pages")]
+[assembly: XmlnsDefinition("http://schemas.microsoft.com/dotnet/maui/global", "WellnessWingman")]
+[assembly: XmlnsDefinition("http://schemas.microsoft.com/dotnet/maui/global", "WellnessWingman.Pages")]

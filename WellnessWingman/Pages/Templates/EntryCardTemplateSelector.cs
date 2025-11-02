@@ -1,7 +1,7 @@
-using HealthHelper.Models;
+using WellnessWingman.Models;
 using Microsoft.Maui.Controls;
 
-namespace HealthHelper.Pages.Templates;
+namespace WellnessWingman.Pages.Templates;
 
 public class EntryCardTemplateSelector : DataTemplateSelector
 {

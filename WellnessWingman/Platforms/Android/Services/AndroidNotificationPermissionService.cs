@@ -1,10 +1,10 @@
 #if ANDROID
-using HealthHelper.Services.Platform;
+using WellnessWingman.Services.Platform;
 using Microsoft.Extensions.Logging;
 using Microsoft.Maui.ApplicationModel;
 using Microsoft.Maui.Controls;
 
-namespace HealthHelper.Platforms.Android.Services;
+namespace WellnessWingman.Platforms.Android.Services;
 
 /// <summary>
 /// Android implementation for requesting POST_NOTIFICATIONS permission
@@ -26,14 +26,14 @@ public class AndroidNotificationPermissionService : INotificationPermissionServi
             return;
         }
 
-        var notificationStatus = await Microsoft.Maui.ApplicationModel.Permissions.CheckStatusAsync<HealthHelper.Platforms.Android.Permissions.PostNotificationsPermission>();
+        var notificationStatus = await Microsoft.Maui.ApplicationModel.Permissions.CheckStatusAsync<WellnessWingman.Platforms.Android.Permissions.PostNotificationsPermission>();
         if (notificationStatus == PermissionStatus.Granted)
         {
             return;
         }
 
         // Show rationale explaining why we need this permission
-        if (Microsoft.Maui.ApplicationModel.Permissions.ShouldShowRationale<HealthHelper.Platforms.Android.Permissions.PostNotificationsPermission>())
+        if (Microsoft.Maui.ApplicationModel.Permissions.ShouldShowRationale<WellnessWingman.Platforms.Android.Permissions.PostNotificationsPermission>())
         {
             await MainThread.InvokeOnMainThreadAsync(async () =>
             {
@@ -53,7 +53,7 @@ public class AndroidNotificationPermissionService : INotificationPermissionServi
         }
 
         // Request the permission
-        notificationStatus = await Microsoft.Maui.ApplicationModel.Permissions.RequestAsync<HealthHelper.Platforms.Android.Permissions.PostNotificationsPermission>();
+        notificationStatus = await Microsoft.Maui.ApplicationModel.Permissions.RequestAsync<WellnessWingman.Platforms.Android.Permissions.PostNotificationsPermission>();
 
         if (notificationStatus != PermissionStatus.Granted)
         {

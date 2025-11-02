@@ -1,4 +1,4 @@
-namespace HealthHelper.Services.Platform;
+namespace WellnessWingman.Services.Platform;
 
 /// <summary>
 /// Service for requesting notification permissions required for background analysis

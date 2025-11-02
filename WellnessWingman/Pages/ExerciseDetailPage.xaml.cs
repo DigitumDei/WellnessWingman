@@ -1,7 +1,7 @@
-using HealthHelper.PageModels;
+using WellnessWingman.PageModels;
 using Microsoft.Maui.Controls;
 
-namespace HealthHelper.Pages;
+namespace WellnessWingman.Pages;
 
 public partial class ExerciseDetailPage : ContentPage
 {

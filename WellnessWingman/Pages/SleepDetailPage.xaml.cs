@@ -1,6 +1,6 @@
-using HealthHelper.PageModels;
+using WellnessWingman.PageModels;
 
-namespace HealthHelper.Pages;
+namespace WellnessWingman.Pages;
 
 public partial class SleepDetailPage : ContentPage
 {

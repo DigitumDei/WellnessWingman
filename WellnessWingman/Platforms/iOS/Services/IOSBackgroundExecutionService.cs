@@ -1,6 +1,6 @@
-using HealthHelper.Services.Platform;
+using WellnessWingman.Services.Platform;
 
-namespace HealthHelper.Platforms.iOS.Services;
+namespace WellnessWingman.Platforms.iOS.Services;
 
 /// <summary>
 /// iOS implementation of IBackgroundExecutionService.

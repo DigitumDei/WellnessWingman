@@ -5,7 +5,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Maui.Controls;
 
-namespace HealthHelper.Services.Navigation;
+namespace WellnessWingman.Services.Navigation;
 
 public class HistoricalNavigationService : IHistoricalNavigationService
 {

@@ -3,7 +3,7 @@ using System.Globalization;
 using Foundation;
 using ImageIO;
 
-namespace HealthHelper.Utilities;
+namespace WellnessWingman.Utilities;
 
 public static partial class ImageMetadataExtractor
 {

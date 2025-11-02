@@ -2,10 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
-using HealthHelper.Models;
+using WellnessWingman.Models;
 using Microsoft.Extensions.Logging;
 
-namespace HealthHelper.Services.Analysis;
+namespace WellnessWingman.Services.Analysis;
 
 /// <summary>
 /// Validates meal analysis results for schema compliance and data quality.

@@ -1,7 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
-using HealthHelper.Utilities;
+using WellnessWingman.Utilities;
 
-namespace HealthHelper.Models;
+namespace WellnessWingman.Models;
 
 public abstract partial class TrackedEntryCard : ObservableObject
 {

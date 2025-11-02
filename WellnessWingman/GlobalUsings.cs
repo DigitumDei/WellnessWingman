@@ -1,3 +1,3 @@
 global using Fonts;
-global using HealthHelper.PageModels;
-global using HealthHelper.Pages;
+global using WellnessWingman.PageModels;
+global using WellnessWingman.Pages;

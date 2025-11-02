@@ -2,7 +2,7 @@
 using Android.Content;
 #endif
 
-namespace HealthHelper.Services.Share;
+namespace WellnessWingman.Services.Share;
 
 public interface IShareIntentProcessor
 {

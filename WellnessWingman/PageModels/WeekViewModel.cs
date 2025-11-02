@@ -5,14 +5,14 @@ using System.IO;
 using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using HealthHelper.Data;
-using HealthHelper.Models;
-using HealthHelper.Services.Analysis;
-using HealthHelper.Services.Navigation;
+using WellnessWingman.Data;
+using WellnessWingman.Models;
+using WellnessWingman.Services.Analysis;
+using WellnessWingman.Services.Navigation;
 using Microsoft.Extensions.Logging;
 using Microsoft.Maui.Controls;
 
-namespace HealthHelper.PageModels;
+namespace WellnessWingman.PageModels;
 
 public partial class WeekViewModel : ObservableObject, IQueryAttributable
 {

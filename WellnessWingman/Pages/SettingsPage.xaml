@@ -1,9 +1,9 @@
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
-             xmlns:models="clr-namespace:HealthHelper.Models"
-             xmlns:viewmodels="clr-namespace:HealthHelper.PageModels"
-             xmlns:f="clr-namespace:Fonts;assembly=HealthHelper"
-             x:Class="HealthHelper.Pages.SettingsPage"
+             xmlns:models="clr-namespace:WellnessWingman.Models"
+             xmlns:viewmodels="clr-namespace:WellnessWingman.PageModels"
+             xmlns:f="clr-namespace:Fonts;assembly=WellnessWingman"
+             x:Class="WellnessWingman.Pages.SettingsPage"
              x:DataType="viewmodels:SettingsViewModel"
              Title="Settings">
     <VerticalStackLayout Spacing="20" Padding="20">

@@ -1,5 +1,5 @@
 ﻿#if !ANDROID && !IOS && !MACCATALYST
-namespace HealthHelper.Utilities;
+namespace WellnessWingman.Utilities;
 
 public static partial class ImageMetadataExtractor
 {

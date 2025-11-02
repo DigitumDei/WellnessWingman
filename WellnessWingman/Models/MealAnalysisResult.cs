@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace HealthHelper.Models;
+namespace WellnessWingman.Models;
 
 /// <summary>
 /// Structured JSON schema for meal analysis results from the LLM.

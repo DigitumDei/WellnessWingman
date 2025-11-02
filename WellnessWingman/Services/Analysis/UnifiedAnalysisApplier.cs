@@ -4,11 +4,11 @@ using Microsoft.Maui.Storage;
 using System;
 using System.Collections.Generic;
 using System.IO;
-using HealthHelper.Data;
-using HealthHelper.Models;
+using WellnessWingman.Data;
+using WellnessWingman.Models;
 using Microsoft.Extensions.Logging;
 
-namespace HealthHelper.Services.Analysis;
+namespace WellnessWingman.Services.Analysis;
 
 /// <summary>
 /// Applies unified analysis results to tracked entries, converting payloads and persisting updates.

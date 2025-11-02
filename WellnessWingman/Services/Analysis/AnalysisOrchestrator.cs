@@ -1,12 +1,12 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
-using HealthHelper.Data;
-using HealthHelper.Models;
-using HealthHelper.Services.Llm;
+using WellnessWingman.Data;
+using WellnessWingman.Models;
+using WellnessWingman.Services.Llm;
 using Microsoft.Extensions.Logging;
 
-namespace HealthHelper.Services.Analysis;
+namespace WellnessWingman.Services.Analysis;
 
 public interface IAnalysisOrchestrator
 {

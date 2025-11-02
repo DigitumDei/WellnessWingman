@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace HealthHelper.Models;
+namespace WellnessWingman.Models;
 
 public class AppSettings
 {
