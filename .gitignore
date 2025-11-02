@@ -362,7 +362,6 @@ MigrationBackup/
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
 .env
-HealthHelper/healthhelper.keystore
 /.claude/settings.local.json
 
 # Tooling
