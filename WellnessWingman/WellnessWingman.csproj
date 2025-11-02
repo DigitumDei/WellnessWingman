@@ -45,17 +45,13 @@
 	<PropertyGroup Condition="'$(Configuration)|$(TargetFramework)|$(Platform)'=='Release|net10.0-android|AnyCPU'">
 	  <AndroidPackageFormat>apk</AndroidPackageFormat>
 	  <AndroidKeyStore>True</AndroidKeyStore>
-	  <AndroidSigningStorePass>8vzq4m42&amp;wzNu</AndroidSigningStorePass>
 	  <AndroidSigningKeyAlias>wellnesswingman</AndroidSigningKeyAlias>
-	  <AndroidSigningKeyPass>8vzq4m42&amp;wzNu</AndroidSigningKeyPass>
 	</PropertyGroup>
 
 	<PropertyGroup Condition="'$(Configuration)|$(TargetFramework)|$(Platform)'=='Debug|net10.0-android|AnyCPU'">
 	  <EmbedAssembliesIntoApk>True</EmbedAssembliesIntoApk>
 	  <AndroidKeyStore>True</AndroidKeyStore>
-	  <AndroidSigningStorePass>8vzq4m42&amp;wzNu</AndroidSigningStorePass>
 	  <AndroidSigningKeyAlias>wellnesswingman</AndroidSigningKeyAlias>
-	  <AndroidSigningKeyPass>8vzq4m42&amp;wzNu</AndroidSigningKeyPass>
 	</PropertyGroup>
 	<PropertyGroup>
 		<CsWinRTAotOptimizerEnabled>false</CsWinRTAotOptimizerEnabled>
@@ -94,5 +90,14 @@
 		<PackageReference Include="OpenAI" Version="2.5.0" />
 		<PackageReference Include="System.Net.Http.Json" Version="9.0.9" />
 	</ItemGroup>
+
+	<Target Name="EnsureAndroidSigningSecrets"
+	        BeforeTargets="Build"
+	        Condition="'$(TargetFramework)' == 'net10.0-android'">
+		<Error Condition="'$(AndroidSigningStorePass)' == ''"
+		       Text="AndroidSigningStorePass is not set. Provide it via an environment variable or pass /p:AndroidSigningStorePass=... when building." />
+		<Error Condition="'$(AndroidSigningKeyPass)' == ''"
+		       Text="AndroidSigningKeyPass is not set. Provide it via an environment variable or pass /p:AndroidSigningKeyPass=... when building." />
+	</Target>
 
 </Project>
