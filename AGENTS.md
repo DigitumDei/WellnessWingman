@@ -1,15 +1,15 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-- `HealthHelper.slnx` coordinates the MAUI app in `HealthHelper/` and shared defaults in `HealthHelper.ServiceDefaults/`.
+- `WellnessWingman.slnx` coordinates the MAUI app in `WellnessWingman/` and shared defaults in `WellnessWingman.ServiceDefaults/`.
 - Domain entities live under `Data/` and `Models/`; presentation logic sits in `PageModels/`; XAML pages and controls reside in `Pages/` and `Pages/Controls/`.
 - Cross-platform assets (icons, fonts, styles) are in `Resources/`; platform-specific heads stay within `Platforms/`.
 - Reusable helpers belong in `Utilities/`, and new services should be registered centrally through `MauiProgram.cs`.
 
 ## Build, Test, and Development Commands
-- `dotnet restore HealthHelper.slnx` pulls all NuGet dependencies prior to any build.
-- `dotnet build HealthHelper.slnx` validates the full solution as CI would.
-- `dotnet build HealthHelper/HealthHelper.csproj -t:Run` launches the MAUI app on the default target.
+- `dotnet restore WellnessWingman.slnx` pulls all NuGet dependencies prior to any build.
+- `dotnet build WellnessWingman.slnx` validates the full solution as CI would.
+- `dotnet build WellnessWingman/WellnessWingman.csproj -t:Run` launches the MAUI app on the default target.
 - `dotnet test` (run from the repo root) executes all test projects as they are added.
 - `dotnet maui-check` is a one-time tooling sanity check per developer machine.
 - Always invoke the .NET CLI as `dotnet` (without an explicit path) to ensure the shim on the PATH is used.
@@ -20,20 +20,20 @@
 - Run `dotnet format` before publishing changes to satisfy analyzers and nullable warnings.
 
 ## Testing Guidelines
-- Place unit tests in the `HealthHelper.Tests/` project, mirroring production namespaces.
+- Place unit tests in the `WellnessWingman.Tests/` project, mirroring production namespaces.
 - Name test classes `<TypeUnderTest>Tests` and methods with scenario-driven verbs (e.g., `GeneratePlan_SortsTasksByUrgency`).
 - Mock AI integrations so `dotnet test` remains deterministic and offline-friendly.
 
 ### Code Coverage
-- Run tests with code coverage using: `dotnet test HealthHelper.Tests/HealthHelper.Tests.csproj /p:CollectCoverage=true /p:CoverletOutputFormat=cobertura /p:CoverletOutput=./TestResults/ /p:IncludeTestAssembly=true`
-- This generates a coverage report at `HealthHelper.Tests/TestResults/coverage.cobertura.xml`
+- Run tests with code coverage using: `dotnet test WellnessWingman.Tests/WellnessWingman.Tests.csproj /p:CollectCoverage=true /p:CoverletOutputFormat=cobertura /p:CoverletOutput=./TestResults/ /p:IncludeTestAssembly=true`
+- This generates a coverage report at `WellnessWingman.Tests/TestResults/coverage.cobertura.xml`
 - Note: The test project uses linked source files rather than project references, requiring `/p:IncludeTestAssembly=true` to measure coverage properly.
 - Generate human-readable HTML reports with ReportGenerator:
   ```bash
   dotnet tool install --global dotnet-reportgenerator-globaltool
-  reportgenerator -reports:"HealthHelper.Tests/TestResults/coverage.cobertura.xml" -targetdir:"HealthHelper.Tests/TestResults/coverage-report" -reporttypes:"Html;TextSummary"
+  reportgenerator -reports:"WellnessWingman.Tests/TestResults/coverage.cobertura.xml" -targetdir:"WellnessWingman.Tests/TestResults/coverage-report" -reporttypes:"Html;TextSummary"
   ```
-- View the text summary at `HealthHelper.Tests/TestResults/coverage-report/Summary.txt` or open the HTML report in a browser.
+- View the text summary at `WellnessWingman.Tests/TestResults/coverage-report/Summary.txt` or open the HTML report in a browser.
 - Target minimum coverage thresholds: 80% line coverage, 70% branch coverage for production code.
 
 ## Security & Configuration

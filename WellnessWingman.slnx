@@ -1,0 +1,7 @@
+<Solution>
+  <Project Path="WellnessWingman.ServiceDefaults/WellnessWingman.ServiceDefaults.csproj" />
+  <Project Path="WellnessWingman/WellnessWingman.csproj">
+    <Deploy Solution="Debug|*" />
+  </Project>
+  <Project Path="WellnessWingman.Tests/WellnessWingman.Tests.csproj" />
+</Solution>
