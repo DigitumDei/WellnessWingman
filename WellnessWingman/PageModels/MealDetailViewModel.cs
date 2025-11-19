@@ -28,6 +28,9 @@ public partial class MealDetailViewModel : ObservableObject
     private MealPhoto? meal;
 
     [ObservableProperty]
+    private string editableDescription = string.Empty;
+
+    [ObservableProperty]
     private string analysisText = string.Empty;
 
     [ObservableProperty]
@@ -167,7 +170,42 @@ public partial class MealDetailViewModel : ObservableObject
 
     partial void OnMealChanged(MealPhoto? value)
     {
+        if (value is not null)
+        {
+            EditableDescription = value.Description;
+        }
         _ = LoadAnalysisAsync();
+    }
+
+    [RelayCommand]
+    private async Task SaveDescriptionAsync()
+    {
+        if (Meal is null)
+        {
+            _logger.LogWarning("SaveDescription invoked without a selected meal.");
+            return;
+        }
+
+        try
+        {
+            var trackedEntry = await _trackedEntryRepository.GetByIdAsync(Meal.EntryId);
+            if (trackedEntry is not null && trackedEntry.Payload is MealPayload mealPayload)
+            {
+                mealPayload.Description = EditableDescription;
+                trackedEntry.Payload = mealPayload; // Ensure the payload is marked as updated
+                await _trackedEntryRepository.UpdateAsync(trackedEntry);
+
+                // Update the UI
+                Meal.Description = EditableDescription;
+
+                await ShowAlertOnMainThreadAsync("Success", "The description has been updated.");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to save description for entry {EntryId}.", Meal.EntryId);
+            await ShowAlertOnMainThreadAsync("Error", "Could not save the new description.");
+        }
     }
 
     private async Task LoadAnalysisAsync()

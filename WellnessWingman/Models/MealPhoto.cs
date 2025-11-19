@@ -1,3 +1,5 @@
+using CommunityToolkit.Mvvm.ComponentModel;
+
 namespace WellnessWingman.Models;
 
 public partial class MealPhoto : TrackedEntryCard
@@ -22,10 +24,12 @@ public partial class MealPhoto : TrackedEntryCard
     {
         FullPath = fullPath;
         OriginalPath = originalPath;
-        Description = description;
+        this.description = description;
     }
 
     public string FullPath { get; }
     public string OriginalPath { get; }
-    public string Description { get; }
+
+    [ObservableProperty]
+    private string description;
 }

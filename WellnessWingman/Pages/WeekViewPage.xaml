@@ -25,7 +25,8 @@
                      Command="{Binding RefreshCommand}"
                      IsRefreshing="{Binding IsLoading}">
             <CollectionView ItemsSource="{Binding Days}"
-                            SelectionMode="None"
+                            SelectionMode="Single"
+                            SelectionChanged="Day_SelectionChanged"
                             VerticalOptions="FillAndExpand">
                 <CollectionView.ItemsLayout>
                     <LinearItemsLayout Orientation="Vertical" ItemSpacing="12" />
@@ -204,11 +205,6 @@
                                        TextColor="{StaticResource Gray600}"
                                        Margin="0,8,0,0" />
                             </Grid>
-
-                            <Border.GestureRecognizers>
-                                <TapGestureRecognizer Command="{Binding BindingContext.SelectDayCommand, Source={x:Reference WeekViewPageRoot}}"
-                                                      CommandParameter="{Binding .}" />
-                            </Border.GestureRecognizers>
                         </Border>
                     </DataTemplate>
                 </CollectionView.ItemTemplate>
