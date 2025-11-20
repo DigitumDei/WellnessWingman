@@ -68,14 +68,15 @@ public sealed class AndroidPhotoResizer : IPhotoResizer
                 cancellationToken.ThrowIfCancellationRequested();
 
                 bool orientationAdjusted = false;
-                Bitmap? finalBitmap = null;
+                Bitmap finalBitmap = decodedBitmap;
 
                 try
                 {
                     finalBitmap = ApplyOrientationIfNeeded(filePath, decodedBitmap, out orientationAdjusted);
+                    var compressFormat = Bitmap.CompressFormat.Jpeg ?? throw new InvalidOperationException("JPEG compression format is unavailable.");
 
                     using var output = File.Create(filePath);
-                    if (!finalBitmap.Compress(Bitmap.CompressFormat.Jpeg, 90, output))
+                    if (!finalBitmap.Compress(compressFormat, 90, output))
                     {
                         _logger.LogWarning("Bitmap compression returned false for {FilePath}.", filePath);
                     }
@@ -85,14 +86,13 @@ public sealed class AndroidPhotoResizer : IPhotoResizer
                 }
                 finally
                 {
-                    finalBitmap?.Dispose();
                     if (orientationAdjusted)
                     {
                         decodedBitmap.Dispose();
                     }
-                    else
+                    if (finalBitmap != decodedBitmap)
                     {
-                        // If no orientation change, finalBitmap equals decodedBitmap and is already disposed.
+                        finalBitmap.Dispose();
                     }
                 }
             }

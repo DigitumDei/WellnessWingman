@@ -80,7 +80,7 @@
 		<PackageReference Include="CommunityToolkit.Maui" Version="13.0.0" />
 		<PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
 		<PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.0">
-		  <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+		  <IncludeAssets>runtime; build; native; analyzers; buildtransitive</IncludeAssets>
 		  <PrivateAssets>all</PrivateAssets>
 		</PackageReference>
 		<PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.0" />
@@ -89,7 +89,11 @@
 		<PackageReference Include="Microsoft.Extensions.Logging.Console" Version="10.0.0" />
 		<PackageReference Include="Microsoft.Maui.Essentials" Version="10.0.10" />
 		<PackageReference Include="OpenAI" Version="2.7.0" />
-		<PackageReference Include="System.Net.Http.Json" Version="10.0.0" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<!-- Remove Roslyn design-time content files that are incompatible with Android packaging -->
+		<PackageReference Update="Microsoft.CodeAnalysis.Workspaces.MSBuild" ExcludeAssets="contentFiles" />
 	</ItemGroup>
 
 	<Target Name="EnsureAndroidSigningSecrets" BeforeTargets="Build" Condition="'$(TargetFramework)' == 'net10.0-android'">

@@ -1,8 +1,6 @@
 #if ANDROID
-using WellnessWingman.Services.Platform;
 using Microsoft.Extensions.Logging;
-using Microsoft.Maui.ApplicationModel;
-using Microsoft.Maui.Controls;
+using WellnessWingman.Services.Platform;
 
 namespace WellnessWingman.Platforms.Android.Services;
 
@@ -37,10 +35,10 @@ public class AndroidNotificationPermissionService : INotificationPermissionServi
         {
             await MainThread.InvokeOnMainThreadAsync(async () =>
             {
-                var page = Application.Current?.MainPage ?? Shell.Current?.CurrentPage;
+                var page = Application.Current?.Windows.FirstOrDefault()?.Page ?? Shell.Current?.CurrentPage;
                 if (page is not null)
                 {
-                    await page.DisplayAlert(
+                    await page.DisplayAlertAsync(
                         "Background Analysis",
                         "We need notification permission to keep analyzing your photos even when the screen is locked. This ensures your meal analysis completes reliably.",
                         "OK");
