@@ -20,12 +20,7 @@ public sealed class AndroidCameraCaptureService : ICameraCaptureService
     {
         ArgumentNullException.ThrowIfNull(capture);
 
-        var activity = MainActivity.Instance;
-        if (activity is null)
-        {
-            throw new InvalidOperationException("MainActivity instance is not available.");
-        }
-
+        var activity = MainActivity.Instance ?? throw new InvalidOperationException("MainActivity instance is not available.");
         var tcs = new TaskCompletionSource<CameraCaptureOutcome>();
 
         void OnActivityResult(object? sender, ActivityResultEventArgs e)
