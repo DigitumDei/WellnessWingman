@@ -86,14 +86,11 @@ public sealed class AndroidPhotoResizer : IPhotoResizer
                 }
                 finally
                 {
-                    if (orientationAdjusted)
-                    {
-                        decodedBitmap.Dispose();
-                    }
                     if (finalBitmap != decodedBitmap)
                     {
                         finalBitmap.Dispose();
                     }
+                    decodedBitmap.Dispose();
                 }
             }
             catch (OperationCanceledException)
