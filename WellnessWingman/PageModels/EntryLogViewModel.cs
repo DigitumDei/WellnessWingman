@@ -10,7 +10,7 @@ using System.Collections.ObjectModel;
 
 namespace WellnessWingman.PageModels;
 
-public partial class EntryLogViewModel : ObservableObject
+    public partial class EntryLogViewModel : ObservableObject, IQueryAttributable
 {
     private readonly ITrackedEntryRepository _trackedEntryRepository;
     private readonly IBackgroundAnalysisService _backgroundAnalysisService;
@@ -22,6 +22,20 @@ public partial class EntryLogViewModel : ObservableObject
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(GenerateDailySummaryCommand))]
     private DailySummaryCard? summaryCard;
+
+    [ObservableProperty]
+    private DateTimeOffset? historicalDate;
+
+    partial void OnHistoricalDateChanged(DateTimeOffset? value)
+    {
+        OnPropertyChanged(nameof(IsHistoricalMode));
+        OnPropertyChanged(nameof(FormattedHistoricalDate));
+        GenerateDailySummaryCommand.NotifyCanExecuteChanged();
+        ReloadEntriesCommand.Execute(null);
+    }
+
+    public bool IsHistoricalMode => HistoricalDate.HasValue;
+    public string FormattedHistoricalDate => HistoricalDate?.ToString("ddd, MMM d, yyyy") ?? "Today";
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(GenerateDailySummaryCommand))]
@@ -42,6 +56,19 @@ public partial class EntryLogViewModel : ObservableObject
         _logger = logger;
     }
 
+    public void ApplyQueryAttributes(IDictionary<string, object> query)
+    {
+        if (query.TryGetValue("HistoricalDate", out var historicalDateValue) && historicalDateValue is DateTime historicalDate)
+        {
+            HistoricalDate = new DateTimeOffset(historicalDate);
+            _logger.LogInformation("Navigating to DayDetailPage for date {Date}", historicalDate.Date);
+        }
+        else
+        {
+            HistoricalDate = null;
+        }
+    }
+
     partial void OnSummaryCardChanged(DailySummaryCard? value)
     {
         OnPropertyChanged(nameof(ShowGenerateSummaryButton));
@@ -49,7 +76,35 @@ public partial class EntryLogViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private async Task GoToEntryDetail(TrackedEntryCard entry)
+    public async Task ReloadEntriesAsync()
+    {
+        await LoadEntriesAsync();
+    }
+
+    [RelayCommand]
+    private async Task GoToPreviousDayAsync()
+    {
+        if (!IsHistoricalMode)
+        {
+            return;
+        }
+
+        HistoricalDate = HistoricalDate!.Value.AddDays(-1);
+    }
+
+    [RelayCommand]
+    private async Task GoToNextDayAsync()
+    {
+        if (!IsHistoricalMode)
+        {
+            return;
+        }
+
+        HistoricalDate = HistoricalDate!.Value.AddDays(1);
+    }
+
+    [RelayCommand]
+    public async Task GoToEntryDetail(TrackedEntryCard entry)
     {
         if (entry is null)
         {
@@ -137,8 +192,10 @@ public partial class EntryLogViewModel : ObservableObject
         {
             IsGeneratingSummary = true;
 
+            var dateToQuery = IsHistoricalMode ? HistoricalDate!.Value.Date : DateTime.Now.Date;
+
             var entriesForDay = await _trackedEntryRepository
-                .GetByDayAsync(DateTime.Now)
+                .GetByDayAsync(dateToQuery)
                 .ConfigureAwait(false);
 
             var entryCountSnapshot = entriesForDay
@@ -157,7 +214,7 @@ public partial class EntryLogViewModel : ObservableObject
             };
 
             var existingSummaryEntries = await _trackedEntryRepository
-                .GetByEntryTypeAndDayAsync(EntryType.DailySummary, DateTime.Now)
+                .GetByEntryTypeAndDayAsync(EntryType.DailySummary, dateToQuery)
                 .ConfigureAwait(false);
 
             var existingSummary = existingSummaryEntries
@@ -259,6 +316,11 @@ public partial class EntryLogViewModel : ObservableObject
 
     private bool CanGenerateSummary()
     {
+        if (IsHistoricalMode)
+        {
+            return false;
+        }
+
         if (IsGeneratingSummary)
         {
             return false;
@@ -305,8 +367,9 @@ public partial class EntryLogViewModel : ObservableObject
     {
         try
         {
-            _logger.LogDebug("Loading tracked entries for {Date}.", DateTime.Now.Date);
-            var entries = (await _trackedEntryRepository.GetByDayAsync(DateTime.Now).ConfigureAwait(false))
+            var dateToQuery = IsHistoricalMode ? HistoricalDate!.Value.Date : DateTime.Now.Date;
+            _logger.LogDebug("Loading tracked entries for {Date}.", dateToQuery);
+            var entries = (await _trackedEntryRepository.GetByDayAsync(dateToQuery).ConfigureAwait(false))
                 .ToList();
 
             var stuckEntries = entries
@@ -328,7 +391,7 @@ public partial class EntryLogViewModel : ObservableObject
             }
 
             var summaryEntries = await _trackedEntryRepository
-                .GetByEntryTypeAndDayAsync(EntryType.DailySummary, DateTime.Now)
+                .GetByEntryTypeAndDayAsync(EntryType.DailySummary, dateToQuery)
                 .ConfigureAwait(false);
 
             var summaryEntry = summaryEntries

@@ -1,39 +1,64 @@
-using System;
-using System.Globalization;
+using WellnessWingman.PageModels;
+using WellnessWingman.Models;
+using Microsoft.Maui.Controls;
+using WellnessWingman.Services.Analysis;
 
-namespace WellnessWingman.Pages;
-
-[QueryProperty(nameof(TargetDate), "Date")]
-public partial class DayDetailPage : ContentPage
+namespace WellnessWingman.Pages
 {
-    private DateTime targetDate;
-
-    public DayDetailPage()
+    public partial class DayDetailPage : ContentPage
     {
-        InitializeComponent();
-        UpdateDisplayedDate();
-    }
+        public EntryLogViewModel ViewModel => BindingContext as EntryLogViewModel ?? throw new ArgumentException("BindingContext is not an EntryLogViewModel");
+        private readonly IBackgroundAnalysisService _backgroundAnalysisService;
 
-    public DateTime TargetDate
-    {
-        get => targetDate;
-        set
+        public DayDetailPage(EntryLogViewModel viewModel, IBackgroundAnalysisService backgroundAnalysisService)
         {
-            var normalized = value.Kind switch
-            {
-                DateTimeKind.Utc => value.ToLocalTime(),
-                _ => value
-            };
-
-            // Normalize to date only to avoid time zone drift when navigating between contexts.
-            targetDate = normalized.Date;
-            UpdateDisplayedDate();
+            InitializeComponent();
+            BindingContext = viewModel;
+            _backgroundAnalysisService = backgroundAnalysisService;
         }
-    }
 
-    private void UpdateDisplayedDate()
-    {
-        var displayDate = targetDate == default ? DateTime.Today : targetDate;
-        DateLabel.Text = displayDate.ToString("D", CultureInfo.CurrentCulture);
+        protected override void OnAppearing()
+        {
+            base.OnAppearing();
+            _backgroundAnalysisService.StatusChanged += OnEntryStatusChanged;
+        }
+
+        protected override void OnDisappearing()
+        {
+            base.OnDisappearing();
+            _backgroundAnalysisService.StatusChanged -= OnEntryStatusChanged;
+        }
+
+        private async void OnEntryStatusChanged(object? sender, EntryStatusChangedEventArgs e)
+        {
+            await ViewModel.UpdateEntryStatusAsync(e.EntryId, e.Status);
+        }
+
+        private async void EntriesCollection_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (e.CurrentSelection.FirstOrDefault() is not TrackedEntryCard selectedEntry)
+            {
+                return;
+            }
+
+            await HandleEntrySelectionAsync(ViewModel, selectedEntry);
+
+            if (sender is CollectionView collectionView)
+            {
+                collectionView.SelectedItem = null;
+            }
+        }
+
+        private static async Task HandleEntrySelectionAsync(EntryLogViewModel viewModel, TrackedEntryCard entry)
+        {
+            if (entry.ProcessingStatus == ProcessingStatus.Failed || entry.ProcessingStatus == ProcessingStatus.Skipped)
+            {
+                await viewModel.RetryAnalysisCommand.ExecuteAsync(entry);
+            }
+            else if (entry.IsClickable)
+            {
+                await viewModel.GoToEntryDetailCommand.ExecuteAsync(entry);
+            }
+        }
     }
 }

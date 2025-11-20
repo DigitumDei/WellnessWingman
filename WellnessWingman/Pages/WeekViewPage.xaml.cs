@@ -31,4 +31,13 @@ public partial class WeekViewPage : ContentPage, IQueryAttributable
     {
         _viewModel.ApplyQueryAttributes(query);
     }
+
+    private async void Day_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (e.CurrentSelection.FirstOrDefault() is WeekDayView selectedDay)
+        {
+            await _viewModel.SelectDayCommand.ExecuteAsync(selectedDay);
+            ((CollectionView)sender).SelectedItem = null; // Deselect item
+        }
+    }
 }

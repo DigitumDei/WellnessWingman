@@ -90,7 +90,7 @@ public class HistoricalNavigationService : IHistoricalNavigationService
             targetDate,
             new Dictionary<string, object>
             {
-                { "Date", targetDate }
+                { "HistoricalDate", targetDate }
             });
     }
 

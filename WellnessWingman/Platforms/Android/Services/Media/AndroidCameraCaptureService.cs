@@ -20,12 +20,7 @@ public sealed class AndroidCameraCaptureService : ICameraCaptureService
     {
         ArgumentNullException.ThrowIfNull(capture);
 
-        var activity = MainActivity.Instance;
-        if (activity is null)
-        {
-            throw new InvalidOperationException("MainActivity instance is not available.");
-        }
-
+        var activity = MainActivity.Instance ?? throw new InvalidOperationException("MainActivity instance is not available.");
         var tcs = new TaskCompletionSource<CameraCaptureOutcome>();
 
         void OnActivityResult(object? sender, ActivityResultEventArgs e)
@@ -83,6 +78,10 @@ public sealed class AndroidCameraCaptureService : ICameraCaptureService
 
             var authority = $"{activity.PackageName}.fileprovider";
             var photoUri = FileProvider.GetUriForFile(activity, authority, file);
+            if (photoUri is null)
+            {
+                throw new InvalidOperationException("Unable to create file URI for captured photo.");
+            }
 
             var intent = new Intent(MediaStore.ActionImageCapture);
             intent.PutExtra(MediaStore.ExtraOutput, photoUri);
