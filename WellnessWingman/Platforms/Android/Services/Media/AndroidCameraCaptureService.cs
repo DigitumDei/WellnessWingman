@@ -83,6 +83,11 @@ public sealed class AndroidCameraCaptureService : ICameraCaptureService
                 throw new InvalidOperationException("Unable to create file URI for captured photo.");
             }
 
+            if (photoUri is null)
+            {
+                throw new InvalidOperationException("Failed to get URI for photo file from FileProvider");
+            }
+
             var intent = new Intent(MediaStore.ActionImageCapture);
             intent.PutExtra(MediaStore.ExtraOutput, photoUri);
             intent.AddFlags(ActivityFlags.GrantReadUriPermission | ActivityFlags.GrantWriteUriPermission);
