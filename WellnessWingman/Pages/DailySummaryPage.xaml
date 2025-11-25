@@ -40,22 +40,37 @@
                     <Label Text="Nutrition Totals"
                            Style="{StaticResource Body2Strong}" />
                     
-                    <Grid ColumnDefinitions="*,*,*,*">
-                        <VerticalStackLayout>
+                    <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="*,*,*,*" RowSpacing="12">
+                        <!-- Row 0: Macros -->
+                        <VerticalStackLayout Grid.Row="0" Grid.Column="0">
                             <Label Text="{Binding Totals.Calories, StringFormat='{0:F0}'}" FontAttributes="Bold" HorizontalOptions="Center" FontSize="18"/>
                             <Label Text="Cals" Style="{StaticResource Caption1}" HorizontalOptions="Center" />
                         </VerticalStackLayout>
-                        <VerticalStackLayout Grid.Column="1">
+                        <VerticalStackLayout Grid.Row="0" Grid.Column="1">
                             <Label Text="{Binding Totals.Protein, StringFormat='{0:F0}g'}" FontAttributes="Bold" HorizontalOptions="Center" FontSize="18"/>
                             <Label Text="Prot" Style="{StaticResource Caption1}" HorizontalOptions="Center" />
                         </VerticalStackLayout>
-                        <VerticalStackLayout Grid.Column="2">
+                        <VerticalStackLayout Grid.Row="0" Grid.Column="2">
                             <Label Text="{Binding Totals.Carbohydrates, StringFormat='{0:F0}g'}" FontAttributes="Bold" HorizontalOptions="Center" FontSize="18"/>
                             <Label Text="Carbs" Style="{StaticResource Caption1}" HorizontalOptions="Center" />
                         </VerticalStackLayout>
-                        <VerticalStackLayout Grid.Column="3">
+                        <VerticalStackLayout Grid.Row="0" Grid.Column="3">
                             <Label Text="{Binding Totals.Fat, StringFormat='{0:F0}g'}" FontAttributes="Bold" HorizontalOptions="Center" FontSize="18"/>
                             <Label Text="Fat" Style="{StaticResource Caption1}" HorizontalOptions="Center" />
+                        </VerticalStackLayout>
+
+                        <!-- Row 1: Micros -->
+                        <VerticalStackLayout Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" HorizontalOptions="Center">
+                             <Label Text="{Binding Totals.Fiber, StringFormat='{0:F0}g'}" FontAttributes="Bold" HorizontalOptions="Center" FontSize="16"/>
+                             <Label Text="Fiber" Style="{StaticResource Caption1}" HorizontalOptions="Center" />
+                        </VerticalStackLayout>
+                        <VerticalStackLayout Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" HorizontalOptions="Center">
+                             <Label Text="{Binding Totals.Sugar, StringFormat='{0:F0}g'}" FontAttributes="Bold" HorizontalOptions="Center" FontSize="16"/>
+                             <Label Text="Sugar" Style="{StaticResource Caption1}" HorizontalOptions="Center" />
+                        </VerticalStackLayout>
+                        <VerticalStackLayout Grid.Row="1" Grid.Column="2" Grid.ColumnSpan="2" HorizontalOptions="Center">
+                             <Label Text="{Binding Totals.Sodium, StringFormat='{0:F0}mg'}" FontAttributes="Bold" HorizontalOptions="Center" FontSize="16"/>
+                             <Label Text="Sodium" Style="{StaticResource Caption1}" HorizontalOptions="Center" />
                         </VerticalStackLayout>
                     </Grid>
                 </VerticalStackLayout>
