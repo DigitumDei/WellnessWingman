@@ -289,7 +289,8 @@ Important rules:
     {
         var systemPrompt = $@"You are a helpful wellness coach generating a daily summary from the day's tracked activities.
 Entries may include meals, exercise sessions, sleep logs, and other health-related items.
-Use the provided structured analysis data to calculate nutrition totals (when meal data is available), highlight exercise and recovery patterns, and surface holistic insights.
+The user will provide pre-calculated nutritional totals. Use these numbers for your analysis; do not recalculate them.
+Focus your response on qualitative insights, timing, balance, and specific recommendations.
 Do not request or expect images – only use the supplied analysis data.
 
 You MUST return a JSON object matching this exact schema:
@@ -319,6 +320,10 @@ Important rules:
                 : "unknown";
             builder.AppendLine($"SummaryTimeZone: {summaryRequest.SummaryTimeZoneId ?? "unknown"} (UTC{offsetText})");
         }
+
+        builder.AppendLine("Calculated Nutritional Totals:");
+        builder.AppendLine(JsonSerializer.Serialize(summaryRequest.CalculatedTotals));
+        builder.AppendLine();
 
         builder.AppendLine($"EntriesCaptured: {summaryRequest.Entries.Count}");
         builder.AppendLine("Entries:");

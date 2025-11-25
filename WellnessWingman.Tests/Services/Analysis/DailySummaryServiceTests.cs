@@ -94,6 +94,7 @@ public class DailySummaryServiceTests
             analysisRepo,
             trackedRepo,
             llmClient,
+            new DailyTotalsCalculator(),
             NullLogger<DailySummaryService>.Instance);
 
         await service.GenerateAsync(summaryEntry);

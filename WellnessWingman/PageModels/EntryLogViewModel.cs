@@ -13,15 +13,23 @@ namespace WellnessWingman.PageModels;
     public partial class EntryLogViewModel : ObservableObject, IQueryAttributable
 {
     private readonly ITrackedEntryRepository _trackedEntryRepository;
+    private readonly IEntryAnalysisRepository _entryAnalysisRepository;
     private readonly IBackgroundAnalysisService _backgroundAnalysisService;
     private readonly ILogger<EntryLogViewModel> _logger;
     private readonly IHistoricalNavigationService _historicalNavigationService;
+    private readonly DailyTotalsCalculator _dailyTotalsCalculator;
     private readonly SemaphoreSlim _summaryCardLock = new(1, 1);
     public ObservableCollection<TrackedEntryCard> Entries { get; } = new();
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(GenerateDailySummaryCommand))]
     private DailySummaryCard? summaryCard;
+
+    [ObservableProperty]
+    private NutritionTotals liveNutritionalTotals = new();
+
+    [ObservableProperty]
+    private bool hasCompletedMeals;
 
     [ObservableProperty]
     private DateTimeOffset? historicalDate;
@@ -46,13 +54,17 @@ namespace WellnessWingman.PageModels;
 
     public EntryLogViewModel(
         ITrackedEntryRepository trackedEntryRepository,
+        IEntryAnalysisRepository entryAnalysisRepository,
         IBackgroundAnalysisService backgroundAnalysisService,
         IHistoricalNavigationService historicalNavigationService,
+        DailyTotalsCalculator dailyTotalsCalculator,
         ILogger<EntryLogViewModel> logger)
     {
         _trackedEntryRepository = trackedEntryRepository;
+        _entryAnalysisRepository = entryAnalysisRepository;
         _backgroundAnalysisService = backgroundAnalysisService;
         _historicalNavigationService = historicalNavigationService;
+        _dailyTotalsCalculator = dailyTotalsCalculator;
         _logger = logger;
     }
 
@@ -559,6 +571,8 @@ namespace WellnessWingman.PageModels;
                 }
             });
 
+            await CalculateLiveTotalsAsync();
+
             await WithSummaryCardLockAsync(async () =>
             {
                 await MainThread.InvokeOnMainThreadAsync(() =>
@@ -764,6 +778,49 @@ namespace WellnessWingman.PageModels;
         if (newStatus == ProcessingStatus.Completed)
         {
             await LoadEntriesAsync().ConfigureAwait(false);
+        }
+    }
+
+    private async Task CalculateLiveTotalsAsync()
+    {
+        try
+        {
+            var completedMeals = Entries
+                .Where(e => e.EntryType == EntryType.Meal && e.ProcessingStatus == ProcessingStatus.Completed)
+                .ToList();
+
+            var analyses = new List<UnifiedAnalysisResult>();
+
+            foreach (var meal in completedMeals)
+            {
+                var analysisEntry = await _entryAnalysisRepository.GetByTrackedEntryIdAsync(meal.EntryId);
+                if (analysisEntry != null && !string.IsNullOrEmpty(analysisEntry.InsightsJson))
+                {
+                    try
+                    {
+                        var result = System.Text.Json.JsonSerializer.Deserialize<UnifiedAnalysisResult>(analysisEntry.InsightsJson);
+                        if (result != null)
+                        {
+                            analyses.Add(result);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Failed to deserialize analysis for entry {EntryId}", meal.EntryId);
+                    }
+                }
+            }
+
+            var totals = _dailyTotalsCalculator.Calculate(analyses);
+            await MainThread.InvokeOnMainThreadAsync(() =>
+            {
+                LiveNutritionalTotals = totals;
+                HasCompletedMeals = completedMeals.Any();
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to calculate live totals.");
         }
     }
 

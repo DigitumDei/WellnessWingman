@@ -36,12 +36,28 @@
                     Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}"
                     Padding="16"
                     StrokeShape="RoundRectangle 12,12,12,12">
-                <VerticalStackLayout Spacing="8">
+                <VerticalStackLayout Spacing="16">
                     <Label Text="Nutrition Totals"
                            Style="{StaticResource Body2Strong}" />
-                    <Label Text="{Binding TotalsSummary}"
-                           Style="{StaticResource Body1}"
-                           LineBreakMode="WordWrap" />
+                    
+                    <Grid ColumnDefinitions="*,*,*,*">
+                        <VerticalStackLayout>
+                            <Label Text="{Binding Totals.Calories, StringFormat='{0:F0}'}" FontAttributes="Bold" HorizontalOptions="Center" FontSize="18"/>
+                            <Label Text="Cals" Style="{StaticResource Caption1}" HorizontalOptions="Center" />
+                        </VerticalStackLayout>
+                        <VerticalStackLayout Grid.Column="1">
+                            <Label Text="{Binding Totals.Protein, StringFormat='{0:F0}g'}" FontAttributes="Bold" HorizontalOptions="Center" FontSize="18"/>
+                            <Label Text="Prot" Style="{StaticResource Caption1}" HorizontalOptions="Center" />
+                        </VerticalStackLayout>
+                        <VerticalStackLayout Grid.Column="2">
+                            <Label Text="{Binding Totals.Carbohydrates, StringFormat='{0:F0}g'}" FontAttributes="Bold" HorizontalOptions="Center" FontSize="18"/>
+                            <Label Text="Carbs" Style="{StaticResource Caption1}" HorizontalOptions="Center" />
+                        </VerticalStackLayout>
+                        <VerticalStackLayout Grid.Column="3">
+                            <Label Text="{Binding Totals.Fat, StringFormat='{0:F0}g'}" FontAttributes="Bold" HorizontalOptions="Center" FontSize="18"/>
+                            <Label Text="Fat" Style="{StaticResource Caption1}" HorizontalOptions="Center" />
+                        </VerticalStackLayout>
+                    </Grid>
                 </VerticalStackLayout>
             </Border>
 

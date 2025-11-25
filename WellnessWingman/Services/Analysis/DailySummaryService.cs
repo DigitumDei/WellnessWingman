@@ -25,6 +25,7 @@ public class DailySummaryService : IDailySummaryService
     private readonly IEntryAnalysisRepository _entryAnalysisRepository;
     private readonly ITrackedEntryRepository _trackedEntryRepository;
     private readonly ILLmClient _llmClient;
+    private readonly DailyTotalsCalculator _dailyTotalsCalculator;
     private readonly ILogger<DailySummaryService> _logger;
 
     public DailySummaryService(
@@ -32,12 +33,14 @@ public class DailySummaryService : IDailySummaryService
         IEntryAnalysisRepository entryAnalysisRepository,
         ITrackedEntryRepository trackedEntryRepository,
         ILLmClient llmClient,
+        DailyTotalsCalculator dailyTotalsCalculator,
         ILogger<DailySummaryService> logger)
     {
         _appSettingsRepository = appSettingsRepository;
         _entryAnalysisRepository = entryAnalysisRepository;
         _trackedEntryRepository = trackedEntryRepository;
         _llmClient = llmClient;
+        _dailyTotalsCalculator = dailyTotalsCalculator;
         _logger = logger;
     }
 
@@ -101,6 +104,8 @@ public class DailySummaryService : IDailySummaryService
                 SummaryUtcOffsetMinutes = summaryOffsetMinutes
             };
 
+            var unifiedAnalyses = new List<UnifiedAnalysisResult?>();
+
             foreach (var entry in completedEntries)
             {
                 analysesByEntry.TryGetValue(entry.EntryId, out var analysisEntry);
@@ -117,6 +122,8 @@ public class DailySummaryService : IDailySummaryService
                         _logger.LogWarning(ex, "Failed to deserialize analysis for entry {EntryId} when generating daily summary.", entry.EntryId);
                     }
                 }
+
+                unifiedAnalyses.Add(structuredAnalysis);
 
                 var entryType = ResolveEntryType(entry, structuredAnalysis);
                 var description = ResolveEntryDescription(entry);
@@ -138,6 +145,8 @@ public class DailySummaryService : IDailySummaryService
                     Analysis = structuredAnalysis
                 });
             }
+
+            summaryRequest.CalculatedTotals = _dailyTotalsCalculator.Calculate(unifiedAnalyses);
 
             var context = new LlmRequestContext
             {

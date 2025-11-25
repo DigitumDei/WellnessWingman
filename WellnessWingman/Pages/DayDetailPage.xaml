@@ -221,65 +221,48 @@
                 <Button Grid.Column="2" Text="&gt;" Command="{Binding GoToNextDayCommand}" />
             </Grid>
 
-            <Button Text="Generate Daily Summary"
-                    Command="{Binding GenerateDailySummaryCommand}"
-                    IsVisible="{Binding ShowGenerateSummaryButton}"
-                    IsEnabled="{Binding IsGeneratingSummary, Converter={StaticResource InvertedBoolConverter}}"
-                    SemanticProperties.Description="Compile a daily nutrition summary" />
-
             <Border StrokeThickness="1"
                     Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}"
                     Padding="16"
                     Margin="0,8,0,0"
                     BackgroundColor="Transparent"
                     StrokeShape="RoundRectangle 12,12,12,12"
-                    IsVisible="{Binding ShowSummaryCard}">
-                <Border.GestureRecognizers>
-                    <TapGestureRecognizer Command="{Binding ViewDailySummaryCommand}" />
-                </Border.GestureRecognizers>
-                <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto,Auto,Auto">
-                    <Label Grid.Row="0"
-                           Text="Daily Summary"
-                           Style="{StaticResource Body2Strong}" />
+                    IsVisible="{Binding HasCompletedMeals}">
+                <VerticalStackLayout Spacing="16">
+                    <Label Text="Daily Nutrition" Style="{StaticResource Body2Strong}" />
 
-                    <Label Grid.Row="1"
-                           Text="{Binding SummaryCard.LocalGeneratedAt, StringFormat='Generated {0:MMM d, h:mm tt}'}"
-                           Style="{StaticResource Caption1}" />
+                    <Grid ColumnDefinitions="*,*,*,*">
+                        <VerticalStackLayout>
+                            <Label Text="{Binding LiveNutritionalTotals.Calories, StringFormat='{0:F0}'}" FontAttributes="Bold" HorizontalOptions="Center" FontSize="18"/>
+                            <Label Text="Cals" Style="{StaticResource Caption1}" HorizontalOptions="Center" />
+                        </VerticalStackLayout>
+                        <VerticalStackLayout Grid.Column="1">
+                            <Label Text="{Binding LiveNutritionalTotals.Protein, StringFormat='{0:F0}g'}" FontAttributes="Bold" HorizontalOptions="Center" FontSize="18"/>
+                            <Label Text="Prot" Style="{StaticResource Caption1}" HorizontalOptions="Center" />
+                        </VerticalStackLayout>
+                        <VerticalStackLayout Grid.Column="2">
+                            <Label Text="{Binding LiveNutritionalTotals.Carbohydrates, StringFormat='{0:F0}g'}" FontAttributes="Bold" HorizontalOptions="Center" FontSize="18"/>
+                            <Label Text="Carbs" Style="{StaticResource Caption1}" HorizontalOptions="Center" />
+                        </VerticalStackLayout>
+                        <VerticalStackLayout Grid.Column="3">
+                            <Label Text="{Binding LiveNutritionalTotals.Fat, StringFormat='{0:F0}g'}" FontAttributes="Bold" HorizontalOptions="Center" FontSize="18"/>
+                            <Label Text="Fat" Style="{StaticResource Caption1}" HorizontalOptions="Center" />
+                        </VerticalStackLayout>
+                    </Grid>
 
-                    <Label Grid.Row="2"
-                           Text="{Binding SummaryCard.EntryCount, StringFormat='Entries included: {0}'}"
-                           Style="{StaticResource Caption1}" />
+                    <Button Text="Get More Details"
+                            Command="{Binding GenerateDailySummaryCommand}"
+                            IsVisible="{Binding ShowGenerateSummaryButton}"
+                            IsEnabled="{Binding IsGeneratingSummary, Converter={StaticResource InvertedBoolConverter}}" />
 
-                    <Label Grid.Row="3"
-                           Text="{Binding SummaryCard.ProcessingStatus, StringFormat='Status: {0}'}"
-                           Style="{StaticResource Caption1}" />
+                    <Button Text="View Analysis"
+                            Command="{Binding ViewDailySummaryCommand}"
+                            IsVisible="{Binding ShowSummaryCard}" />
 
-                    <Label Grid.Row="4"
-                           Text="Tap to view summary"
-                           Style="{StaticResource Caption1}" />
-
-                    <StackLayout Grid.Column="1"
-                                 Grid.RowSpan="5"
-                                 HorizontalOptions="End"
-                                 VerticalOptions="Center"
-                                 Spacing="8">
-                        <ActivityIndicator IsRunning="True"
-                                           Color="{StaticResource Primary}"
-                                           IsVisible="{Binding SummaryCard.ProcessingStatus, Converter={StaticResource IsProcessingConverter}}" />
-                        <Label Text="Outdated"
-                               TextColor="Orange"
-                               FontAttributes="Bold"
-                               IsVisible="{Binding SummaryCard.IsOutdated}" />
-                        <Label Text="Failed"
-                               TextColor="{StaticResource Error}"
-                               FontAttributes="Bold"
-                               IsVisible="{Binding SummaryCard.ProcessingStatus, Converter={StaticResource IsFailedConverter}}" />
-                        <Label Text="Skipped"
-                               TextColor="{StaticResource Gray500}"
-                               FontAttributes="Bold"
-                               IsVisible="{Binding SummaryCard.ProcessingStatus, Converter={StaticResource IsSkippedConverter}}" />
-                    </StackLayout>
-                </Grid>
+                    <ActivityIndicator IsRunning="True"
+                                       IsVisible="{Binding IsGeneratingSummary}"
+                                       HorizontalOptions="Center"/>
+                </VerticalStackLayout>
             </Border>
 
             <Label Text="Entries"
