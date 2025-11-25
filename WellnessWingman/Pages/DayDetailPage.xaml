@@ -214,10 +214,10 @@
                 </ContentPage.Resources>
             
                 <ScrollView>
-                    <ScrollView.Behaviors>
-                        <gestures:HorizontalSwipeBehavior SwipeLeftCommand="{Binding GoToNextDayCommand}"
-                                                          SwipeRightCommand="{Binding GoToPreviousDayCommand}" />
-                    </ScrollView.Behaviors>
+        <CollectionView.Behaviors>
+            <gestures:SwipeNavigationBehavior SwipeLeftCommand="{Binding GoToNextDayCommand}"
+                                              SwipeRightCommand="{Binding GoToPreviousDayCommand}" />
+        </CollectionView.Behaviors>
                     
                     <VerticalStackLayout Spacing="24" Padding="24,32">
                         <!-- Date Navigation -->

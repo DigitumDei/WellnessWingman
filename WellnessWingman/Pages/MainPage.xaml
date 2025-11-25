@@ -215,9 +215,9 @@
     </ContentPage.Resources>
 
     <ScrollView>
-        <ScrollView.Behaviors>
-            <gestures:HorizontalSwipeBehavior SwipeLeftCommand="{Binding SwipeToWeekCommand}" />
-        </ScrollView.Behaviors>
+        <CollectionView.Behaviors>
+            <gestures:SwipeNavigationBehavior SwipeLeftCommand="{Binding SwipeToWeekCommand}" />
+        </CollectionView.Behaviors>
         
         <VerticalStackLayout Spacing="24" Padding="24,32">
             <VerticalStackLayout Spacing="8">
