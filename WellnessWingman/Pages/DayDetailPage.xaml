@@ -213,14 +213,13 @@
                     </ResourceDictionary>
                 </ContentPage.Resources>
             
-                <ScrollView>
-        <CollectionView.Behaviors>
-            <gestures:SwipeNavigationBehavior SwipeLeftCommand="{Binding GoToNextDayCommand}"
-                                              SwipeRightCommand="{Binding GoToPreviousDayCommand}" />
-        </CollectionView.Behaviors>
-                    
-                    <VerticalStackLayout Spacing="24" Padding="24,32">
-                        <!-- Date Navigation -->
+                    <ScrollView>
+                        <ScrollView.Behaviors>
+                            <gestures:SwipeNavigationBehavior SwipeLeftCommand="{Binding GoToNextDayCommand}"
+                                                              SwipeRightCommand="{Binding GoToPreviousDayCommand}" />
+                        </ScrollView.Behaviors>
+                        
+                        <VerticalStackLayout Spacing="24" Padding="24,32">                        <!-- Date Navigation -->
                         <Grid ColumnDefinitions="Auto,*,Auto" VerticalOptions="Center">
                             <Button Text="&lt;" Command="{Binding GoToPreviousDayCommand}" />
                             <Label Grid.Column="1"
