@@ -108,6 +108,7 @@ public static class MauiProgram
         builder.Services.AddTransient<IAnalysisOrchestrator, AnalysisOrchestrator>();
         builder.Services.AddTransient<IDailySummaryService, DailySummaryService>();
         builder.Services.AddTransient<DailyTotalsCalculator>();
+        builder.Services.AddTransient<UnifiedAnalysisHelper>(); // New service
         builder.Services.AddTransient<ILLmClient, OpenAiLlmClient>();
         builder.Services.AddSingleton<MealAnalysisValidator>();
         builder.Services.AddTransient<WeekSummaryBuilder>();

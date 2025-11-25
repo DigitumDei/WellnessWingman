@@ -20,6 +20,7 @@ public partial class DailySummaryViewModel : ObservableObject
     private readonly IBackgroundAnalysisService _backgroundAnalysisService;
     private readonly INotificationPermissionService _notificationPermissionService;
     private readonly DailyTotalsCalculator _dailyTotalsCalculator;
+    private readonly UnifiedAnalysisHelper _unifiedAnalysisHelper; // Declared missing field
     private readonly ILogger<DailySummaryViewModel> _logger;
 
     [ObservableProperty]
@@ -62,6 +63,7 @@ public partial class DailySummaryViewModel : ObservableObject
         IBackgroundAnalysisService backgroundAnalysisService,
         INotificationPermissionService notificationPermissionService,
         DailyTotalsCalculator dailyTotalsCalculator,
+        UnifiedAnalysisHelper unifiedAnalysisHelper,
         ILogger<DailySummaryViewModel> logger)
     {
         _trackedEntryRepository = trackedEntryRepository;
@@ -69,6 +71,7 @@ public partial class DailySummaryViewModel : ObservableObject
         _backgroundAnalysisService = backgroundAnalysisService;
         _notificationPermissionService = notificationPermissionService;
         _dailyTotalsCalculator = dailyTotalsCalculator;
+        _unifiedAnalysisHelper = unifiedAnalysisHelper;
         _logger = logger;
     }
 
@@ -173,23 +176,7 @@ public partial class DailySummaryViewModel : ObservableObject
                 .GetByDayAsync(summaryLocalDate, summaryTimeZone)
                 .ConfigureAwait(false);
 
-            var completedEntries = entriesForDay
-                .Where(e => e.EntryType == EntryType.Meal && e.ProcessingStatus == ProcessingStatus.Completed)
-                .ToList();
-
-            var unifiedAnalyses = new List<UnifiedAnalysisResult?>();
-            foreach (var meal in completedEntries)
-            {
-                var mealAnalysis = await _entryAnalysisRepository.GetByTrackedEntryIdAsync(meal.EntryId);
-                if (mealAnalysis != null && !string.IsNullOrEmpty(mealAnalysis.InsightsJson))
-                {
-                    try
-                    {
-                         unifiedAnalyses.Add(JsonSerializer.Deserialize<UnifiedAnalysisResult>(mealAnalysis.InsightsJson));
-                    }
-                    catch { }
-                }
-            }
+            var unifiedAnalyses = await _unifiedAnalysisHelper.GetUnifiedAnalysisResultsForCompletedMealsAsync(entriesForDay);
 
             var calculatedTotals = _dailyTotalsCalculator.Calculate(unifiedAnalyses);
 

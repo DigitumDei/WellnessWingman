@@ -7,6 +7,7 @@ using WellnessWingman.Services.Navigation;
 using WellnessWingman.Utilities;
 using Microsoft.Extensions.Logging;
 using System.Collections.ObjectModel;
+using System.Text.Json; // Added for JsonSerializer
 
 namespace WellnessWingman.PageModels;
 
@@ -18,6 +19,7 @@ namespace WellnessWingman.PageModels;
     private readonly ILogger<EntryLogViewModel> _logger;
     private readonly IHistoricalNavigationService _historicalNavigationService;
     private readonly DailyTotalsCalculator _dailyTotalsCalculator;
+    private readonly UnifiedAnalysisHelper _unifiedAnalysisHelper;
     private readonly SemaphoreSlim _summaryCardLock = new(1, 1);
     public ObservableCollection<TrackedEntryCard> Entries { get; } = new();
 
@@ -68,6 +70,7 @@ namespace WellnessWingman.PageModels;
         IBackgroundAnalysisService backgroundAnalysisService,
         IHistoricalNavigationService historicalNavigationService,
         DailyTotalsCalculator dailyTotalsCalculator,
+        UnifiedAnalysisHelper unifiedAnalysisHelper,
         ILogger<EntryLogViewModel> logger)
     {
         _trackedEntryRepository = trackedEntryRepository;
@@ -75,6 +78,7 @@ namespace WellnessWingman.PageModels;
         _backgroundAnalysisService = backgroundAnalysisService;
         _historicalNavigationService = historicalNavigationService;
         _dailyTotalsCalculator = dailyTotalsCalculator;
+        _unifiedAnalysisHelper = unifiedAnalysisHelper;
         _logger = logger;
     }
 
@@ -813,37 +817,17 @@ namespace WellnessWingman.PageModels;
     {
         try
         {
-            var completedMeals = Entries
+            var completedMealCards = Entries
                 .Where(e => e.EntryType == EntryType.Meal && e.ProcessingStatus == ProcessingStatus.Completed)
                 .ToList();
 
-            var analyses = new List<UnifiedAnalysisResult>();
-
-            foreach (var meal in completedMeals)
-            {
-                var analysisEntry = await _entryAnalysisRepository.GetByTrackedEntryIdAsync(meal.EntryId);
-                if (analysisEntry != null && !string.IsNullOrEmpty(analysisEntry.InsightsJson))
-                {
-                    try
-                    {
-                        var result = System.Text.Json.JsonSerializer.Deserialize<UnifiedAnalysisResult>(analysisEntry.InsightsJson);
-                        if (result != null)
-                        {
-                            analyses.Add(result);
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, "Failed to deserialize analysis for entry {EntryId}", meal.EntryId);
-                    }
-                }
-            }
-
+            var analyses = await _unifiedAnalysisHelper.GetUnifiedAnalysisResultsForCompletedMealCardsAsync(completedMealCards);
+            
             var totals = _dailyTotalsCalculator.Calculate(analyses);
             await MainThread.InvokeOnMainThreadAsync(() =>
             {
                 LiveNutritionalTotals = totals;
-                HasCompletedMeals = completedMeals.Any();
+                HasCompletedMeals = completedMealCards.Any();
             });
         }
         catch (Exception ex)

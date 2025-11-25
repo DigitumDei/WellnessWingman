@@ -60,18 +60,20 @@
                         </VerticalStackLayout>
 
                         <!-- Row 1: Micros -->
-                        <VerticalStackLayout Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" HorizontalOptions="Center">
-                             <Label Text="{Binding Totals.Fiber, StringFormat='{0:F0}g'}" FontAttributes="Bold" HorizontalOptions="Center" FontSize="16"/>
-                             <Label Text="Fiber" Style="{StaticResource Caption1}" HorizontalOptions="Center" />
-                        </VerticalStackLayout>
-                        <VerticalStackLayout Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" HorizontalOptions="Center">
-                             <Label Text="{Binding Totals.Sugar, StringFormat='{0:F0}g'}" FontAttributes="Bold" HorizontalOptions="Center" FontSize="16"/>
-                             <Label Text="Sugar" Style="{StaticResource Caption1}" HorizontalOptions="Center" />
-                        </VerticalStackLayout>
-                        <VerticalStackLayout Grid.Row="1" Grid.Column="2" Grid.ColumnSpan="2" HorizontalOptions="Center">
-                             <Label Text="{Binding Totals.Sodium, StringFormat='{0:F0}mg'}" FontAttributes="Bold" HorizontalOptions="Center" FontSize="16"/>
-                             <Label Text="Sodium" Style="{StaticResource Caption1}" HorizontalOptions="Center" />
-                        </VerticalStackLayout>
+                        <Grid Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="4" ColumnDefinitions="*,*,*">
+                            <VerticalStackLayout Grid.Column="0" HorizontalOptions="Center">
+                                <Label Text="{Binding Totals.Fiber, StringFormat='{0:F0}g'}" FontAttributes="Bold" HorizontalOptions="Center" FontSize="16"/>
+                                <Label Text="Fiber" Style="{StaticResource Caption1}" HorizontalOptions="Center" />
+                            </VerticalStackLayout>
+                            <VerticalStackLayout Grid.Column="1" HorizontalOptions="Center">
+                                <Label Text="{Binding Totals.Sugar, StringFormat='{0:F0}g'}" FontAttributes="Bold" HorizontalOptions="Center" FontSize="16"/>
+                                <Label Text="Sugar" Style="{StaticResource Caption1}" HorizontalOptions="Center" />
+                            </VerticalStackLayout>
+                            <VerticalStackLayout Grid.Column="2" HorizontalOptions="Center">
+                                <Label Text="{Binding Totals.Sodium, StringFormat='{0:F0}mg'}" FontAttributes="Bold" HorizontalOptions="Center" FontSize="16"/>
+                                <Label Text="Sodium" Style="{StaticResource Caption1}" HorizontalOptions="Center" />
+                            </VerticalStackLayout>
+                        </Grid>
                     </Grid>
                 </VerticalStackLayout>
             </Border>
