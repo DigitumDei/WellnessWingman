@@ -9,6 +9,7 @@ public class DailySummaryRequest
     public DateTime SummaryDate { get; set; }
     public string? SummaryTimeZoneId { get; set; }
     public int? SummaryUtcOffsetMinutes { get; set; }
+    public NutritionTotals CalculatedTotals { get; set; } = new();
     public List<DailySummaryEntryContext> Entries { get; set; } = new();
 }
 

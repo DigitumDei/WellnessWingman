@@ -55,6 +55,7 @@
     <Compile Include="..\WellnessWingman\Data\WellnessWingmanDbContext.cs" Link="Data\WellnessWingmanDbContext.cs" />
     <Compile Include="..\WellnessWingman\Data\IAppSettingsRepository.cs" Link="Data\IAppSettingsRepository.cs" />
     <Compile Include="..\WellnessWingman\Services\Analysis\UnifiedAnalysisApplier.cs" Link="Services\Analysis\UnifiedAnalysisApplier.cs" />
+    <Compile Include="..\WellnessWingman\Services\Analysis\DailyTotalsCalculator.cs" Link="Services\Analysis\DailyTotalsCalculator.cs" />
     <Compile Include="..\WellnessWingman\Services\Analysis\AnalysisInvocationResult.cs" Link="Services\Analysis\AnalysisInvocationResult.cs" />
     <Compile Include="..\WellnessWingman\Services\Analysis\DailySummaryService.cs" Link="Services\Analysis\DailySummaryService.cs" />
     <Compile Include="..\WellnessWingman\Services\Analysis\WeekSummaryBuilder.cs" Link="Services\Analysis\WeekSummaryBuilder.cs" />

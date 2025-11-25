@@ -19,6 +19,8 @@ public partial class DailySummaryViewModel : ObservableObject
     private readonly IEntryAnalysisRepository _entryAnalysisRepository;
     private readonly IBackgroundAnalysisService _backgroundAnalysisService;
     private readonly INotificationPermissionService _notificationPermissionService;
+    private readonly DailyTotalsCalculator _dailyTotalsCalculator;
+    private readonly UnifiedAnalysisHelper _unifiedAnalysisHelper; // Declared missing field
     private readonly ILogger<DailySummaryViewModel> _logger;
 
     [ObservableProperty]
@@ -34,7 +36,7 @@ public partial class DailySummaryViewModel : ObservableObject
     private ProcessingStatus processingStatus;
 
     [ObservableProperty]
-    private string totalsSummary = string.Empty;
+    private NutritionTotals totals = new();
 
     [ObservableProperty]
     private string balanceOverall = string.Empty;
@@ -60,12 +62,16 @@ public partial class DailySummaryViewModel : ObservableObject
         IEntryAnalysisRepository entryAnalysisRepository,
         IBackgroundAnalysisService backgroundAnalysisService,
         INotificationPermissionService notificationPermissionService,
+        DailyTotalsCalculator dailyTotalsCalculator,
+        UnifiedAnalysisHelper unifiedAnalysisHelper,
         ILogger<DailySummaryViewModel> logger)
     {
         _trackedEntryRepository = trackedEntryRepository;
         _entryAnalysisRepository = entryAnalysisRepository;
         _backgroundAnalysisService = backgroundAnalysisService;
         _notificationPermissionService = notificationPermissionService;
+        _dailyTotalsCalculator = dailyTotalsCalculator;
+        _unifiedAnalysisHelper = unifiedAnalysisHelper;
         _logger = logger;
     }
 
@@ -101,6 +107,13 @@ public partial class DailySummaryViewModel : ObservableObject
                 StatusMessage = "We couldn't find today's summary entry.";
                 return;
             }
+
+            var summaryTimeZone = DateTimeConverter.ResolveTimeZone(entry.CapturedAtTimeZoneId, entry.CapturedAtOffsetMinutes);
+            var summaryLocalDate = DateTimeConverter.ToOriginalLocal(
+                entry.CapturedAt,
+                entry.CapturedAtTimeZoneId,
+                entry.CapturedAtOffsetMinutes,
+                summaryTimeZone);
 
             await MainThread.InvokeOnMainThreadAsync(() =>
             {
@@ -158,7 +171,16 @@ public partial class DailySummaryViewModel : ObservableObject
                 return;
             }
 
-            await MainThread.InvokeOnMainThreadAsync(() => PopulateSummary(summaryResult));
+            // Calculate totals locally
+            var entriesForDay = await _trackedEntryRepository
+                .GetByDayAsync(summaryLocalDate, summaryTimeZone)
+                .ConfigureAwait(false);
+
+            var unifiedAnalyses = await _unifiedAnalysisHelper.GetUnifiedAnalysisResultsForCompletedMealsAsync(entriesForDay);
+
+            var calculatedTotals = _dailyTotalsCalculator.Calculate(unifiedAnalyses);
+
+            await MainThread.InvokeOnMainThreadAsync(() => PopulateSummary(summaryResult, calculatedTotals));
         }
         catch (Exception ex)
         {
@@ -174,12 +196,11 @@ public partial class DailySummaryViewModel : ObservableObject
         }
     }
 
-    private void PopulateSummary(DailySummaryResult summaryResult)
+    private void PopulateSummary(DailySummaryResult summaryResult, NutritionTotals calculatedTotals)
     {
-        var totals = summaryResult.Totals ?? new NutritionTotals();
+        Totals = calculatedTotals;
         var balance = summaryResult.Balance ?? new NutritionalBalance();
 
-        TotalsSummary = BuildTotalsSummary(totals);
         BalanceOverall = balance.Overall ?? string.Empty;
         BalanceMacro = balance.MacroBalance ?? string.Empty;
         BalanceTiming = balance.Timing ?? string.Empty;
@@ -199,24 +220,6 @@ public partial class DailySummaryViewModel : ObservableObject
         {
             EntriesIncluded.Add(entry);
         }
-    }
-
-    private static string BuildTotalsSummary(NutritionTotals totals)
-    {
-        totals ??= new NutritionTotals();
-
-        static string FormatValue(double? value, string unit)
-        {
-            return value.HasValue ? $"{value.Value:0.#}{unit}" : "—";
-        }
-
-        return $"Calories: {FormatValue(totals.Calories, " kcal")}\n" +
-               $"Protein: {FormatValue(totals.Protein, " g")}\n" +
-               $"Carbs: {FormatValue(totals.Carbohydrates, " g")}\n" +
-               $"Fat: {FormatValue(totals.Fat, " g")}\n" +
-               $"Fiber: {FormatValue(totals.Fiber, " g")}\n" +
-               $"Sugar: {FormatValue(totals.Sugar, " g")}\n" +
-               $"Sodium: {FormatValue(totals.Sodium, " mg")}";
     }
 
     [RelayCommand]

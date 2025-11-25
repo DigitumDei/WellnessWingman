@@ -7,21 +7,31 @@ using WellnessWingman.Services.Navigation;
 using WellnessWingman.Utilities;
 using Microsoft.Extensions.Logging;
 using System.Collections.ObjectModel;
+using System.Text.Json; // Added for JsonSerializer
 
 namespace WellnessWingman.PageModels;
 
     public partial class EntryLogViewModel : ObservableObject, IQueryAttributable
 {
     private readonly ITrackedEntryRepository _trackedEntryRepository;
+    private readonly IEntryAnalysisRepository _entryAnalysisRepository;
     private readonly IBackgroundAnalysisService _backgroundAnalysisService;
     private readonly ILogger<EntryLogViewModel> _logger;
     private readonly IHistoricalNavigationService _historicalNavigationService;
+    private readonly DailyTotalsCalculator _dailyTotalsCalculator;
+    private readonly UnifiedAnalysisHelper _unifiedAnalysisHelper;
     private readonly SemaphoreSlim _summaryCardLock = new(1, 1);
     public ObservableCollection<TrackedEntryCard> Entries { get; } = new();
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(GenerateDailySummaryCommand))]
     private DailySummaryCard? summaryCard;
+
+    [ObservableProperty]
+    private NutritionTotals liveNutritionalTotals = new();
+
+    [ObservableProperty]
+    private bool hasCompletedMeals;
 
     [ObservableProperty]
     private DateTimeOffset? historicalDate;
@@ -39,20 +49,36 @@ namespace WellnessWingman.PageModels;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(GenerateDailySummaryCommand))]
+    [NotifyPropertyChangedFor(nameof(IsSummaryProcessing))]
     private bool isGeneratingSummary;
 
     public bool ShowGenerateSummaryButton => SummaryCard is null;
-    public bool ShowSummaryCard => SummaryCard is not null;
+    
+    public bool ShowViewAnalysisButton => SummaryCard is not null && 
+                                         (SummaryCard.IsClickable || 
+                                          SummaryCard.ProcessingStatus == ProcessingStatus.Failed || 
+                                          SummaryCard.ProcessingStatus == ProcessingStatus.Skipped);
+
+    public bool IsSummaryProcessing => IsGeneratingSummary || 
+                                       (SummaryCard is not null && 
+                                        (SummaryCard.ProcessingStatus == ProcessingStatus.Pending || 
+                                         SummaryCard.ProcessingStatus == ProcessingStatus.Processing));
 
     public EntryLogViewModel(
         ITrackedEntryRepository trackedEntryRepository,
+        IEntryAnalysisRepository entryAnalysisRepository,
         IBackgroundAnalysisService backgroundAnalysisService,
         IHistoricalNavigationService historicalNavigationService,
+        DailyTotalsCalculator dailyTotalsCalculator,
+        UnifiedAnalysisHelper unifiedAnalysisHelper,
         ILogger<EntryLogViewModel> logger)
     {
         _trackedEntryRepository = trackedEntryRepository;
+        _entryAnalysisRepository = entryAnalysisRepository;
         _backgroundAnalysisService = backgroundAnalysisService;
         _historicalNavigationService = historicalNavigationService;
+        _dailyTotalsCalculator = dailyTotalsCalculator;
+        _unifiedAnalysisHelper = unifiedAnalysisHelper;
         _logger = logger;
     }
 
@@ -72,7 +98,23 @@ namespace WellnessWingman.PageModels;
     partial void OnSummaryCardChanged(DailySummaryCard? value)
     {
         OnPropertyChanged(nameof(ShowGenerateSummaryButton));
-        OnPropertyChanged(nameof(ShowSummaryCard));
+        OnPropertyChanged(nameof(ShowViewAnalysisButton));
+        OnPropertyChanged(nameof(IsSummaryProcessing));
+    }
+
+    [RelayCommand]
+    private async Task SelectEntryAsync(TrackedEntryCard entry)
+    {
+        if (entry is null) return;
+
+        if (entry.ProcessingStatus == ProcessingStatus.Failed || entry.ProcessingStatus == ProcessingStatus.Skipped)
+        {
+            await RetryAnalysisCommand.ExecuteAsync(entry);
+        }
+        else
+        {
+            await GoToEntryDetailCommand.ExecuteAsync(entry);
+        }
     }
 
     [RelayCommand]
@@ -559,6 +601,9 @@ namespace WellnessWingman.PageModels;
                 }
             });
 
+            var entriesSnapshot = Entries.ToList();
+            await CalculateLiveTotalsAsync(entriesSnapshot);
+
             await WithSummaryCardLockAsync(async () =>
             {
                 await MainThread.InvokeOnMainThreadAsync(() =>
@@ -758,12 +803,37 @@ namespace WellnessWingman.PageModels;
 
                 UpdateSummaryOutdatedFlag();
                 GenerateDailySummaryCommand.NotifyCanExecuteChanged();
+                OnPropertyChanged(nameof(ShowViewAnalysisButton));
+                OnPropertyChanged(nameof(IsSummaryProcessing));
             });
         });
 
         if (newStatus == ProcessingStatus.Completed)
         {
             await LoadEntriesAsync().ConfigureAwait(false);
+        }
+    }
+
+    private async Task CalculateLiveTotalsAsync(IEnumerable<TrackedEntryCard> currentEntries)
+    {
+        try
+        {
+            var completedMealCards = currentEntries
+                .Where(e => e.EntryType == EntryType.Meal && e.ProcessingStatus == ProcessingStatus.Completed)
+                .ToList();
+
+            var analyses = await _unifiedAnalysisHelper.GetUnifiedAnalysisResultsForCompletedMealCardsAsync(completedMealCards);
+            
+            var totals = _dailyTotalsCalculator.Calculate(analyses);
+            await MainThread.InvokeOnMainThreadAsync(() =>
+            {
+                LiveNutritionalTotals = totals;
+                HasCompletedMeals = completedMealCards.Any();
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to calculate live totals.");
         }
     }
 
