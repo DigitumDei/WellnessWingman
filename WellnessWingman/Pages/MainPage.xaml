@@ -215,11 +215,10 @@
     </ContentPage.Resources>
 
     <ScrollView>
-        <ScrollView.Behaviors>
-            <gestures:SwipeNavigationBehavior SwipeLeftCommand="{Binding SwipeToWeekCommand}" />
-        </ScrollView.Behaviors>
-        
         <VerticalStackLayout Spacing="24" Padding="24,32">
+            <VerticalStackLayout.Behaviors>
+                <gestures:ImprovedHorizontalSwipeBehavior SwipeLeftCommand="{Binding SwipeToWeekCommand}" />
+            </VerticalStackLayout.Behaviors>
             <VerticalStackLayout Spacing="8">
                 <Label Text="Capture Your Health Entries" Style="{StaticResource Headline}" />
             </VerticalStackLayout>
