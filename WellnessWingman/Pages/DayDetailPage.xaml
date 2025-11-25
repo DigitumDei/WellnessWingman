@@ -204,105 +204,105 @@
         </ResourceDictionary>
     </ContentPage.Resources>
 
-    <ScrollView>
-        <ScrollView.Behaviors>
+    <CollectionView ItemsSource="{Binding Entries}"
+                    SelectionMode="Single"
+                    SelectionChanged="EntriesCollection_SelectionChanged"
+                    ItemTemplate="{StaticResource EntryCardTemplateSelector}">
+
+        <CollectionView.Behaviors>
             <gestures:HorizontalSwipeBehavior SwipeLeftCommand="{Binding GoToNextDayCommand}"
                                               SwipeRightCommand="{Binding GoToPreviousDayCommand}" />
-        </ScrollView.Behaviors>
-        <VerticalStackLayout Spacing="24" Padding="24,32">
-            <!-- Date Navigation -->
-            <Grid ColumnDefinitions="Auto,*,Auto" VerticalOptions="Center">
-                <Button Text="&lt;" Command="{Binding GoToPreviousDayCommand}" />
-                <Label Grid.Column="1"
-                       Text="{Binding HistoricalDate, StringFormat='{0:ddd, MMM d, yyyy}'}"
-                       HorizontalOptions="Center"
-                       VerticalOptions="Center"
-                       Style="{StaticResource Headline}" />
-                <Button Grid.Column="2" Text="&gt;" Command="{Binding GoToNextDayCommand}" />
-            </Grid>
+        </CollectionView.Behaviors>
 
-            <Border StrokeThickness="1"
-                    Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}"
-                    Padding="16"
-                    Margin="0,8,0,0"
-                    BackgroundColor="Transparent"
-                    StrokeShape="RoundRectangle 12,12,12,12"
-                    IsVisible="{Binding HasCompletedMeals}">
-                <VerticalStackLayout Spacing="16">
-                    <Label Text="Daily Nutrition" Style="{StaticResource Body2Strong}" />
+        <CollectionView.Header>
+            <VerticalStackLayout Spacing="24" Padding="24,32">
+                <!-- Date Navigation -->
+                <Grid ColumnDefinitions="Auto,*,Auto" VerticalOptions="Center">
+                    <Button Text="&lt;" Command="{Binding GoToPreviousDayCommand}" />
+                    <Label Grid.Column="1"
+                           Text="{Binding HistoricalDate, StringFormat='{0:ddd, MMM d, yyyy}'}"
+                           HorizontalOptions="Center"
+                           VerticalOptions="Center"
+                           Style="{StaticResource Headline}" />
+                    <Button Grid.Column="2" Text="&gt;" Command="{Binding GoToNextDayCommand}" />
+                </Grid>
 
-                    <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="*,*,*,*" RowSpacing="12">
-                        <!-- Row 0: Macros -->
-                        <VerticalStackLayout Grid.Row="0" Grid.Column="0">
-                            <Label Text="{Binding LiveNutritionalTotals.Calories, StringFormat='{0:F0}'}" FontAttributes="Bold" HorizontalOptions="Center" FontSize="18"/>
-                            <Label Text="Cals" Style="{StaticResource Caption1}" HorizontalOptions="Center" />
-                        </VerticalStackLayout>
-                        <VerticalStackLayout Grid.Row="0" Grid.Column="1">
-                            <Label Text="{Binding LiveNutritionalTotals.Protein, StringFormat='{0:F0}g'}" FontAttributes="Bold" HorizontalOptions="Center" FontSize="18"/>
-                            <Label Text="Prot" Style="{StaticResource Caption1}" HorizontalOptions="Center" />
-                        </VerticalStackLayout>
-                        <VerticalStackLayout Grid.Row="0" Grid.Column="2">
-                            <Label Text="{Binding LiveNutritionalTotals.Carbohydrates, StringFormat='{0:F0}g'}" FontAttributes="Bold" HorizontalOptions="Center" FontSize="18"/>
-                            <Label Text="Carbs" Style="{StaticResource Caption1}" HorizontalOptions="Center" />
-                        </VerticalStackLayout>
-                        <VerticalStackLayout Grid.Row="0" Grid.Column="3">
-                            <Label Text="{Binding LiveNutritionalTotals.Fat, StringFormat='{0:F0}g'}" FontAttributes="Bold" HorizontalOptions="Center" FontSize="18"/>
-                            <Label Text="Fat" Style="{StaticResource Caption1}" HorizontalOptions="Center" />
-                        </VerticalStackLayout>
+                <Border StrokeThickness="1"
+                        Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}"
+                        Padding="16"
+                        Margin="0,8,0,0"
+                        BackgroundColor="Transparent"
+                        StrokeShape="RoundRectangle 12,12,12,12"
+                        IsVisible="{Binding HasCompletedMeals}">
+                    <VerticalStackLayout Spacing="16">
+                        <Label Text="Daily Nutrition" Style="{StaticResource Body2Strong}" />
 
-                        <!-- Row 1: Micros -->
-                        <VerticalStackLayout Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" HorizontalOptions="Center">
-                             <Label Text="{Binding LiveNutritionalTotals.Fiber, StringFormat='{0:F0}g'}" FontAttributes="Bold" HorizontalOptions="Center" FontSize="16"/>
-                             <Label Text="Fiber" Style="{StaticResource Caption1}" HorizontalOptions="Center" />
-                        </VerticalStackLayout>
-                        <VerticalStackLayout Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" HorizontalOptions="Center">
-                             <Label Text="{Binding LiveNutritionalTotals.Sugar, StringFormat='{0:F0}g'}" FontAttributes="Bold" HorizontalOptions="Center" FontSize="16"/>
-                             <Label Text="Sugar" Style="{StaticResource Caption1}" HorizontalOptions="Center" />
-                        </VerticalStackLayout>
-                        <VerticalStackLayout Grid.Row="1" Grid.Column="2" Grid.ColumnSpan="2" HorizontalOptions="Center">
-                             <Label Text="{Binding LiveNutritionalTotals.Sodium, StringFormat='{0:F0}mg'}" FontAttributes="Bold" HorizontalOptions="Center" FontSize="16"/>
-                             <Label Text="Sodium" Style="{StaticResource Caption1}" HorizontalOptions="Center" />
-                        </VerticalStackLayout>
-                    </Grid>
+                        <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="*,*,*,*" RowSpacing="12">
+                            <!-- Row 0: Macros -->
+                            <VerticalStackLayout Grid.Row="0" Grid.Column="0">
+                                <Label Text="{Binding LiveNutritionalTotals.Calories, StringFormat='{0:F0}'}" FontAttributes="Bold" HorizontalOptions="Center" FontSize="18"/>
+                                <Label Text="Cals" Style="{StaticResource Caption1}" HorizontalOptions="Center" />
+                            </VerticalStackLayout>
+                            <VerticalStackLayout Grid.Row="0" Grid.Column="1">
+                                <Label Text="{Binding LiveNutritionalTotals.Protein, StringFormat='{0:F0}g'}" FontAttributes="Bold" HorizontalOptions="Center" FontSize="18"/>
+                                <Label Text="Prot" Style="{StaticResource Caption1}" HorizontalOptions="Center" />
+                            </VerticalStackLayout>
+                            <VerticalStackLayout Grid.Row="0" Grid.Column="2">
+                                <Label Text="{Binding LiveNutritionalTotals.Carbohydrates, StringFormat='{0:F0}g'}" FontAttributes="Bold" HorizontalOptions="Center" FontSize="18"/>
+                                <Label Text="Carbs" Style="{StaticResource Caption1}" HorizontalOptions="Center" />
+                            </VerticalStackLayout>
+                            <VerticalStackLayout Grid.Row="0" Grid.Column="3">
+                                <Label Text="{Binding LiveNutritionalTotals.Fat, StringFormat='{0:F0}g'}" FontAttributes="Bold" HorizontalOptions="Center" FontSize="18"/>
+                                <Label Text="Fat" Style="{StaticResource Caption1}" HorizontalOptions="Center" />
+                            </VerticalStackLayout>
 
-                    <Button Text="Get More Details"
-                            Command="{Binding GenerateDailySummaryCommand}"
-                            IsVisible="{Binding ShowGenerateSummaryButton}"
-                            IsEnabled="{Binding IsGeneratingSummary, Converter={StaticResource InvertedBoolConverter}}" />
+                            <!-- Row 1: Micros -->
+                            <VerticalStackLayout Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" HorizontalOptions="Center">
+                                <Label Text="{Binding LiveNutritionalTotals.Fiber, StringFormat='{0:F0}g'}" FontAttributes="Bold" HorizontalOptions="Center" FontSize="16"/>
+                                <Label Text="Fiber" Style="{StaticResource Caption1}" HorizontalOptions="Center" />
+                            </VerticalStackLayout>
+                            <VerticalStackLayout Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" HorizontalOptions="Center">
+                                <Label Text="{Binding LiveNutritionalTotals.Sugar, StringFormat='{0:F0}g'}" FontAttributes="Bold" HorizontalOptions="Center" FontSize="16"/>
+                                <Label Text="Sugar" Style="{StaticResource Caption1}" HorizontalOptions="Center" />
+                            </VerticalStackLayout>
+                            <VerticalStackLayout Grid.Row="1" Grid.Column="2" Grid.ColumnSpan="2" HorizontalOptions="Center">
+                                <Label Text="{Binding LiveNutritionalTotals.Sodium, StringFormat='{0:F0}mg'}" FontAttributes="Bold" HorizontalOptions="Center" FontSize="16"/>
+                                <Label Text="Sodium" Style="{StaticResource Caption1}" HorizontalOptions="Center" />
+                            </VerticalStackLayout>
+                        </Grid>
 
-                    <Button Text="View Analysis"
-                            Command="{Binding ViewDailySummaryCommand}"
-                            IsVisible="{Binding ShowViewAnalysisButton}" />
+                        <Button Text="Get More Details"
+                                Command="{Binding GenerateDailySummaryCommand}"
+                                IsVisible="{Binding ShowGenerateSummaryButton}"
+                                IsEnabled="{Binding IsGeneratingSummary, Converter={StaticResource InvertedBoolConverter}}" />
 
-                    <VerticalStackLayout Spacing="4" 
-                                         IsVisible="{Binding IsSummaryProcessing}" 
-                                         HorizontalOptions="Center">
-                        <ActivityIndicator IsRunning="True" Color="{StaticResource Primary}" />
-                        <Label Text="Generating analysis..." 
-                               Style="{StaticResource Caption1}" 
-                               TextColor="{StaticResource Gray500}" 
-                               HorizontalOptions="Center"/>
+                        <Button Text="View Analysis"
+                                Command="{Binding ViewDailySummaryCommand}"
+                                IsVisible="{Binding ShowViewAnalysisButton}" />
+
+                        <VerticalStackLayout Spacing="4" 
+                                             IsVisible="{Binding IsSummaryProcessing}" 
+                                             HorizontalOptions="Center">
+                            <ActivityIndicator IsRunning="True" Color="{StaticResource Primary}" />
+                            <Label Text="Generating analysis..." 
+                                   Style="{StaticResource Caption1}" 
+                                   TextColor="{StaticResource Gray500}" 
+                                   HorizontalOptions="Center"/>
+                        </VerticalStackLayout>
                     </VerticalStackLayout>
-                </VerticalStackLayout>
-            </Border>
+                </Border>
 
-            <Label Text="Entries"
-                   Style="{StaticResource Headline}"
-                   Margin="0,24,0,0" />
+                <Label Text="Entries"
+                       Style="{StaticResource Headline}"
+                       Margin="0,24,0,0" />
+            </VerticalStackLayout>
+        </CollectionView.Header>
 
-            <CollectionView ItemsSource="{Binding Entries}"
-                            Margin="0,8,0,0"
-                            SelectionMode="Single"
-                            SelectionChanged="EntriesCollection_SelectionChanged"
-                            ItemTemplate="{StaticResource EntryCardTemplateSelector}">
-                <CollectionView.EmptyView>
-                    <VerticalStackLayout Padding="32" Spacing="12" HorizontalOptions="Center" VerticalOptions="Center">
-                        <Label Text="No entries tracked for this day." HorizontalTextAlignment="Center" Style="{StaticResource Body1}" />
-                        <Label Text="Swipe left or right to explore other days." HorizontalTextAlignment="Center" Style="{StaticResource Caption1}" />
-                    </VerticalStackLayout>
-                </CollectionView.EmptyView>
-            </CollectionView>
-
-        </VerticalStackLayout>
-    </ScrollView>
+        <CollectionView.EmptyView>
+            <VerticalStackLayout Padding="32" Spacing="12" HorizontalOptions="Center" VerticalOptions="Center">
+                <Label Text="No entries tracked for this day." HorizontalTextAlignment="Center" Style="{StaticResource Body1}" />
+                <Label Text="Swipe left or right to explore other days." HorizontalTextAlignment="Center" Style="{StaticResource Caption1}" />
+            </VerticalStackLayout>
+        </CollectionView.EmptyView>
+    </CollectionView>
 </ContentPage>
