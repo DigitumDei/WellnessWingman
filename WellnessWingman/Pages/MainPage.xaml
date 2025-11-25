@@ -215,11 +215,9 @@
                 <Label Text="Snap meal photos or share workout screenshots so your chosen LLM can summarise your day." Style="{StaticResource Body1}" />
             </VerticalStackLayout>
 
-            <HorizontalStackLayout Spacing="12">
-                <Button Text="Take Photo"
-                        SemanticProperties.Description="Capture a meal photo"
-                        Clicked="TakePhotoButton_Clicked" />
-            </HorizontalStackLayout>
+            <Button Text="Take Photo"
+                    SemanticProperties.Description="Capture a meal photo"
+                    Clicked="TakePhotoButton_Clicked" />
 
             <Border StrokeThickness="1"
                     Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}"
