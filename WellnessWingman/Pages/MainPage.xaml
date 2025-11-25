@@ -270,11 +270,17 @@
 
                     <Button Text="View Analysis"
                             Command="{Binding ViewDailySummaryCommand}"
-                            IsVisible="{Binding ShowSummaryCard}" />
+                            IsVisible="{Binding ShowViewAnalysisButton}" />
 
-                    <ActivityIndicator IsRunning="True"
-                                       IsVisible="{Binding IsGeneratingSummary}"
-                                       HorizontalOptions="Center"/>
+                    <VerticalStackLayout Spacing="4" 
+                                         IsVisible="{Binding IsSummaryProcessing}" 
+                                         HorizontalOptions="Center">
+                        <ActivityIndicator IsRunning="True" Color="{StaticResource Primary}" />
+                        <Label Text="Generating analysis..." 
+                               Style="{StaticResource Caption1}" 
+                               TextColor="{StaticResource Gray500}" 
+                               HorizontalOptions="Center"/>
+                    </VerticalStackLayout>
                 </VerticalStackLayout>
             </Border>
 

@@ -47,10 +47,20 @@ namespace WellnessWingman.PageModels;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(GenerateDailySummaryCommand))]
+    [NotifyPropertyChangedFor(nameof(IsSummaryProcessing))]
     private bool isGeneratingSummary;
 
     public bool ShowGenerateSummaryButton => SummaryCard is null;
-    public bool ShowSummaryCard => SummaryCard is not null;
+    
+    public bool ShowViewAnalysisButton => SummaryCard is not null && 
+                                         (SummaryCard.IsClickable || 
+                                          SummaryCard.ProcessingStatus == ProcessingStatus.Failed || 
+                                          SummaryCard.ProcessingStatus == ProcessingStatus.Skipped);
+
+    public bool IsSummaryProcessing => IsGeneratingSummary || 
+                                       (SummaryCard is not null && 
+                                        (SummaryCard.ProcessingStatus == ProcessingStatus.Pending || 
+                                         SummaryCard.ProcessingStatus == ProcessingStatus.Processing));
 
     public EntryLogViewModel(
         ITrackedEntryRepository trackedEntryRepository,
@@ -84,7 +94,8 @@ namespace WellnessWingman.PageModels;
     partial void OnSummaryCardChanged(DailySummaryCard? value)
     {
         OnPropertyChanged(nameof(ShowGenerateSummaryButton));
-        OnPropertyChanged(nameof(ShowSummaryCard));
+        OnPropertyChanged(nameof(ShowViewAnalysisButton));
+        OnPropertyChanged(nameof(IsSummaryProcessing));
     }
 
     [RelayCommand]
@@ -772,6 +783,8 @@ namespace WellnessWingman.PageModels;
 
                 UpdateSummaryOutdatedFlag();
                 GenerateDailySummaryCommand.NotifyCanExecuteChanged();
+                OnPropertyChanged(nameof(ShowViewAnalysisButton));
+                OnPropertyChanged(nameof(IsSummaryProcessing));
             });
         });
 
