@@ -99,6 +99,21 @@ namespace WellnessWingman.PageModels;
     }
 
     [RelayCommand]
+    private async Task SelectEntryAsync(TrackedEntryCard entry)
+    {
+        if (entry is null) return;
+
+        if (entry.ProcessingStatus == ProcessingStatus.Failed || entry.ProcessingStatus == ProcessingStatus.Skipped)
+        {
+            await RetryAnalysisCommand.ExecuteAsync(entry);
+        }
+        else
+        {
+            await GoToEntryDetailCommand.ExecuteAsync(entry);
+        }
+    }
+
+    [RelayCommand]
     public async Task ReloadEntriesAsync()
     {
         await LoadEntriesAsync();

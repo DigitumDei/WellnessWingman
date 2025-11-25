@@ -347,38 +347,6 @@ public partial class MainPage : ContentPage
         }
     }
 
-    private async void EntriesCollection_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (BindingContext is not EntryLogViewModel vm)
-        {
-            return;
-        }
-
-        if (e.CurrentSelection.FirstOrDefault() is not TrackedEntryCard selectedEntry)
-        {
-            return;
-        }
-
-        await HandleEntrySelectionAsync(vm, selectedEntry);
-
-        if (sender is CollectionView collectionView)
-        {
-            collectionView.SelectedItem = null;
-        }
-    }
-
-    private static async Task HandleEntrySelectionAsync(EntryLogViewModel viewModel, TrackedEntryCard entry)
-    {
-        if (entry.ProcessingStatus == ProcessingStatus.Failed || entry.ProcessingStatus == ProcessingStatus.Skipped)
-        {
-            await viewModel.RetryAnalysisCommand.ExecuteAsync(entry);
-        }
-        else if (entry.IsClickable)
-        {
-            await viewModel.GoToEntryDetailCommand.ExecuteAsync(entry);
-        }
-    }
-
     private async void OnEntryStatusChanged(object? sender, EntryStatusChangedEventArgs e)
     {
         if (BindingContext is EntryLogViewModel vm)
