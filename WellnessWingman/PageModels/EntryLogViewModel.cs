@@ -601,7 +601,8 @@ namespace WellnessWingman.PageModels;
                 }
             });
 
-            await CalculateLiveTotalsAsync();
+            var entriesSnapshot = Entries.ToList();
+            await CalculateLiveTotalsAsync(entriesSnapshot);
 
             await WithSummaryCardLockAsync(async () =>
             {
@@ -813,11 +814,11 @@ namespace WellnessWingman.PageModels;
         }
     }
 
-    private async Task CalculateLiveTotalsAsync()
+    private async Task CalculateLiveTotalsAsync(IEnumerable<TrackedEntryCard> currentEntries)
     {
         try
         {
-            var completedMealCards = Entries
+            var completedMealCards = currentEntries
                 .Where(e => e.EntryType == EntryType.Meal && e.ProcessingStatus == ProcessingStatus.Completed)
                 .ToList();
 
