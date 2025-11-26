@@ -218,9 +218,19 @@ Important rules:
             new SystemChatMessage(systemPrompt)
         };
 
+        // Build the initial prompt text
+        var promptText = "Analyze this image and return the unified JSON response.";
+
+        // Add user-provided description if available
+        if (entry.Payload is PendingEntryPayload pendingPayload &&
+            !string.IsNullOrWhiteSpace(pendingPayload.Description))
+        {
+            promptText += $"\n\nUser provided these details: {pendingPayload.Description}";
+        }
+
         var userContent = new List<ChatMessageContentPart>
         {
-            ChatMessageContentPart.CreateTextPart("Analyze this image and return the unified JSON response.")
+            ChatMessageContentPart.CreateTextPart(promptText)
         };
 
         if (!string.IsNullOrWhiteSpace(entry.BlobPath))

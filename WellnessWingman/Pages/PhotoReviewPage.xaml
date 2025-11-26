@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:pageModels="clr-namespace:WellnessWingman.PageModels"
+             x:Class="WellnessWingman.Pages.PhotoReviewPage"
+             x:DataType="pageModels:PhotoReviewPageViewModel"
+             Title="Review Photo">
+    <ScrollView>
+        <VerticalStackLayout Spacing="20" Padding="24">
+            <Image Source="{Binding PreviewImage}"
+                   Aspect="AspectFit"
+                   HeightRequest="260"
+                   SemanticProperties.Description="Captured photo preview" />
+
+            <Label Text="{Binding CaptureInfo}"
+                   Style="{StaticResource Caption1}" />
+
+            <Label Text="Add optional details (typed or voice)"
+                   Style="{StaticResource Body2Strong}" />
+            <Editor Text="{Binding Description}"
+                    Placeholder="Describe your meal, workout, or other details..."
+                    AutoSize="TextChanges"
+                    MaximumHeightRequest="200"
+                    IsEnabled="{Binding IsSubmitting, Converter={StaticResource InvertedBoolConverter}}"
+                    SemanticProperties.Description="Optional description for this entry" />
+
+            <ActivityIndicator IsRunning="{Binding IsSubmitting}"
+                               IsVisible="{Binding IsSubmitting}" />
+
+            <Button Text="Save Entry"
+                    Command="{Binding SubmitCommand}"
+                    IsEnabled="{Binding IsSubmitting, Converter={StaticResource InvertedBoolConverter}}"
+                    SemanticProperties.Description="Save entry with optional description" />
+
+            <Button Text="Cancel"
+                    Command="{Binding CancelCommand}"
+                    IsEnabled="{Binding IsSubmitting, Converter={StaticResource InvertedBoolConverter}}"
+                    SemanticProperties.Description="Cancel and discard photo"
+                    BackgroundColor="{StaticResource Gray200}" />
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>
