@@ -104,8 +104,8 @@ public partial class PhotoReviewPageViewModel : ObservableObject
         {
             IsSubmitting = true;
 
-            _logger.LogInformation("SubmitAsync: Finalizing photo capture with description: {HasDescription}",
-                !string.IsNullOrWhiteSpace(Description));
+            _logger.LogInformation("SubmitAsync: Finalizing photo capture with description: '{Description}'",
+                Description ?? "(null)");
 
             var entry = await _finalizationService.FinalizeAsync(PendingCapture, Description);
 

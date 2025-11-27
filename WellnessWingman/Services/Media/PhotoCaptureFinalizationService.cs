@@ -71,6 +71,8 @@ public class PhotoCaptureFinalizationService : IPhotoCaptureFinalizationService
 
             // Use the provided description, or null if not provided
             var finalDescription = string.IsNullOrWhiteSpace(description) ? null : description.Trim();
+            _logger.LogInformation("FinalizeAsync: Storing entry with description: '{Description}'",
+                finalDescription ?? "(null)");
 
             var newEntry = new TrackedEntry
             {
