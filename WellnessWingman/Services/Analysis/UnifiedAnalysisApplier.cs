@@ -101,12 +101,14 @@ internal static class UnifiedAnalysisApplier
         {
             EntryType.Meal => new MealPayload
             {
-                Description = pendingPayload.Description,
+                // Don't copy user notes to Description - let AI generate its own description
+                Description = null,
                 PreviewBlobPath = pendingPayload.PreviewBlobPath ?? entry.BlobPath
             },
             EntryType.Exercise => new ExercisePayload
             {
-                Description = pendingPayload.Description,
+                // Don't copy user notes to Description - let AI generate its own description
+                Description = null,
                 PreviewBlobPath = pendingPayload.PreviewBlobPath ?? entry.BlobPath,
                 ScreenshotBlobPath = entry.BlobPath ?? pendingPayload.PreviewBlobPath
             },

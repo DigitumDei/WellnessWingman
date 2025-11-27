@@ -15,14 +15,14 @@
             <Label Text="{Binding CaptureInfo}"
                    Style="{StaticResource Caption1}" />
 
-            <Label Text="Add optional details (typed or voice)"
+            <Label Text="Add context to help the AI (optional)"
                    Style="{StaticResource Body2Strong}" />
             <Editor Text="{Binding Description}"
-                    Placeholder="Describe your meal, workout, or other details..."
+                    Placeholder="E.g., &quot;I didn't eat the chips&quot;, portion sizes, ingredients..."
                     AutoSize="TextChanges"
                     MaximumHeightRequest="200"
                     IsEnabled="{Binding IsSubmitting, Converter={StaticResource InvertedBoolConverter}}"
-                    SemanticProperties.Description="Optional description for this entry" />
+                    SemanticProperties.Description="Optional context to help AI analysis" />
 
             <ActivityIndicator IsRunning="{Binding IsSubmitting}"
                                IsVisible="{Binding IsSubmitting}" />
