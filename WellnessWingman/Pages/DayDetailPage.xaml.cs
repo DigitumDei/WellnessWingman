@@ -29,6 +29,24 @@ namespace WellnessWingman.Pages
             _backgroundAnalysisService.StatusChanged -= OnEntryStatusChanged;
         }
 
+        private async void EntriesCollection_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (e.CurrentSelection.FirstOrDefault() is not TrackedEntryCard selectedEntry)
+            {
+                return;
+            }
+
+            if (ViewModel.SelectEntryCommand.CanExecute(selectedEntry))
+            {
+                await ViewModel.SelectEntryCommand.ExecuteAsync(selectedEntry);
+            }
+
+            if (sender is CollectionView collectionView)
+            {
+                collectionView.SelectedItem = null;
+            }
+        }
+
         private async void OnEntryStatusChanged(object? sender, EntryStatusChangedEventArgs e)
         {
             await ViewModel.UpdateEntryStatusAsync(e.EntryId, e.Status);

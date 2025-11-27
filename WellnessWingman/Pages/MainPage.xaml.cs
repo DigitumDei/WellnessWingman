@@ -59,6 +59,29 @@ public partial class MainPage : ContentPage
         _backgroundAnalysisService.StatusChanged -= OnEntryStatusChanged;
     }
 
+    private async void EntriesCollection_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (BindingContext is not EntryLogViewModel vm)
+        {
+            return;
+        }
+
+        if (e.CurrentSelection.FirstOrDefault() is not TrackedEntryCard selectedEntry)
+        {
+            return;
+        }
+
+        if (vm.SelectEntryCommand.CanExecute(selectedEntry))
+        {
+            await vm.SelectEntryCommand.ExecuteAsync(selectedEntry);
+        }
+
+        if (sender is CollectionView collectionView)
+        {
+            collectionView.SelectedItem = null;
+        }
+    }
+
     private async void TakePhotoButton_Clicked(object sender, EventArgs e)
     {
         if (_isCapturing)
