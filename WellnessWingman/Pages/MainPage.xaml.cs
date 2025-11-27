@@ -71,23 +71,14 @@ public partial class MainPage : ContentPage
             return;
         }
 
-        await HandleEntrySelectionAsync(vm, selectedEntry);
+        if (vm.SelectEntryCommand.CanExecute(selectedEntry))
+        {
+            await vm.SelectEntryCommand.ExecuteAsync(selectedEntry);
+        }
 
         if (sender is CollectionView collectionView)
         {
             collectionView.SelectedItem = null;
-        }
-    }
-
-    private static async Task HandleEntrySelectionAsync(EntryLogViewModel viewModel, TrackedEntryCard entry)
-    {
-        if (entry.ProcessingStatus == ProcessingStatus.Failed || entry.ProcessingStatus == ProcessingStatus.Skipped)
-        {
-            await viewModel.RetryAnalysisCommand.ExecuteAsync(entry);
-        }
-        else if (entry.IsClickable)
-        {
-            await viewModel.GoToEntryDetailCommand.ExecuteAsync(entry);
         }
     }
 

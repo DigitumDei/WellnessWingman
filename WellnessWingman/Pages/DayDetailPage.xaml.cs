@@ -36,13 +36,9 @@ namespace WellnessWingman.Pages
                 return;
             }
 
-            if (selectedEntry.ProcessingStatus == ProcessingStatus.Failed || selectedEntry.ProcessingStatus == ProcessingStatus.Skipped)
+            if (ViewModel.SelectEntryCommand.CanExecute(selectedEntry))
             {
-                await ViewModel.RetryAnalysisCommand.ExecuteAsync(selectedEntry);
-            }
-            else if (selectedEntry.IsClickable)
-            {
-                await ViewModel.GoToEntryDetailCommand.ExecuteAsync(selectedEntry);
+                await ViewModel.SelectEntryCommand.ExecuteAsync(selectedEntry);
             }
 
             if (sender is CollectionView collectionView)
