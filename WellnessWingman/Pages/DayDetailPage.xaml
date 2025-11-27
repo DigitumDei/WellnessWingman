@@ -4,7 +4,6 @@
              xmlns:pageModels="clr-namespace:WellnessWingman.PageModels"
              xmlns:models="clr-namespace:WellnessWingman.Models"
              xmlns:templates="clr-namespace:WellnessWingman.Pages.Templates"
-             xmlns:gestures="clr-namespace:WellnessWingman.Utilities.Gestures"
              x:Class="WellnessWingman.Pages.DayDetailPage"
              x:DataType="pageModels:EntryLogViewModel"
              Title="{Binding FormattedHistoricalDate}">
@@ -18,9 +17,6 @@
                                     Margin="0,0,0,16"
                                     BackgroundColor="Transparent"
                                     StrokeShape="RoundRectangle 12,12,12,12">
-                                <Border.GestureRecognizers>
-                                    <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type pageModels:EntryLogViewModel}}, Path=SelectEntryCommand}" CommandParameter="{Binding .}" />
-                                </Border.GestureRecognizers>
             
                                 <Grid RowDefinitions="Auto,Auto" BackgroundColor="Transparent">
                                     <Image Source="{Binding FullPath}"
@@ -30,6 +26,7 @@
             
                                     <Grid Grid.Row="0"
                                           BackgroundColor="#80000000"
+                                          InputTransparent="True"
                                           IsVisible="{Binding IsClickable, Converter={StaticResource InvertedBoolConverter}}">
                                         <VerticalStackLayout HorizontalOptions="Center"
                                                              VerticalOptions="Center"
@@ -83,9 +80,6 @@
                                     Margin="0,0,0,16"
                                     BackgroundColor="Transparent"
                                     StrokeShape="RoundRectangle 12,12,12,12">
-                                <Border.GestureRecognizers>
-                                    <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type pageModels:EntryLogViewModel}}, Path=SelectEntryCommand}" CommandParameter="{Binding .}" />
-                                </Border.GestureRecognizers>
             
                                 <Grid RowDefinitions="Auto,Auto" BackgroundColor="Transparent">
                                     <Image Source="{Binding PreviewPath}"
@@ -95,6 +89,7 @@
             
                                     <Grid Grid.Row="0"
                                           BackgroundColor="#80000000"
+                                          InputTransparent="True"
                                           IsVisible="{Binding IsClickable, Converter={StaticResource InvertedBoolConverter}}">
                                         <VerticalStackLayout HorizontalOptions="Center"
                                                              VerticalOptions="Center"
@@ -148,9 +143,6 @@
                                     Margin="0,0,0,16"
                                     BackgroundColor="Transparent"
                                     StrokeShape="RoundRectangle 12,12,12,12">
-                                <Border.GestureRecognizers>
-                                    <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type pageModels:EntryLogViewModel}}, Path=SelectEntryCommand}" CommandParameter="{Binding .}" />
-                                </Border.GestureRecognizers>
             
                                 <Grid RowDefinitions="Auto,Auto" BackgroundColor="Transparent">
                                     <Image Source="{Binding PreviewPath}"
@@ -160,6 +152,7 @@
             
                                     <Grid Grid.Row="0"
                                           BackgroundColor="#80000000"
+                                          InputTransparent="True"
                                           IsVisible="{Binding IsClickable, Converter={StaticResource InvertedBoolConverter}}">
                                         <VerticalStackLayout HorizontalOptions="Center"
                                                              VerticalOptions="Center"
@@ -213,104 +206,118 @@
                     </ResourceDictionary>
                 </ContentPage.Resources>
             
-                    <ScrollView>
-                        <VerticalStackLayout Spacing="24" Padding="24,32">
-                            <VerticalStackLayout.Behaviors>
-                                <gestures:ImprovedHorizontalSwipeBehavior
-                                    SwipeLeftCommand="{Binding GoToNextDayCommand}"
-                                    SwipeRightCommand="{Binding GoToPreviousDayCommand}" />
-                            </VerticalStackLayout.Behaviors>
-                            <!-- Date Navigation -->
-                        <Grid ColumnDefinitions="Auto,*,Auto" VerticalOptions="Center">
-                            <Button Text="&lt;" Command="{Binding GoToPreviousDayCommand}" />
-                            <Label Grid.Column="1"
-                                   Text="{Binding HistoricalDate, StringFormat='{0:ddd, MMM d, yyyy}'}"
-                                   HorizontalOptions="Center"
-                                   VerticalOptions="Center"
-                                   Style="{StaticResource Headline}" />
-                            <Button Grid.Column="2" Text="&gt;" Command="{Binding GoToNextDayCommand}" />
-                        </Grid>
-            
-                        <Border StrokeThickness="1"
-                                Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}"
-                                Padding="16"
-                                Margin="0,8,0,0"
-                                BackgroundColor="Transparent"
-                                StrokeShape="RoundRectangle 12,12,12,12"
-                                IsVisible="{Binding HasCompletedMeals}">
-                            <VerticalStackLayout Spacing="16">
-                                <Label Text="Daily Nutrition" Style="{StaticResource Body2Strong}" />
-            
-                                <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="*,*,*,*" RowSpacing="12">
-                                    <!-- Row 0: Macros -->
-                                    <VerticalStackLayout Grid.Row="0" Grid.Column="0">
-                                        <Label Text="{Binding LiveNutritionalTotals.Calories, StringFormat='{0:F0}'}" FontAttributes="Bold" HorizontalOptions="Center" FontSize="18"/>
-                                        <Label Text="Cals" Style="{StaticResource Caption1}" HorizontalOptions="Center" />
-                                    </VerticalStackLayout>
-                                    <VerticalStackLayout Grid.Row="0" Grid.Column="1">
-                                        <Label Text="{Binding LiveNutritionalTotals.Protein, StringFormat='{0:F0}g'}" FontAttributes="Bold" HorizontalOptions="Center" FontSize="18"/>
-                                        <Label Text="Prot" Style="{StaticResource Caption1}" HorizontalOptions="Center" />
-                                    </VerticalStackLayout>
-                                    <VerticalStackLayout Grid.Row="0" Grid.Column="2">
-                                        <Label Text="{Binding LiveNutritionalTotals.Carbohydrates, StringFormat='{0:F0}g'}" FontAttributes="Bold" HorizontalOptions="Center" FontSize="18"/>
-                                        <Label Text="Carbs" Style="{StaticResource Caption1}" HorizontalOptions="Center" />
-                                    </VerticalStackLayout>
-                                    <VerticalStackLayout Grid.Row="0" Grid.Column="3">
-                                        <Label Text="{Binding LiveNutritionalTotals.Fat, StringFormat='{0:F0}g'}" FontAttributes="Bold" HorizontalOptions="Center" FontSize="18"/>
-                                        <Label Text="Fat" Style="{StaticResource Caption1}" HorizontalOptions="Center" />
-                                    </VerticalStackLayout>
-            
-                                                            <!-- Row 1: Micros -->
-                                                            <Grid Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="4" ColumnDefinitions="*,*,*">
-                                                                <VerticalStackLayout Grid.Column="0" HorizontalOptions="Center">
-                                                                    <Label Text="{Binding LiveNutritionalTotals.Fiber, StringFormat='{0:F0}g'}" FontAttributes="Bold" HorizontalOptions="Center" FontSize="16"/>
-                                                                    <Label Text="Fiber" Style="{StaticResource Caption1}" HorizontalOptions="Center" />
-                                                                </VerticalStackLayout>
-                                                                <VerticalStackLayout Grid.Column="1" HorizontalOptions="Center">
-                                                                    <Label Text="{Binding LiveNutritionalTotals.Sugar, StringFormat='{0:F0}g'}" FontAttributes="Bold" HorizontalOptions="Center" FontSize="16"/>
-                                                                    <Label Text="Sugar" Style="{StaticResource Caption1}" HorizontalOptions="Center" />
-                                                                </VerticalStackLayout>
-                                                                <VerticalStackLayout Grid.Column="2" HorizontalOptions="Center">
-                                                                    <Label Text="{Binding LiveNutritionalTotals.Sodium, StringFormat='{0:F0}mg'}" FontAttributes="Bold" HorizontalOptions="Center" FontSize="16"/>
-                                                                    <Label Text="Sodium" Style="{StaticResource Caption1}" HorizontalOptions="Center" />
-                                                                </VerticalStackLayout>
-                                                            </Grid>                                </Grid>
-            
-                                <Button Text="Get More Details"
-                                        Command="{Binding GenerateDailySummaryCommand}"
-                                        IsVisible="{Binding ShowGenerateSummaryButton}"
-                                        IsEnabled="{Binding IsGeneratingSummary, Converter={StaticResource InvertedBoolConverter}}" />
-            
-                                <Button Text="View Analysis"
-                                        Command="{Binding ViewDailySummaryCommand}"
-                                        IsVisible="{Binding ShowViewAnalysisButton}" />
-            
-                                <VerticalStackLayout Spacing="4" 
-                                                     IsVisible="{Binding IsSummaryProcessing}" 
-                                                     HorizontalOptions="Center">
-                                    <ActivityIndicator IsRunning="True" Color="{StaticResource Primary}" />
-                                    <Label Text="Generating analysis..." 
-                                           Style="{StaticResource Caption1}" 
-                                           TextColor="{StaticResource Gray500}" 
-                                           HorizontalOptions="Center"/>
-                                </VerticalStackLayout>
+    <ScrollView>
+        <VerticalStackLayout Spacing="24" Padding="24,32">
+            <SwipeView>
+                <SwipeView.LeftItems>
+                    <SwipeItems Mode="Execute">
+                        <SwipeItem Text="Previous"
+                                   BackgroundColor="Transparent"
+                                   Command="{Binding GoToPreviousDayCommand}" />
+                    </SwipeItems>
+                </SwipeView.LeftItems>
+                <SwipeView.RightItems>
+                    <SwipeItems Mode="Execute">
+                        <SwipeItem Text="Next"
+                                   BackgroundColor="Transparent"
+                                   Command="{Binding GoToNextDayCommand}" />
+                    </SwipeItems>
+                </SwipeView.RightItems>
+                <!-- Date Navigation -->
+                <Grid ColumnDefinitions="Auto,*,Auto" VerticalOptions="Center">
+                    <Button Text="&lt;" Command="{Binding GoToPreviousDayCommand}" />
+                    <Label Grid.Column="1"
+                           Text="{Binding HistoricalDate, StringFormat='{0:ddd, MMM d, yyyy}'}"
+                           HorizontalOptions="Center"
+                           VerticalOptions="Center"
+                           Style="{StaticResource Headline}" />
+                    <Button Grid.Column="2" Text="&gt;" Command="{Binding GoToNextDayCommand}" />
+                </Grid>
+            </SwipeView>
+
+                <Border StrokeThickness="1"
+                        Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}"
+                        Padding="16"
+                        Margin="0,8,0,0"
+                        BackgroundColor="Transparent"
+                        StrokeShape="RoundRectangle 12,12,12,12"
+                        IsVisible="{Binding HasCompletedMeals}">
+                    <VerticalStackLayout Spacing="16">
+                        <Label Text="Daily Nutrition" Style="{StaticResource Body2Strong}" />
+
+                        <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="*,*,*,*" RowSpacing="12">
+                            <!-- Row 0: Macros -->
+                            <VerticalStackLayout Grid.Row="0" Grid.Column="0">
+                                <Label Text="{Binding LiveNutritionalTotals.Calories, StringFormat='{0:F0}'}" FontAttributes="Bold" HorizontalOptions="Center" FontSize="18"/>
+                                <Label Text="Cals" Style="{StaticResource Caption1}" HorizontalOptions="Center" />
                             </VerticalStackLayout>
-                        </Border>
-            
-                        <Label Text="Entries"
-                               Style="{StaticResource Headline}"
-                               Margin="0,24,0,0" />
-            
-                        <VerticalStackLayout BindableLayout.ItemsSource="{Binding Entries}"
-                                             BindableLayout.ItemTemplateSelector="{StaticResource EntryCardTemplateSelector}"
-                                             Spacing="0"
-                                             Margin="0,8,0,0">
-                             <BindableLayout.EmptyView>
-                                <VerticalStackLayout Padding="32" Spacing="12" HorizontalOptions="Center" VerticalOptions="Center">
-                                    <Label Text="No entries tracked for this day." HorizontalTextAlignment="Center" Style="{StaticResource Body1}" />
-                                    <Label Text="Swipe left or right to explore other days." HorizontalTextAlignment="Center" Style="{StaticResource Caption1}" />
+                            <VerticalStackLayout Grid.Row="0" Grid.Column="1">
+                                <Label Text="{Binding LiveNutritionalTotals.Protein, StringFormat='{0:F0}g'}" FontAttributes="Bold" HorizontalOptions="Center" FontSize="18"/>
+                                <Label Text="Prot" Style="{StaticResource Caption1}" HorizontalOptions="Center" />
+                            </VerticalStackLayout>
+                            <VerticalStackLayout Grid.Row="0" Grid.Column="2">
+                                <Label Text="{Binding LiveNutritionalTotals.Carbohydrates, StringFormat='{0:F0}g'}" FontAttributes="Bold" HorizontalOptions="Center" FontSize="18"/>
+                                <Label Text="Carbs" Style="{StaticResource Caption1}" HorizontalOptions="Center" />
+                            </VerticalStackLayout>
+                            <VerticalStackLayout Grid.Row="0" Grid.Column="3">
+                                <Label Text="{Binding LiveNutritionalTotals.Fat, StringFormat='{0:F0}g'}" FontAttributes="Bold" HorizontalOptions="Center" FontSize="18"/>
+                                <Label Text="Fat" Style="{StaticResource Caption1}" HorizontalOptions="Center" />
+                            </VerticalStackLayout>
+
+                            <!-- Row 1: Micros -->
+                            <Grid Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="4" ColumnDefinitions="*,*,*">
+                                <VerticalStackLayout Grid.Column="0" HorizontalOptions="Center">
+                                    <Label Text="{Binding LiveNutritionalTotals.Fiber, StringFormat='{0:F0}g'}" FontAttributes="Bold" HorizontalOptions="Center" FontSize="16"/>
+                                    <Label Text="Fiber" Style="{StaticResource Caption1}" HorizontalOptions="Center" />
                                 </VerticalStackLayout>
-                            </BindableLayout.EmptyView>
+                                <VerticalStackLayout Grid.Column="1" HorizontalOptions="Center">
+                                    <Label Text="{Binding LiveNutritionalTotals.Sugar, StringFormat='{0:F0}g'}" FontAttributes="Bold" HorizontalOptions="Center" FontSize="16"/>
+                                    <Label Text="Sugar" Style="{StaticResource Caption1}" HorizontalOptions="Center" />
+                                </VerticalStackLayout>
+                                <VerticalStackLayout Grid.Column="2" HorizontalOptions="Center">
+                                    <Label Text="{Binding LiveNutritionalTotals.Sodium, StringFormat='{0:F0}mg'}" FontAttributes="Bold" HorizontalOptions="Center" FontSize="16"/>
+                                    <Label Text="Sodium" Style="{StaticResource Caption1}" HorizontalOptions="Center" />
+                                </VerticalStackLayout>
+                            </Grid>
+                        </Grid>
+
+                        <Button Text="Get More Details"
+                                Command="{Binding GenerateDailySummaryCommand}"
+                                IsVisible="{Binding ShowGenerateSummaryButton}"
+                                IsEnabled="{Binding IsGeneratingSummary, Converter={StaticResource InvertedBoolConverter}}" />
+
+                        <Button Text="View Analysis"
+                                Command="{Binding ViewDailySummaryCommand}"
+                                IsVisible="{Binding ShowViewAnalysisButton}" />
+
+                        <VerticalStackLayout Spacing="4" 
+                                             IsVisible="{Binding IsSummaryProcessing}" 
+                                             HorizontalOptions="Center">
+                            <ActivityIndicator IsRunning="True" Color="{StaticResource Primary}" />
+                            <Label Text="Generating analysis..." 
+                                   Style="{StaticResource Caption1}" 
+                                   TextColor="{StaticResource Gray500}" 
+                                   HorizontalOptions="Center"/>
                         </VerticalStackLayout>
                     </VerticalStackLayout>
-                </ScrollView></ContentPage>
+                </Border>
+
+                <Label Text="Entries"
+                       Style="{StaticResource Headline}"
+                       Margin="0,24,0,0" />
+
+            <CollectionView ItemsSource="{Binding Entries}"
+                            ItemTemplate="{StaticResource EntryCardTemplateSelector}"
+                            SelectionMode="Single"
+                            SelectionChanged="EntriesCollection_SelectionChanged"
+                            Margin="0,8,0,0">
+                <CollectionView.EmptyView>
+                    <VerticalStackLayout Padding="32" Spacing="12" HorizontalOptions="Center" VerticalOptions="Center">
+                        <Label Text="No entries tracked for this day." HorizontalTextAlignment="Center" Style="{StaticResource Body1}" />
+                        <Label Text="Swipe left or right to explore other days." HorizontalTextAlignment="Center" Style="{StaticResource Caption1}" />
+                    </VerticalStackLayout>
+                </CollectionView.EmptyView>
+            </CollectionView>
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

@@ -29,6 +29,28 @@ namespace WellnessWingman.Pages
             _backgroundAnalysisService.StatusChanged -= OnEntryStatusChanged;
         }
 
+        private async void EntriesCollection_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (e.CurrentSelection.FirstOrDefault() is not TrackedEntryCard selectedEntry)
+            {
+                return;
+            }
+
+            if (selectedEntry.ProcessingStatus == ProcessingStatus.Failed || selectedEntry.ProcessingStatus == ProcessingStatus.Skipped)
+            {
+                await ViewModel.RetryAnalysisCommand.ExecuteAsync(selectedEntry);
+            }
+            else if (selectedEntry.IsClickable)
+            {
+                await ViewModel.GoToEntryDetailCommand.ExecuteAsync(selectedEntry);
+            }
+
+            if (sender is CollectionView collectionView)
+            {
+                collectionView.SelectedItem = null;
+            }
+        }
+
         private async void OnEntryStatusChanged(object? sender, EntryStatusChangedEventArgs e)
         {
             await ViewModel.UpdateEntryStatusAsync(e.EntryId, e.Status);
