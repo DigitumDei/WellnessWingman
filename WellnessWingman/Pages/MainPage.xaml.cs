@@ -10,11 +10,9 @@ namespace WellnessWingman.Pages;
 
 public partial class MainPage : ContentPage
 {
-    private readonly ITrackedEntryRepository _trackedEntryRepository;
+    private readonly IPhotoCaptureFinalizationService _finalizationService;
     private readonly IBackgroundAnalysisService _backgroundAnalysisService;
-    private readonly INotificationPermissionService _notificationPermissionService;
     private readonly ILogger<MainPage> _logger;
-    private readonly IPhotoResizer _photoResizer;
     private readonly ICameraCaptureService _cameraCaptureService;
     private readonly IPendingPhotoStore _pendingPhotoStore;
     private bool _isCapturing;
@@ -22,21 +20,17 @@ public partial class MainPage : ContentPage
 
     public MainPage(
         EntryLogViewModel viewModel,
-        ITrackedEntryRepository trackedEntryRepository,
+        IPhotoCaptureFinalizationService finalizationService,
         IBackgroundAnalysisService backgroundAnalysisService,
-        INotificationPermissionService notificationPermissionService,
         ILogger<MainPage> logger,
-        IPhotoResizer photoResizer,
         ICameraCaptureService cameraCaptureService,
         IPendingPhotoStore pendingPhotoStore)
     {
         InitializeComponent();
         BindingContext = viewModel;
-        _trackedEntryRepository = trackedEntryRepository;
+        _finalizationService = finalizationService;
         _backgroundAnalysisService = backgroundAnalysisService;
-        _notificationPermissionService = notificationPermissionService;
         _logger = logger;
-        _photoResizer = photoResizer;
         _cameraCaptureService = cameraCaptureService;
         _pendingPhotoStore = pendingPhotoStore;
     }
@@ -139,11 +133,14 @@ public partial class MainPage : ContentPage
                 return;
             }
 
-            _logger.LogInformation("TakePhotoButton_Clicked: Camera capture returned, finalising photo");
-            await FinalizePhotoCaptureAsync(capture);
+            _logger.LogInformation("TakePhotoButton_Clicked: Camera capture returned, navigating to review page");
+
+            await Shell.Current.GoToAsync(nameof(PhotoReviewPage), new Dictionary<string, object>
+            {
+                ["PendingCapture"] = capture
+            });
             captureFinalized = true;
-            await _pendingPhotoStore.ClearAsync();
-            _logger.LogInformation("TakePhotoButton_Clicked: Photo capture completed successfully");
+            _logger.LogInformation("TakePhotoButton_Clicked: Navigated to photo review page");
         }
         catch (Exception ex)
         {
@@ -203,8 +200,21 @@ public partial class MainPage : ContentPage
             }
 
             _logger.LogInformation("Processing pending photo captured at {CapturedAtUtc}.", pending.CapturedAtUtc);
-            await FinalizePhotoCaptureAsync(pending);
+            var entry = await _finalizationService.FinalizeAsync(pending, description: null);
             finalized = true;
+
+            if (entry is not null && BindingContext is EntryLogViewModel vm)
+            {
+                try
+                {
+                    await vm.AddPendingEntryAsync(entry);
+                }
+                catch (Exception uiEx)
+                {
+                    _logger.LogError(uiEx, "ProcessPendingCaptureAsync: Failed to add entry {EntryId} to UI collection.", entry.EntryId);
+                }
+            }
+
             await _pendingPhotoStore.ClearAsync();
         }
         catch (Exception ex)
@@ -248,105 +258,6 @@ public partial class MainPage : ContentPage
             CapturedAtTimeZoneId = timeZoneId,
             CapturedAtOffsetMinutes = offsetMinutes
         };
-    }
-
-    private async Task FinalizePhotoCaptureAsync(PendingPhotoCapture capture)
-    {
-        string originalPath = capture.OriginalAbsolutePath;
-        string previewPath = capture.PreviewAbsolutePath;
-
-        if (!File.Exists(originalPath))
-        {
-            throw new FileNotFoundException("Captured photo file is missing.", originalPath);
-        }
-
-        if (new FileInfo(originalPath).Length == 0)
-        {
-            throw new InvalidOperationException("Captured photo file is empty.");
-        }
-
-        Directory.CreateDirectory(Path.GetDirectoryName(previewPath)!);
-
-        File.Copy(originalPath, previewPath, overwrite: true);
-        _logger.LogInformation("FinalizePhotoCaptureAsync: Preview copy refreshed at {PreviewPath}", previewPath);
-
-        await _photoResizer.ResizeAsync(previewPath, 1280, 1280);
-        _logger.LogInformation("FinalizePhotoCaptureAsync: Preview resized");
-
-        var timeZoneId = capture.CapturedAtTimeZoneId;
-        var offsetMinutes = capture.CapturedAtOffsetMinutes;
-
-        if (timeZoneId is null || offsetMinutes is null)
-        {
-            var metadata = DateTimeConverter.CaptureTimeZoneMetadata(capture.CapturedAtUtc);
-            timeZoneId ??= metadata.TimeZoneId;
-            offsetMinutes ??= metadata.OffsetMinutes;
-        }
-
-        var newEntry = new TrackedEntry
-        {
-            EntryType = EntryType.Unknown,
-            CapturedAt = capture.CapturedAtUtc,
-            CapturedAtTimeZoneId = timeZoneId,
-            CapturedAtOffsetMinutes = offsetMinutes,
-            BlobPath = capture.OriginalRelativePath,
-            Payload = new PendingEntryPayload
-            {
-                Description = "Processing photo",
-                PreviewBlobPath = capture.PreviewRelativePath
-            },
-            DataSchemaVersion = 0,
-            ProcessingStatus = ProcessingStatus.Pending
-        };
-
-        bool entryPersisted = false;
-
-        try
-        {
-            await _trackedEntryRepository.AddAsync(newEntry);
-            entryPersisted = true;
-            _logger.LogInformation("FinalizePhotoCaptureAsync: Database entry created with ID {EntryId}", newEntry.EntryId);
-
-            if (BindingContext is EntryLogViewModel vm)
-            {
-                try
-                {
-                    await vm.AddPendingEntryAsync(newEntry);
-                }
-                catch (Exception uiEx)
-                {
-                    _logger.LogError(uiEx, "FinalizePhotoCaptureAsync: Failed to add entry {EntryId} to UI collection.", newEntry.EntryId);
-                }
-            }
-
-            try
-            {
-                // Request notification permission on first photo capture (Android 13+)
-                // This enables foreground service to keep analysis running when screen is locked
-                await _notificationPermissionService.EnsurePermissionAsync();
-
-                await _backgroundAnalysisService.QueueEntryAsync(newEntry.EntryId);
-                _logger.LogInformation("FinalizePhotoCaptureAsync: Entry queued for background analysis");
-            }
-            catch (Exception queueEx)
-            {
-                _logger.LogError(queueEx, "FinalizePhotoCaptureAsync: Failed to queue background analysis for entry {EntryId}.", newEntry.EntryId);
-                await MainThread.InvokeOnMainThreadAsync(async () =>
-                {
-                    await DisplayAlertAsync("Analysis Delayed", "We saved your photo but couldn't start the analysis yet. Please retry from the meal card.", "OK");
-                });
-            }
-        }
-        catch
-        {
-            if (entryPersisted)
-            {
-                _logger.LogWarning("FinalizePhotoCaptureAsync: Rolling back database entry {EntryId} due to failure.", newEntry.EntryId);
-                await _trackedEntryRepository.DeleteAsync(newEntry.EntryId);
-            }
-
-            throw;
-        }
     }
 
     private static void CleanupCaptureFiles(PendingPhotoCapture capture)

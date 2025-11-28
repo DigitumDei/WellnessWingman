@@ -55,6 +55,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<IBackgroundAnalysisService, BackgroundAnalysisService>();
         builder.Services.AddScoped<IStaleEntryRecoveryService, StaleEntryRecoveryService>();
         builder.Services.AddSingleton<IPendingPhotoStore, FilePendingPhotoStore>();
+        builder.Services.AddScoped<IPhotoCaptureFinalizationService, PhotoCaptureFinalizationService>();
 
 #if ANDROID
         builder.Services.AddSingleton<IPhotoResizer, AndroidPhotoResizer>();
@@ -104,6 +105,8 @@ public static class MauiProgram
         builder.Services.AddTransient<ExerciseDetailPage>();
         builder.Services.AddTransient<ShareEntryViewModel>();
         builder.Services.AddTransient<ShareEntryPage>();
+        builder.Services.AddTransient<PhotoReviewPageViewModel>();
+        builder.Services.AddTransient<PhotoReviewPage>();
 
         builder.Services.AddTransient<IAnalysisOrchestrator, AnalysisOrchestrator>();
         builder.Services.AddTransient<IDailySummaryService, DailySummaryService>();

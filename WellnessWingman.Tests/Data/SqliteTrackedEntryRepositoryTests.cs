@@ -1,5 +1,7 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using System.Text.Json;
 using WellnessWingman.Data;
 using WellnessWingman.Models;
@@ -25,7 +27,8 @@ public sealed class SqliteTrackedEntryRepositoryTests : IDisposable
         _context = new WellnessWingmanDbContext(options);
         _context.Database.EnsureCreated();
 
-        _repository = new SqliteTrackedEntryRepository(_context);
+        var logger = NullLogger<SqliteTrackedEntryRepository>.Instance;
+        _repository = new SqliteTrackedEntryRepository(_context, logger);
     }
 
     [Fact]

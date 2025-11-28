@@ -1,6 +1,7 @@
 using WellnessWingman.Models;
 using WellnessWingman.Utilities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using System.Text.Json;
 
 namespace WellnessWingman.Data;
@@ -8,15 +9,17 @@ namespace WellnessWingman.Data;
 public class SqliteTrackedEntryRepository : ITrackedEntryRepository
 {
     WellnessWingmanDbContext _context;
+    private readonly ILogger<SqliteTrackedEntryRepository> _logger;
 
-    public SqliteTrackedEntryRepository(WellnessWingmanDbContext context)
+    public SqliteTrackedEntryRepository(WellnessWingmanDbContext context, ILogger<SqliteTrackedEntryRepository> logger)
     {
         _context = context;
+        _logger = logger;
     }
 
     public async Task AddAsync(TrackedEntry entry)
     {
-        entry.DataPayload = JsonSerializer.Serialize(entry.Payload);
+        entry.DataPayload = JsonSerializer.Serialize(entry.Payload, entry.Payload.GetType());
         await _context.TrackedEntries.AddAsync(entry);
         await _context.SaveChangesAsync();
     }
@@ -147,7 +150,7 @@ public class SqliteTrackedEntryRepository : ITrackedEntryRepository
         trackedEntry.CapturedAtOffsetMinutes = entry.CapturedAtOffsetMinutes;
         trackedEntry.BlobPath = entry.BlobPath;
         trackedEntry.DataSchemaVersion = entry.DataSchemaVersion;
-        trackedEntry.DataPayload = JsonSerializer.Serialize(entry.Payload);
+        trackedEntry.DataPayload = JsonSerializer.Serialize(entry.Payload, entry.Payload.GetType());
         trackedEntry.ProcessingStatus = entry.ProcessingStatus;
         trackedEntry.ExternalId = entry.ExternalId;
 
@@ -173,6 +176,11 @@ public class SqliteTrackedEntryRepository : ITrackedEntryRepository
         if (entry.DataSchemaVersion == 0)
         {
             entry.Payload = JsonSerializer.Deserialize<PendingEntryPayload>(entry.DataPayload) ?? new PendingEntryPayload();
+            if (entry.Payload is PendingEntryPayload pending)
+            {
+                _logger.LogInformation("DeserializePayload: Entry {EntryId} deserialized with description: '{Description}'",
+                    entry.EntryId, pending.Description ?? "(null)");
+            }
             return;
         }
 

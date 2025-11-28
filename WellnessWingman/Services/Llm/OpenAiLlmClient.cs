@@ -185,7 +185,7 @@ public class OpenAiLlmClient : ILLmClient
         return ex.Message?.Contains("WriteCore method", StringComparison.OrdinalIgnoreCase) == true;
     }
 
-    private static async Task<List<ChatMessage>> CreateUnifiedChatRequest(
+    private async Task<List<ChatMessage>> CreateUnifiedChatRequest(
         TrackedEntry entry,
         string? existingAnalysisJson,
         string? correction)
@@ -218,9 +218,27 @@ Important rules:
             new SystemChatMessage(systemPrompt)
         };
 
+        // Build the initial prompt text
+        var promptText = "Analyze this image and return the unified JSON response.";
+
+        // Add user-provided description if available
+        if (entry.Payload is PendingEntryPayload pendingPayload &&
+            !string.IsNullOrWhiteSpace(pendingPayload.Description))
+        {
+            promptText += $"\n\nUser provided these details: {pendingPayload.Description}";
+            _logger.LogInformation("CreateUnifiedChatRequest: Including user description in prompt: '{Description}'",
+                pendingPayload.Description);
+        }
+        else
+        {
+            _logger.LogInformation("CreateUnifiedChatRequest: No user description available (Payload type: {PayloadType}, IsNull: {IsNull})",
+                entry.Payload?.GetType().Name ?? "null",
+                entry.Payload is null);
+        }
+
         var userContent = new List<ChatMessageContentPart>
         {
-            ChatMessageContentPart.CreateTextPart("Analyze this image and return the unified JSON response.")
+            ChatMessageContentPart.CreateTextPart(promptText)
         };
 
         if (!string.IsNullOrWhiteSpace(entry.BlobPath))
