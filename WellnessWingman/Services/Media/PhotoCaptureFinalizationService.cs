@@ -90,41 +90,25 @@ public class PhotoCaptureFinalizationService : IPhotoCaptureFinalizationService
                 ProcessingStatus = ProcessingStatus.Pending
             };
 
-            bool entryPersisted = false;
+            await _trackedEntryRepository.AddAsync(newEntry);
+            _logger.LogInformation("FinalizeAsync: Database entry created with ID {EntryId}", newEntry.EntryId);
 
             try
             {
-                await _trackedEntryRepository.AddAsync(newEntry);
-                entryPersisted = true;
-                _logger.LogInformation("FinalizeAsync: Database entry created with ID {EntryId}", newEntry.EntryId);
+                // Request notification permission on first photo capture (Android 13+)
+                // This enables foreground service to keep analysis running when screen is locked
+                await _notificationPermissionService.EnsurePermissionAsync();
 
-                try
-                {
-                    // Request notification permission on first photo capture (Android 13+)
-                    // This enables foreground service to keep analysis running when screen is locked
-                    await _notificationPermissionService.EnsurePermissionAsync();
-
-                    await _backgroundAnalysisService.QueueEntryAsync(newEntry.EntryId);
-                    _logger.LogInformation("FinalizeAsync: Entry queued for background analysis");
-                }
-                catch (Exception queueEx)
-                {
-                    _logger.LogError(queueEx, "FinalizeAsync: Failed to queue background analysis for entry {EntryId}.", newEntry.EntryId);
-                    // Note: Caller should handle displaying error to user if needed
-                }
-
-                return newEntry;
+                await _backgroundAnalysisService.QueueEntryAsync(newEntry.EntryId);
+                _logger.LogInformation("FinalizeAsync: Entry queued for background analysis");
             }
-            catch
+            catch (Exception queueEx)
             {
-                if (entryPersisted)
-                {
-                    _logger.LogWarning("FinalizeAsync: Rolling back database entry {EntryId} due to failure.", newEntry.EntryId);
-                    await _trackedEntryRepository.DeleteAsync(newEntry.EntryId);
-                }
-
-                throw;
+                _logger.LogError(queueEx, "FinalizeAsync: Failed to queue background analysis for entry {EntryId}.", newEntry.EntryId);
+                // Note: Caller should handle displaying error to user if needed
             }
+
+            return newEntry;
         }
         catch (Exception ex)
         {

@@ -164,13 +164,14 @@ public partial class PhotoReviewPageViewModel : ObservableObject
 
             // Clear pending store
             await _pendingPhotoStore.ClearAsync();
-
-            // Navigate back to MainPage
-            await Shell.Current.GoToAsync("..", true);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "CancelAsync: Failed to cancel");
+        }
+        finally
+        {
+            // Navigate back to MainPage
             await Shell.Current.GoToAsync("..", true);
         }
     }
