@@ -63,14 +63,15 @@ public partial class PhotoReviewPageViewModel : ObservableObject
 
         try
         {
-            var previewPath = PendingCapture.PreviewAbsolutePath;
-            if (File.Exists(previewPath))
+            // Use original photo for preview (preview file doesn't exist yet)
+            var originalPath = PendingCapture.OriginalAbsolutePath;
+            if (File.Exists(originalPath))
             {
-                PreviewImage = ImageSource.FromFile(previewPath);
+                PreviewImage = ImageSource.FromFile(originalPath);
             }
             else
             {
-                _logger.LogWarning("LoadPreview: Preview file not found at {PreviewPath}", previewPath);
+                _logger.LogWarning("LoadPreview: Original photo file not found at {OriginalPath}", originalPath);
             }
 
             var localCapturedAt = DateTimeConverter.ToOriginalLocal(
