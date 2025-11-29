@@ -1,13 +1,9 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
+using Microsoft.Extensions.Logging.Abstractions;
 using System.Text.Json;
-using System.Threading.Tasks;
 using WellnessWingman.Data;
 using WellnessWingman.Models;
 using WellnessWingman.Services.Analysis;
 using WellnessWingman.Services.Llm;
-using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace WellnessWingman.Tests.Services.Analysis;
@@ -216,7 +212,7 @@ public class DailySummaryServiceTests
     {
         public DailySummaryRequest? LastRequest { get; private set; }
 
-        public Task<LlmAnalysisResult> InvokeAnalysisAsync(TrackedEntry entry, LlmRequestContext context, string? existingAnalysisJson = null, string? correction = null)
+        public Task<LlmAnalysisResult> InvokeAnalysisAsync(TrackedEntry entry, LlmRequestContext context, string? existingAnalysisJson = null, string? userProvidedDetails = null)
         {
             throw new NotSupportedException();
         }

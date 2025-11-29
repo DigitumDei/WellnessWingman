@@ -1,18 +1,13 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Text;
-using System.Text.Json;
-using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.Extensions.Logging;
+using System.Text;
+using System.Text.Json;
 using WellnessWingman.Data;
 using WellnessWingman.Models;
 using WellnessWingman.Services.Analysis;
-using Microsoft.Extensions.Logging;
-using Microsoft.Maui.ApplicationModel;
-using Microsoft.Maui.Storage;
+using WellnessWingman.Services.Llm;
+using WellnessWingman.Services.Media;
 
 namespace WellnessWingman.PageModels;
 
@@ -22,7 +17,13 @@ public partial class MealDetailViewModel : ObservableObject
     private readonly ITrackedEntryRepository _trackedEntryRepository;
     private readonly IEntryAnalysisRepository _entryAnalysisRepository;
     private readonly IBackgroundAnalysisService _backgroundAnalysisService;
+    private readonly IAudioRecordingService _audioRecordingService;
+    private readonly IAudioTranscriptionService _audioTranscriptionService;
     private readonly ILogger<MealDetailViewModel> _logger;
+
+    private Timer? _recordingTimer;
+    private DateTime _recordingStartTime;
+    private bool _hasCheckedPermission;
 
     [ObservableProperty]
     private MealPhoto? meal;
@@ -44,15 +45,36 @@ public partial class MealDetailViewModel : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(SubmitCorrectionCommand))]
     private bool isSubmittingCorrection;
 
+    [ObservableProperty]
+    private bool isRecording;
+
+    [ObservableProperty]
+    private bool isTranscribing;
+
+    [ObservableProperty]
+    private TimeSpan recordingDuration;
+
+    public bool IsRecordingButtonEnabled => IsCorrectionMode && !IsSubmittingCorrection && !IsTranscribing;
+
+    public string RecordingButtonIcon => IsRecording ? "⏹" : "🎤";
+
+    public string RecordingButtonText => IsRecording ? "Tap to stop recording" : "Use your voice to update the analysis";
+
+    public Color RecordingButtonColor => IsRecording ? Colors.Red : Color.FromArgb("#512BD4"); // Primary color
+
     public MealDetailViewModel(
         ITrackedEntryRepository trackedEntryRepository,
         IEntryAnalysisRepository entryAnalysisRepository,
         IBackgroundAnalysisService backgroundAnalysisService,
+        IAudioRecordingService audioRecordingService,
+        IAudioTranscriptionService audioTranscriptionService,
         ILogger<MealDetailViewModel> logger)
     {
         _trackedEntryRepository = trackedEntryRepository;
         _entryAnalysisRepository = entryAnalysisRepository;
         _backgroundAnalysisService = backgroundAnalysisService;
+        _audioRecordingService = audioRecordingService;
+        _audioTranscriptionService = audioTranscriptionService;
         _logger = logger;
     }
 
@@ -247,6 +269,24 @@ public partial class MealDetailViewModel : ObservableObject
         IsCorrectionMode = !IsCorrectionMode;
     }
 
+    [RelayCommand]
+    private async Task ToggleRecordingAsync()
+    {
+        if (!IsCorrectionMode)
+        {
+            return;
+        }
+
+        if (IsRecording)
+        {
+            await StopRecordingInternalAsync();
+        }
+        else
+        {
+            await StartRecordingInternalAsync();
+        }
+    }
+
     [RelayCommand(CanExecute = nameof(CanSubmitCorrection))]
     private async Task SubmitCorrectionAsync()
     {
@@ -267,7 +307,7 @@ public partial class MealDetailViewModel : ObservableObject
             IsSubmittingCorrection = true;
             _logger.LogInformation("Submitting correction for entry {EntryId}.", Meal.EntryId);
 
-            var trackedEntry = await _trackedEntryRepository.GetByIdAsync(Meal.EntryId).ConfigureAwait(false);
+            var trackedEntry = await _trackedEntryRepository.GetByIdAsync(Meal.EntryId);
             if (trackedEntry is null)
             {
                 _logger.LogWarning("Tracked entry {EntryId} not found when submitting correction.", Meal.EntryId);
@@ -275,7 +315,7 @@ public partial class MealDetailViewModel : ObservableObject
                 return;
             }
 
-            var existingAnalysis = await _entryAnalysisRepository.GetByTrackedEntryIdAsync(Meal.EntryId).ConfigureAwait(false);
+            var existingAnalysis = await _entryAnalysisRepository.GetByTrackedEntryIdAsync(Meal.EntryId);
             if (existingAnalysis is null)
             {
                 _logger.LogWarning("No analysis exists for entry {EntryId}; cannot apply correction.", Meal.EntryId);
@@ -284,7 +324,7 @@ public partial class MealDetailViewModel : ObservableObject
             }
 
             // Queue the correction for background processing
-            await _backgroundAnalysisService.QueueCorrectionAsync(Meal.EntryId, trimmedCorrection!).ConfigureAwait(false);
+            await _backgroundAnalysisService.QueueCorrectionAsync(Meal.EntryId, trimmedCorrection!);
 
             _logger.LogInformation("Successfully queued correction for entry {EntryId}.", Meal.EntryId);
             await ShowAlertOnMainThreadAsync("Processing correction", "Thanks! We're updating the analysis with your feedback. This may take a few moments.");
@@ -305,6 +345,174 @@ public partial class MealDetailViewModel : ObservableObject
     private bool CanSubmitCorrection()
     {
         return !IsSubmittingCorrection && !string.IsNullOrWhiteSpace(CorrectionText);
+    }
+
+    private async Task StartRecordingInternalAsync()
+    {
+        if (IsTranscribing || IsSubmittingCorrection || !IsCorrectionMode)
+        {
+            return;
+        }
+
+        try
+        {
+            if (!_hasCheckedPermission || !await _audioRecordingService.CheckPermissionAsync())
+            {
+                _hasCheckedPermission = true;
+                var granted = await _audioRecordingService.RequestPermissionAsync();
+                if (!granted)
+                {
+                    await ShowAlertOnMainThreadAsync("Permission Required",
+                        "Microphone access is required for voice corrections. Please grant permission in settings.");
+                    return;
+                }
+            }
+
+            var audioDirectory = Path.Combine(FileSystem.CacheDirectory, "Audio", "Corrections");
+            Directory.CreateDirectory(audioDirectory);
+            var audioFilePath = Path.Combine(audioDirectory, $"{Guid.NewGuid():N}.m4a");
+
+            var started = await _audioRecordingService.StartRecordingAsync(audioFilePath);
+            if (!started)
+            {
+                _logger.LogWarning("Failed to start correction recording.");
+                await ShowAlertOnMainThreadAsync("Error", "Failed to start recording. Please try again.");
+                return;
+            }
+
+            IsRecording = true;
+            _recordingStartTime = DateTime.UtcNow;
+            RecordingDuration = TimeSpan.Zero;
+
+            _recordingTimer = new Timer(_ =>
+            {
+                MainThread.BeginInvokeOnMainThread(() =>
+                {
+                    RecordingDuration = DateTime.UtcNow - _recordingStartTime;
+                });
+            }, null, TimeSpan.Zero, TimeSpan.FromMilliseconds(100));
+
+            _logger.LogInformation("Voice correction recording started.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to start correction recording.");
+            await ShowAlertOnMainThreadAsync("Error", "An error occurred while starting recording.");
+        }
+    }
+
+    private async Task StopRecordingInternalAsync(bool transcribe = true)
+    {
+        try
+        {
+            _recordingTimer?.Dispose();
+            _recordingTimer = null;
+
+            IsRecording = false;
+
+            var result = await _audioRecordingService.StopRecordingAsync();
+
+            if (result.Status != AudioRecordingStatus.Success || string.IsNullOrEmpty(result.AudioFilePath))
+            {
+                _logger.LogError("Correction recording failed: {Error}", result.ErrorMessage);
+                if (transcribe)
+                {
+                    await ShowAlertOnMainThreadAsync("Error",
+                        result.ErrorMessage ?? "Failed to save recording. Please try again.");
+                }
+                return;
+            }
+
+            if (!transcribe)
+            {
+                TryDeleteRecordingFile(result.AudioFilePath);
+                RecordingDuration = TimeSpan.Zero;
+                return;
+            }
+
+            IsTranscribing = true;
+
+            var transcriptionResult = await _audioTranscriptionService.TranscribeAsync(result.AudioFilePath);
+
+            IsTranscribing = false;
+
+            if (!transcriptionResult.Success || string.IsNullOrWhiteSpace(transcriptionResult.TranscribedText))
+            {
+                _logger.LogError("Correction transcription failed: {Error}", transcriptionResult.ErrorMessage);
+                await ShowAlertOnMainThreadAsync("Transcription Error",
+                    transcriptionResult.ErrorMessage ?? "Failed to transcribe audio. You can type the correction instead.");
+                return;
+            }
+
+            if (!IsCorrectionMode)
+            {
+                TryDeleteRecordingFile(result.AudioFilePath);
+                RecordingDuration = TimeSpan.Zero;
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(CorrectionText))
+            {
+                CorrectionText = transcriptionResult.TranscribedText;
+            }
+            else
+            {
+                CorrectionText = $"{CorrectionText}\n{transcriptionResult.TranscribedText}";
+            }
+
+            RecordingDuration = TimeSpan.Zero;
+            _logger.LogInformation("Correction transcription succeeded.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to stop correction recording or transcribe.");
+            IsRecording = false;
+            IsTranscribing = false;
+            RecordingDuration = TimeSpan.Zero;
+            _recordingTimer?.Dispose();
+            _recordingTimer = null;
+
+            await ShowAlertOnMainThreadAsync("Error", "An error occurred while processing the recording.");
+        }
+    }
+
+    private async Task ResetRecordingStateAsync()
+    {
+        try
+        {
+            _recordingTimer?.Dispose();
+            _recordingTimer = null;
+
+            if (IsRecording)
+            {
+                await StopRecordingInternalAsync(transcribe: false);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to reset recording state for corrections.");
+        }
+        finally
+        {
+            IsRecording = false;
+            IsTranscribing = false;
+            RecordingDuration = TimeSpan.Zero;
+        }
+    }
+
+    private void TryDeleteRecordingFile(string audioFilePath)
+    {
+        try
+        {
+            if (File.Exists(audioFilePath))
+            {
+                File.Delete(audioFilePath);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to delete recording at {Path}", audioFilePath);
+        }
     }
 
     private static async Task ShowAlertOnMainThreadAsync(string title, string message)
@@ -459,13 +667,34 @@ public partial class MealDetailViewModel : ObservableObject
 
         return sb.ToString();
     }
+
     partial void OnIsCorrectionModeChanged(bool value)
     {
         OnPropertyChanged(nameof(CorrectionToggleButtonText));
+        OnPropertyChanged(nameof(IsRecordingButtonEnabled));
 
         if (!value)
         {
+            _ = ResetRecordingStateAsync();
             CorrectionText = string.Empty;
         }
+    }
+
+    partial void OnIsRecordingChanged(bool value)
+    {
+        OnPropertyChanged(nameof(IsRecordingButtonEnabled));
+        OnPropertyChanged(nameof(RecordingButtonIcon));
+        OnPropertyChanged(nameof(RecordingButtonText));
+        OnPropertyChanged(nameof(RecordingButtonColor));
+    }
+
+    partial void OnIsTranscribingChanged(bool value)
+    {
+        OnPropertyChanged(nameof(IsRecordingButtonEnabled));
+    }
+
+    partial void OnIsSubmittingCorrectionChanged(bool value)
+    {
+        OnPropertyChanged(nameof(IsRecordingButtonEnabled));
     }
 }

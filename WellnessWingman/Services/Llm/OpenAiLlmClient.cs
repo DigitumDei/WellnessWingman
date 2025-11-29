@@ -1,16 +1,11 @@
-using System;
+using Microsoft.Extensions.Logging;
+using OpenAI;
+using OpenAI.Chat;
 using System.ClientModel;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
 using System.Text;
 using System.Text.Json;
 using WellnessWingman.Models;
 using WellnessWingman.Utilities;
-using Microsoft.Extensions.Logging;
-using Microsoft.Maui.Storage;
-using OpenAI;
-using OpenAI.Chat;
 
 namespace WellnessWingman.Services.Llm;
 
@@ -27,7 +22,7 @@ public class OpenAiLlmClient : ILLmClient
         TrackedEntry entry,
         LlmRequestContext context,
         string? existingAnalysisJson = null,
-        string? correction = null)
+        string? userProvidedDetails = null)
     {
         if (string.IsNullOrWhiteSpace(context.ApiKey))
         {
@@ -37,7 +32,7 @@ public class OpenAiLlmClient : ILLmClient
         var client = new OpenAIClient(context.ApiKey);
         var chatClient = client.GetChatClient(context.ModelId);
 
-        var messages = await CreateUnifiedChatRequest(entry, existingAnalysisJson, correction).ConfigureAwait(false);
+        var messages = await CreateUnifiedChatRequest(entry, existingAnalysisJson, userProvidedDetails).ConfigureAwait(false);
 
         try
         {
@@ -188,7 +183,7 @@ public class OpenAiLlmClient : ILLmClient
     private async Task<List<ChatMessage>> CreateUnifiedChatRequest(
         TrackedEntry entry,
         string? existingAnalysisJson,
-        string? correction)
+        string? userProvidedDetails)
     {
         var systemPrompt = $@"You are a helpful assistant that analyzes images to track health and wellness.
 
@@ -220,21 +215,6 @@ Important rules:
 
         // Build the initial prompt text
         var promptText = "Analyze this image and return the unified JSON response.";
-
-        // Add user-provided description if available
-        if (entry.Payload is PendingEntryPayload pendingPayload &&
-            !string.IsNullOrWhiteSpace(pendingPayload.Description))
-        {
-            promptText += $"\n\nUser provided these details: {pendingPayload.Description}";
-            _logger.LogInformation("CreateUnifiedChatRequest: Including user description in prompt: '{Description}'",
-                pendingPayload.Description);
-        }
-        else
-        {
-            _logger.LogInformation("CreateUnifiedChatRequest: No user description available (Payload type: {PayloadType}, IsNull: {IsNull})",
-                entry.Payload?.GetType().Name ?? "null",
-                entry.Payload is null);
-        }
 
         var userContent = new List<ChatMessageContentPart>
         {
@@ -268,9 +248,9 @@ Important rules:
             messages.Add(new UserChatMessage("The previous message is the earlier JSON response. Update it to reflect the latest instructions."));
         }
 
-        if (!string.IsNullOrWhiteSpace(correction))
+        if (!string.IsNullOrWhiteSpace(userProvidedDetails))
         {
-            messages.Add(new UserChatMessage($"User correction:\n{correction.Trim()}"));
+            messages.Add(new UserChatMessage($"User correction:\n{userProvidedDetails.Trim()}"));
         }
 
         return messages;

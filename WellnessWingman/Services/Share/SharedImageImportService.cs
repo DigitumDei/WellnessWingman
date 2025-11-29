@@ -122,7 +122,7 @@ public sealed class SharedImageImportService : ISharedImageImportService
             var repository = scope.ServiceProvider.GetRequiredService<ITrackedEntryRepository>();
 
             await repository.AddAsync(newEntry).ConfigureAwait(false);
-            await _backgroundAnalysisService.QueueEntryAsync(newEntry.EntryId, cancellationToken).ConfigureAwait(false);
+            await _backgroundAnalysisService.QueueEntryAsync(newEntry.EntryId, null, cancellationToken).ConfigureAwait(false);
             _logger.LogInformation("Committed shared image {DraftId} as entry {EntryId} awaiting classification.", draftId, newEntry.EntryId);
         }
         finally

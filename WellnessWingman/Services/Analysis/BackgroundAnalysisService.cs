@@ -14,7 +14,7 @@ public interface IBackgroundAnalysisService
     /// <summary>
     /// Queue an entry for background analysis
     /// </summary>
-    Task QueueEntryAsync(int entryId, CancellationToken cancellationToken = default);
+    Task QueueEntryAsync(int entryId, string? userProvidedDetails = null, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Queue a correction analysis for an entry (re-analysis with user feedback)
@@ -45,7 +45,7 @@ public class BackgroundAnalysisService : IBackgroundAnalysisService
         _backgroundExecution = backgroundExecution;
     }
 
-    public Task QueueEntryAsync(int entryId, CancellationToken cancellationToken = default)
+    public Task QueueEntryAsync(int entryId, string? userProvidedDetails = null, CancellationToken cancellationToken = default)
     {
         _ = Task.Run(async () =>
         {
@@ -80,16 +80,16 @@ public class BackgroundAnalysisService : IBackgroundAnalysisService
                     if (cancellationToken.IsCancellationRequested)
                     {
                         _logger.LogInformation("Analysis cancelled before LLM call for entry {EntryId}.", entryId);
-                        await UpdateStatusAsync(entryRepository, entryId, ProcessingStatus.Pending);
-                        return;
-                    }
+                    await UpdateStatusAsync(entryRepository, entryId, ProcessingStatus.Pending);
+                    return;
+                }
 
-                    var result = await orchestrator.ProcessEntryAsync(entry, cancellationToken).ConfigureAwait(false);
+                var result = await orchestrator.ProcessEntryAsync(entry, userProvidedDetails, cancellationToken).ConfigureAwait(false);
 
-                    // Check cancellation after LLM call
-                    if (cancellationToken.IsCancellationRequested)
-                    {
-                        _logger.LogInformation("Analysis cancelled after LLM call for entry {EntryId}.", entryId);
+                // Check cancellation after LLM call
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    _logger.LogInformation("Analysis cancelled after LLM call for entry {EntryId}.", entryId);
                         await UpdateStatusAsync(entryRepository, entryId, ProcessingStatus.Pending);
                         return;
                     }

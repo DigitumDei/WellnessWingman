@@ -36,6 +36,7 @@ public class PhotoCaptureFinalizationService : IPhotoCaptureFinalizationService
     {
         try
         {
+            var initialDetails = string.IsNullOrWhiteSpace(description) ? null : description.Trim();
             string originalPath = capture.OriginalAbsolutePath;
             string previewPath = capture.PreviewAbsolutePath;
 
@@ -69,10 +70,10 @@ public class PhotoCaptureFinalizationService : IPhotoCaptureFinalizationService
                 offsetMinutes ??= metadata.OffsetMinutes;
             }
 
-            // Use the provided description, or null if not provided
-            var finalDescription = string.IsNullOrWhiteSpace(description) ? null : description.Trim();
-            _logger.LogInformation("FinalizeAsync: Storing entry with description: '{Description}'",
-                finalDescription ?? "(null)");
+            if (!string.IsNullOrWhiteSpace(initialDetails))
+            {
+                _logger.LogInformation("FinalizeAsync: Captured user-provided details for analysis: '{Details}'", initialDetails);
+            }
 
             var newEntry = new TrackedEntry
             {
@@ -83,7 +84,6 @@ public class PhotoCaptureFinalizationService : IPhotoCaptureFinalizationService
                 BlobPath = capture.OriginalRelativePath,
                 Payload = new PendingEntryPayload
                 {
-                    Description = finalDescription,
                     PreviewBlobPath = capture.PreviewRelativePath
                 },
                 DataSchemaVersion = 0,
@@ -99,7 +99,7 @@ public class PhotoCaptureFinalizationService : IPhotoCaptureFinalizationService
                 // This enables foreground service to keep analysis running when screen is locked
                 await _notificationPermissionService.EnsurePermissionAsync();
 
-                await _backgroundAnalysisService.QueueEntryAsync(newEntry.EntryId);
+                await _backgroundAnalysisService.QueueEntryAsync(newEntry.EntryId, initialDetails);
                 _logger.LogInformation("FinalizeAsync: Entry queued for background analysis");
             }
             catch (Exception queueEx)
