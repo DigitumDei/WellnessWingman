@@ -83,6 +83,24 @@ public partial class PhotoReviewPageViewModel : ObservableObject
 
     public Color RecordingButtonColor => IsRecording ? Colors.Red : Color.FromArgb("#512BD4"); // Primary color
 
+    partial void OnIsRecordingChanged(bool value)
+    {
+        OnPropertyChanged(nameof(IsRecordingButtonEnabled));
+        OnPropertyChanged(nameof(RecordingButtonIcon));
+        OnPropertyChanged(nameof(RecordingButtonText));
+        OnPropertyChanged(nameof(RecordingButtonColor));
+    }
+
+    partial void OnIsTranscribingChanged(bool value)
+    {
+        OnPropertyChanged(nameof(IsRecordingButtonEnabled));
+    }
+
+    partial void OnIsSubmittingChanged(bool value)
+    {
+        OnPropertyChanged(nameof(IsRecordingButtonEnabled));
+    }
+
     private void LoadPreview()
     {
         if (PendingCapture is null)
@@ -278,10 +296,6 @@ public partial class PhotoReviewPageViewModel : ObservableObject
             }
 
             IsRecording = true;
-            OnPropertyChanged(nameof(IsRecordingButtonEnabled));
-            OnPropertyChanged(nameof(RecordingButtonIcon));
-            OnPropertyChanged(nameof(RecordingButtonText));
-            OnPropertyChanged(nameof(RecordingButtonColor));
 
             _recordingStartTime = DateTime.UtcNow;
             RecordingDuration = TimeSpan.Zero;
@@ -313,10 +327,6 @@ public partial class PhotoReviewPageViewModel : ObservableObject
             _recordingTimer = null;
 
             IsRecording = false;
-            OnPropertyChanged(nameof(IsRecordingButtonEnabled));
-            OnPropertyChanged(nameof(RecordingButtonIcon));
-            OnPropertyChanged(nameof(RecordingButtonText));
-            OnPropertyChanged(nameof(RecordingButtonColor));
 
             _logger.LogInformation("StopRecordingInternalAsync: Stopping recording");
 
@@ -367,10 +377,6 @@ public partial class PhotoReviewPageViewModel : ObservableObject
             _logger.LogError(ex, "StopRecordingInternalAsync: Failed to stop recording or transcribe");
             IsRecording = false;
             IsTranscribing = false;
-            OnPropertyChanged(nameof(IsRecordingButtonEnabled));
-            OnPropertyChanged(nameof(RecordingButtonIcon));
-            OnPropertyChanged(nameof(RecordingButtonText));
-            OnPropertyChanged(nameof(RecordingButtonColor));
 
             _recordingTimer?.Dispose();
             _recordingTimer = null;
