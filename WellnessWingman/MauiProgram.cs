@@ -60,17 +60,20 @@ public static class MauiProgram
 #if ANDROID
         builder.Services.AddSingleton<IPhotoResizer, AndroidPhotoResizer>();
         builder.Services.AddSingleton<ICameraCaptureService, AndroidCameraCaptureService>();
+        builder.Services.AddSingleton<IAudioRecordingService, AndroidAudioRecordingService>();
         builder.Services.AddScoped<IShareIntentProcessor, ShareIntentProcessor>();
         builder.Services.AddSingleton<IBackgroundExecutionService, WellnessWingman.Platforms.Android.Services.AndroidBackgroundExecutionService>();
         builder.Services.AddSingleton<INotificationPermissionService, WellnessWingman.Platforms.Android.Services.AndroidNotificationPermissionService>();
 #elif IOS
         builder.Services.AddSingleton<IPhotoResizer, NoOpPhotoResizer>();
         builder.Services.AddSingleton<ICameraCaptureService, MediaPickerCameraCaptureService>();
+        builder.Services.AddSingleton<IAudioRecordingService, IOSAudioRecordingService>();
         builder.Services.AddSingleton<IBackgroundExecutionService, WellnessWingman.Platforms.iOS.Services.IOSBackgroundExecutionService>();
         builder.Services.AddSingleton<INotificationPermissionService, NoOpNotificationPermissionService>();
 #else
         builder.Services.AddSingleton<IPhotoResizer, NoOpPhotoResizer>();
         builder.Services.AddSingleton<ICameraCaptureService, MediaPickerCameraCaptureService>();
+        builder.Services.AddSingleton<IAudioRecordingService, NoOpAudioRecordingService>();
         builder.Services.AddSingleton<IBackgroundExecutionService, NoOpBackgroundExecutionService>();
         builder.Services.AddSingleton<INotificationPermissionService, NoOpNotificationPermissionService>();
 #endif
@@ -113,6 +116,7 @@ public static class MauiProgram
         builder.Services.AddTransient<DailyTotalsCalculator>();
         builder.Services.AddTransient<UnifiedAnalysisHelper>(); // New service
         builder.Services.AddTransient<ILLmClient, OpenAiLlmClient>();
+        builder.Services.AddTransient<IAudioTranscriptionService, OpenAiAudioTranscriptionService>();
         builder.Services.AddSingleton<MealAnalysisValidator>();
         builder.Services.AddTransient<WeekSummaryBuilder>();
 

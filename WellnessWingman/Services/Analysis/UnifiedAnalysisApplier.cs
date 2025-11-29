@@ -1,12 +1,9 @@
 #if !UNIT_TESTS
 using Microsoft.Maui.Storage;
 #endif
-using System;
-using System.Collections.Generic;
-using System.IO;
+using Microsoft.Extensions.Logging;
 using WellnessWingman.Data;
 using WellnessWingman.Models;
-using Microsoft.Extensions.Logging;
 
 namespace WellnessWingman.Services.Analysis;
 
@@ -101,14 +98,12 @@ internal static class UnifiedAnalysisApplier
         {
             EntryType.Meal => new MealPayload
             {
-                // Don't copy user notes to Description - let AI generate its own description
-                Description = null,
+                Description = pendingPayload.Description,
                 PreviewBlobPath = pendingPayload.PreviewBlobPath ?? entry.BlobPath
             },
             EntryType.Exercise => new ExercisePayload
             {
-                // Don't copy user notes to Description - let AI generate its own description
-                Description = null,
+                Description = pendingPayload.Description,
                 PreviewBlobPath = pendingPayload.PreviewBlobPath ?? entry.BlobPath,
                 ScreenshotBlobPath = entry.BlobPath ?? pendingPayload.PreviewBlobPath
             },

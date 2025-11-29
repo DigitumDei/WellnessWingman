@@ -1,5 +1,4 @@
 using WellnessWingman.Models;
-using System.Threading.Tasks;
 
 namespace WellnessWingman.Services.Llm;
 
@@ -9,7 +8,7 @@ public interface ILLmClient
         TrackedEntry entry,
         LlmRequestContext context,
         string? existingAnalysisJson = null,
-        string? correction = null);
+        string? userProvidedDetails = null);
 
     Task<LlmAnalysisResult> InvokeDailySummaryAsync(
         DailySummaryRequest summaryRequest,

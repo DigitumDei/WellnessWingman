@@ -1,12 +1,16 @@
 using System;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using Microsoft.Maui.Controls;
+using Microsoft.Maui.ApplicationModel;
+using Microsoft.Maui.Storage;
 using WellnessWingman.Models;
 using WellnessWingman.Services.Media;
+using WellnessWingman.Services.Llm;
 using WellnessWingman.Utilities;
 
 namespace WellnessWingman.PageModels;
@@ -16,17 +20,26 @@ public partial class PhotoReviewPageViewModel : ObservableObject
 {
     private readonly IPhotoCaptureFinalizationService _finalizationService;
     private readonly IPendingPhotoStore _pendingPhotoStore;
+    private readonly IAudioRecordingService _audioRecordingService;
+    private readonly IAudioTranscriptionService _audioTranscriptionService;
     private readonly ILogger<PhotoReviewPageViewModel> _logger;
 
     private PendingPhotoCapture? _pendingCapture;
+    private Timer? _recordingTimer;
+    private DateTime _recordingStartTime;
+    private bool _hasCheckedPermission;
 
     public PhotoReviewPageViewModel(
         IPhotoCaptureFinalizationService finalizationService,
         IPendingPhotoStore pendingPhotoStore,
+        IAudioRecordingService audioRecordingService,
+        IAudioTranscriptionService audioTranscriptionService,
         ILogger<PhotoReviewPageViewModel> logger)
     {
         _finalizationService = finalizationService;
         _pendingPhotoStore = pendingPhotoStore;
+        _audioRecordingService = audioRecordingService;
+        _audioTranscriptionService = audioTranscriptionService;
         _logger = logger;
     }
 
@@ -52,6 +65,41 @@ public partial class PhotoReviewPageViewModel : ObservableObject
 
     [ObservableProperty]
     private bool isSubmitting;
+
+    [ObservableProperty]
+    private bool isRecording;
+
+    [ObservableProperty]
+    private bool isTranscribing;
+
+    [ObservableProperty]
+    private TimeSpan recordingDuration;
+
+    public bool IsRecordingButtonEnabled => !IsSubmitting && !IsTranscribing;
+
+    public string RecordingButtonIcon => IsRecording ? "⏹" : "🎤";
+
+    public string RecordingButtonText => IsRecording ? "Tap to stop recording" : "Tap to record voice note";
+
+    public Color RecordingButtonColor => IsRecording ? Colors.Red : Color.FromArgb("#512BD4"); // Primary color
+
+    partial void OnIsRecordingChanged(bool value)
+    {
+        OnPropertyChanged(nameof(IsRecordingButtonEnabled));
+        OnPropertyChanged(nameof(RecordingButtonIcon));
+        OnPropertyChanged(nameof(RecordingButtonText));
+        OnPropertyChanged(nameof(RecordingButtonColor));
+    }
+
+    partial void OnIsTranscribingChanged(bool value)
+    {
+        OnPropertyChanged(nameof(IsRecordingButtonEnabled));
+    }
+
+    partial void OnIsSubmittingChanged(bool value)
+    {
+        OnPropertyChanged(nameof(IsRecordingButtonEnabled));
+    }
 
     private void LoadPreview()
     {
@@ -195,6 +243,145 @@ public partial class PhotoReviewPageViewModel : ObservableObject
         catch (Exception ex)
         {
             _logger.LogError(ex, "CleanupCaptureFiles: Failed to cleanup files");
+        }
+    }
+
+    [RelayCommand]
+    private async Task ToggleRecordingAsync()
+    {
+        if (IsRecording)
+        {
+            await StopRecordingInternalAsync();
+        }
+        else
+        {
+            await StartRecordingInternalAsync();
+        }
+    }
+
+    private async Task StartRecordingInternalAsync()
+    {
+        if (IsTranscribing || IsSubmitting)
+        {
+            return;
+        }
+
+        try
+        {
+            // Check and request permission only once
+            if (!_hasCheckedPermission || !await _audioRecordingService.CheckPermissionAsync())
+            {
+                _hasCheckedPermission = true;
+                var granted = await _audioRecordingService.RequestPermissionAsync();
+                if (!granted)
+                {
+                    await Shell.Current.DisplayAlertAsync("Permission Required",
+                        "Microphone access is required for voice notes. Please grant permission in settings.", "OK");
+                    return;
+                }
+            }
+
+            // Generate audio file path
+            var audioDirectory = Path.Combine(FileSystem.CacheDirectory, "Audio", "Pending");
+            Directory.CreateDirectory(audioDirectory);
+            var audioFilePath = Path.Combine(audioDirectory, $"{Guid.NewGuid():N}.m4a");
+
+            // Start recording
+            var started = await _audioRecordingService.StartRecordingAsync(audioFilePath);
+            if (!started)
+            {
+                _logger.LogWarning("StartRecordingInternalAsync: Failed to start recording");
+                await Shell.Current.DisplayAlertAsync("Error", "Failed to start recording. Please try again.", "OK");
+                return;
+            }
+
+            IsRecording = true;
+
+            _recordingStartTime = DateTime.UtcNow;
+            RecordingDuration = TimeSpan.Zero;
+
+            // Start timer to update duration
+            _recordingTimer = new Timer(_ =>
+            {
+                MainThread.BeginInvokeOnMainThread(() =>
+                {
+                    RecordingDuration = DateTime.UtcNow - _recordingStartTime;
+                });
+            }, null, TimeSpan.Zero, TimeSpan.FromMilliseconds(100));
+
+            _logger.LogInformation("StartRecordingInternalAsync: Recording started");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "StartRecordingInternalAsync: Failed to start recording");
+            await Shell.Current.DisplayAlertAsync("Error", "An error occurred while starting recording.", "OK");
+        }
+    }
+
+    private async Task StopRecordingInternalAsync()
+    {
+        try
+        {
+            // Stop timer
+            _recordingTimer?.Dispose();
+            _recordingTimer = null;
+
+            IsRecording = false;
+
+            _logger.LogInformation("StopRecordingInternalAsync: Stopping recording");
+
+            // Stop recording
+            var result = await _audioRecordingService.StopRecordingAsync();
+
+            if (result.Status != AudioRecordingStatus.Success || string.IsNullOrEmpty(result.AudioFilePath))
+            {
+                _logger.LogError("StopRecordingInternalAsync: Recording failed - {ErrorMessage}", result.ErrorMessage);
+                await Shell.Current.DisplayAlertAsync("Error",
+                    result.ErrorMessage ?? "Failed to save recording. Please try again.", "OK");
+                return;
+            }
+
+            _logger.LogInformation("StopRecordingInternalAsync: Recording saved, starting transcription");
+
+            // Transcribe audio
+            IsTranscribing = true;
+            OnPropertyChanged(nameof(IsRecordingButtonEnabled));
+
+            var transcriptionResult = await _audioTranscriptionService.TranscribeAsync(result.AudioFilePath);
+
+            IsTranscribing = false;
+            OnPropertyChanged(nameof(IsRecordingButtonEnabled));
+
+            if (!transcriptionResult.Success || string.IsNullOrWhiteSpace(transcriptionResult.TranscribedText))
+            {
+                _logger.LogError("StopRecordingInternalAsync: Transcription failed - {ErrorMessage}", transcriptionResult.ErrorMessage);
+                await Shell.Current.DisplayAlertAsync("Transcription Error",
+                    transcriptionResult.ErrorMessage ?? "Failed to transcribe audio. You can type manually instead.", "OK");
+                return;
+            }
+
+            // Append transcribed text to description
+            if (string.IsNullOrWhiteSpace(Description))
+            {
+                Description = transcriptionResult.TranscribedText;
+            }
+            else
+            {
+                Description = $"{Description}\n{transcriptionResult.TranscribedText}";
+            }
+
+            _logger.LogInformation("StopRecordingInternalAsync: Transcription successful");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "StopRecordingInternalAsync: Failed to stop recording or transcribe");
+            IsRecording = false;
+            IsTranscribing = false;
+
+            _recordingTimer?.Dispose();
+            _recordingTimer = null;
+
+            await Shell.Current.DisplayAlertAsync("Error", "An error occurred during transcription.", "OK");
         }
     }
 }

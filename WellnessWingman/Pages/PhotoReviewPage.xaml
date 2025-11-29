@@ -17,8 +17,55 @@
 
             <Label Text="Add context to help the AI (optional)"
                    Style="{StaticResource Body2Strong}" />
+
+            <!-- Voice Recording Button -->
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12" Margin="0,0,0,8">
+                <Label Grid.Column="0"
+                       Text="{Binding RecordingButtonText}"
+                       VerticalOptions="Center"
+                       Style="{StaticResource Caption1}"
+                       TextColor="{StaticResource Gray600}" />
+                <Button Grid.Column="1"
+                        Text="{Binding RecordingButtonIcon}"
+                        FontSize="24"
+                        WidthRequest="56"
+                        HeightRequest="56"
+                        CornerRadius="28"
+                        BackgroundColor="{Binding RecordingButtonColor}"
+                        TextColor="White"
+                        Command="{Binding ToggleRecordingCommand}"
+                        IsEnabled="{Binding IsRecordingButtonEnabled}"
+                        SemanticProperties.Description="{Binding RecordingButtonText}" />
+            </Grid>
+
+            <!-- Recording Status Indicator -->
+            <StackLayout Orientation="Horizontal"
+                         Spacing="8"
+                         IsVisible="{Binding IsRecording}"
+                         HorizontalOptions="Center"
+                         Margin="0,0,0,8">
+                <Ellipse Fill="Red"
+                         WidthRequest="12"
+                         HeightRequest="12"
+                         VerticalOptions="Center" />
+                <Label Text="{Binding RecordingDuration, StringFormat='Recording... {0:mm\\:ss}'}"
+                       Style="{StaticResource Body2}"
+                       TextColor="Red"
+                       VerticalOptions="Center" />
+            </StackLayout>
+
+            <!-- Transcription Status -->
+            <ActivityIndicator IsRunning="{Binding IsTranscribing}"
+                               IsVisible="{Binding IsTranscribing}"
+                               Color="{StaticResource Primary}" />
+            <Label Text="Transcribing..."
+                   IsVisible="{Binding IsTranscribing}"
+                   Style="{StaticResource Caption1}"
+                   HorizontalOptions="Center"
+                   Margin="0,0,0,8" />
+
             <Editor Text="{Binding Description}"
-                    Placeholder="E.g., &quot;I didn't eat the chips&quot;, portion sizes, ingredients..."
+                    Placeholder="E.g., &quot;I didn't eat the chips&quot;, portion sizes, ingredients... (or hold mic button to record)"
                     AutoSize="TextChanges"
                     MaximumHeightRequest="200"
                     IsEnabled="{Binding IsSubmitting, Converter={StaticResource InvertedBoolConverter}}"

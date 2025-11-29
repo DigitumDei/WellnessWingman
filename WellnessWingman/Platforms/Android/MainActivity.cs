@@ -1,3 +1,4 @@
+using System;
 using Android.App;
 using Android.Content;
 using Android.Content.PM;
@@ -47,7 +48,15 @@ public class MainActivity : MauiAppCompatActivity
             Instance = null;
         }
 
-        base.OnDestroy();
+        try
+        {
+            base.OnDestroy();
+        }
+        catch (ObjectDisposedException ex)
+        {
+            // Ignore disposal races during shutdown; Maui may tear down the service provider before fragments finish.
+            Android.Util.Log.Warn(nameof(MainActivity), $"OnDestroy ignored ObjectDisposedException: {ex.Message}");
+        }
     }
 
     protected override void OnActivityResult(int requestCode, Result resultCode, Intent? data)

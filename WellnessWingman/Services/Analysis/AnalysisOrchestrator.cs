@@ -1,16 +1,14 @@
-using System.Collections.Generic;
-using System.Linq;
+using Microsoft.Extensions.Logging;
 using System.Text.Json;
 using WellnessWingman.Data;
 using WellnessWingman.Models;
 using WellnessWingman.Services.Llm;
-using Microsoft.Extensions.Logging;
 
 namespace WellnessWingman.Services.Analysis;
 
 public interface IAnalysisOrchestrator
 {
-    Task<AnalysisInvocationResult> ProcessEntryAsync(TrackedEntry entry, CancellationToken cancellationToken = default);
+    Task<AnalysisInvocationResult> ProcessEntryAsync(TrackedEntry entry, string? userProvidedDetails = null, CancellationToken cancellationToken = default);
     Task<AnalysisInvocationResult> ProcessCorrectionAsync(TrackedEntry entry, EntryAnalysis existingAnalysis, string correction, CancellationToken cancellationToken = default);
 }
 
@@ -44,7 +42,7 @@ public class AnalysisOrchestrator : IAnalysisOrchestrator
         _logger = logger;
     }
 
-    public Task<AnalysisInvocationResult> ProcessEntryAsync(TrackedEntry entry, CancellationToken cancellationToken = default)
+    public Task<AnalysisInvocationResult> ProcessEntryAsync(TrackedEntry entry, string? userProvidedDetails = null, CancellationToken cancellationToken = default)
     {
         if (entry is null)
         {
@@ -56,7 +54,7 @@ public class AnalysisOrchestrator : IAnalysisOrchestrator
             return _dailySummaryService.GenerateAsync(entry, cancellationToken);
         }
 
-        return ProcessUnifiedEntryAsync(entry, existingAnalysis: null, correction: null, cancellationToken);
+        return ProcessUnifiedEntryAsync(entry, existingAnalysis: null, userProvidedDetails: userProvidedDetails, cancellationToken);
     }
 
     public Task<AnalysisInvocationResult> ProcessCorrectionAsync(TrackedEntry entry, EntryAnalysis existingAnalysis, string correction, CancellationToken cancellationToken = default)
@@ -84,7 +82,7 @@ public class AnalysisOrchestrator : IAnalysisOrchestrator
     private async Task<AnalysisInvocationResult> ProcessUnifiedEntryAsync(
         TrackedEntry entry,
         EntryAnalysis? existingAnalysis,
-        string? correction,
+        string? userProvidedDetails,
         CancellationToken cancellationToken)
     {
         try
@@ -117,7 +115,7 @@ public class AnalysisOrchestrator : IAnalysisOrchestrator
                 ApiKey = apiKey
             };
 
-            var llmResult = await _llmClient.InvokeAnalysisAsync(entry, context, existingAnalysis?.InsightsJson, correction).ConfigureAwait(false);
+            var llmResult = await _llmClient.InvokeAnalysisAsync(entry, context, existingAnalysis?.InsightsJson, userProvidedDetails).ConfigureAwait(false);
             if (llmResult.Analysis is null)
             {
                 _logger.LogWarning("LLM returned no analysis for entry {EntryId}.", entry.EntryId);
