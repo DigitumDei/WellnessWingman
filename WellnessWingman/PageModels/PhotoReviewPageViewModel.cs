@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using Microsoft.Maui.Controls;
+using Microsoft.Maui.ApplicationModel;
 using Microsoft.Maui.Storage;
 using WellnessWingman.Models;
 using WellnessWingman.Services.Media;
@@ -288,7 +289,10 @@ public partial class PhotoReviewPageViewModel : ObservableObject
             // Start timer to update duration
             _recordingTimer = new Timer(_ =>
             {
-                RecordingDuration = DateTime.UtcNow - _recordingStartTime;
+                MainThread.BeginInvokeOnMainThread(() =>
+                {
+                    RecordingDuration = DateTime.UtcNow - _recordingStartTime;
+                });
             }, null, TimeSpan.Zero, TimeSpan.FromMilliseconds(100));
 
             _logger.LogInformation("StartRecordingInternalAsync: Recording started");
