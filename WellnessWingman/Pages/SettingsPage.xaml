@@ -7,18 +7,22 @@
              x:DataType="viewmodels:SettingsViewModel"
              Title="Settings">
     <VerticalStackLayout Spacing="20" Padding="20">
-        <Label Text="LLM Provider" />
-        <Picker ItemsSource="{Binding Providers}" 
-                SelectedItem="{Binding SelectedProvider}" />
+        <Label Text="LLM Provider"
+               AutomationProperties.Name="LlmProviderLabel" />
+        <Picker ItemsSource="{Binding Providers}"
+                SelectedItem="{Binding SelectedProvider}"
+                AutomationProperties.Name="LlmProviderPicker" />
 
-        <Label Text="API Key" />
+        <Label Text="API Key"
+               AutomationProperties.Name="ApiKeyLabel" />
         <Grid ColumnDefinitions="*,40" VerticalOptions="Center">
             <Entry
                 Grid.Column="0"
                 Text="{Binding ApiKey}"
                 IsPassword="{Binding IsApiKeyMasked}"
                 Placeholder="Paste your provider key"
-                VerticalOptions="Center" />
+                VerticalOptions="Center"
+                AutomationProperties.Name="ApiKeyEntry" />
             <ImageButton
                 Grid.Column="1"
                 Command="{Binding ToggleApiKeyVisibilityCommand}"
@@ -26,7 +30,8 @@
                 WidthRequest="40"
                 HeightRequest="40"
                 Padding="6"
-                SemanticProperties.Description="Toggle API key visibility">
+                SemanticProperties.Description="Toggle API key visibility"
+                AutomationProperties.Name="ToggleApiKeyVisibilityButton">
                 <ImageButton.Source>
                     <FontImageSource
                         Glyph="{Binding ToggleIconGlyph}"
@@ -36,9 +41,12 @@
             </ImageButton>
         </Grid>
 
-        <Button Text="Save" Command="{Binding SaveSettingsCommand}" />
+        <Button Text="Save"
+                Command="{Binding SaveSettingsCommand}"
+                AutomationProperties.Name="SaveSettingsButton" />
 
         <Button Text="Share Diagnostics Log"
-                Command="{Binding ShareDiagnosticsLogCommand}" />
+                Command="{Binding ShareDiagnosticsLogCommand}"
+                AutomationProperties.Name="ShareDiagnosticsButton" />
     </VerticalStackLayout>
 </ContentPage>

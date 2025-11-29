@@ -4,4 +4,5 @@
     <Deploy Solution="Debug|*" />
   </Project>
   <Project Path="WellnessWingman.Tests/WellnessWingman.Tests.csproj" />
+  <Project Path="WellnessWingman.UITests/WellnessWingman.UITests.csproj" />
 </Solution>
