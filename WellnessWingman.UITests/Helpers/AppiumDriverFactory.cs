@@ -34,10 +34,10 @@ public static class AppiumDriverFactory
             PlatformName = "Android",
             PlatformVersion = AppiumConfig.AndroidPlatformVersion,
             DeviceName = AppiumConfig.AndroidDeviceName,
+            App = AppiumConfig.AppPath // Use App property instead of AddAdditionalAppiumOption
         };
 
         // App configuration
-        options.AddAdditionalAppiumOption("app", AppiumConfig.AppPath);
         options.AddAdditionalAppiumOption("appPackage", AppiumConfig.AppPackage);
         options.AddAdditionalAppiumOption("appActivity", AppiumConfig.AppActivity);
 
