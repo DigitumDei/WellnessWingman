@@ -218,9 +218,12 @@
                     </SwipeItems>
                 </SwipeView.RightItems>
                 <VerticalStackLayout Spacing="8">
-                    <Label Text="Capture Your Health Entries" Style="{StaticResource Headline}" />
+                    <Label Text="Capture Your Health Entries"
+                           Style="{StaticResource Headline}"
+                           AutomationProperties.Name="MainPageTitle" />
 
                     <Button Text="Take Photo"
+                            AutomationProperties.Name="TakePhotoButton"
                             SemanticProperties.Description="Capture a meal photo"
                             Clicked="TakePhotoButton_Clicked" />
                 </VerticalStackLayout>
@@ -232,9 +235,12 @@
                         Margin="0,8,0,0"
                         BackgroundColor="Transparent"
                         StrokeShape="RoundRectangle 12,12,12,12"
-                        IsVisible="{Binding HasCompletedMeals}">
+                        IsVisible="{Binding HasCompletedMeals}"
+                        AutomationProperties.Name="NutritionSummaryPanel">
                     <VerticalStackLayout Spacing="16">
-                        <Label Text="Today's Nutrition" Style="{StaticResource Body2Strong}" />
+                        <Label Text="Today's Nutrition"
+                               Style="{StaticResource Body2Strong}"
+                               AutomationProperties.Name="NutritionSummaryTitle" />
 
                         <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="*,*,*,*" RowSpacing="12">
                             <!-- Row 0: Macros -->
@@ -294,13 +300,15 @@
 
                 <Label Text="Recent Entries"
                        Style="{StaticResource Headline}"
-                       Margin="0,24,0,0" />
+                       Margin="0,24,0,0"
+                       AutomationProperties.Name="RecentEntriesTitle" />
 
                 <CollectionView ItemsSource="{Binding Entries}"
                                 ItemTemplate="{StaticResource EntryCardTemplateSelector}"
                                 SelectionMode="Single"
                                 SelectionChanged="EntriesCollection_SelectionChanged"
-                                Margin="0,8,0,0">
+                                Margin="0,8,0,0"
+                                AutomationProperties.Name="EntriesCollection">
                     <CollectionView.EmptyView>
                         <VerticalStackLayout Padding="32" Spacing="12" HorizontalOptions="Center" VerticalOptions="Center">
                             <Label Text="No entries tracked yet." HorizontalTextAlignment="Center" Style="{StaticResource Body1}" />

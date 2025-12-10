@@ -21,7 +21,8 @@
             <CollectionView ItemsSource="{Binding Days}"
                             SelectionMode="Single"
                             SelectionChanged="Day_SelectionChanged"
-                            VerticalOptions="FillAndExpand">
+                            VerticalOptions="FillAndExpand"
+                            AutomationProperties.Name="WeekDaysCollection">
                 <CollectionView.ItemsLayout>
                     <LinearItemsLayout Orientation="Vertical" ItemSpacing="12" />
                 </CollectionView.ItemsLayout>
