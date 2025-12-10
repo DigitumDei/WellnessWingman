@@ -39,13 +39,20 @@ public static class AppiumDriverFactory
 
         // App configuration
         options.AddAdditionalAppiumOption("appPackage", AppiumConfig.AppPackage);
-        options.AddAdditionalAppiumOption("appActivity", AppiumConfig.AppActivity);
+        if (!string.IsNullOrWhiteSpace(AppiumConfig.AppActivity))
+        {
+            options.AddAdditionalAppiumOption("appActivity", AppiumConfig.AppActivity);
+        }
+        options.AddAdditionalAppiumOption("udid", AppiumConfig.AndroidUdid); // force specific emulator/device
+        options.AddAdditionalAppiumOption("appWaitActivity", "*"); // accept any main activity during app launch
+        options.AddAdditionalAppiumOption("adbExecTimeout", 120000); // allow slower emulator/app start
 
         // Performance and stability options
         options.AddAdditionalAppiumOption("newCommandTimeout", AppiumConfig.CommandTimeoutSeconds);
         options.AddAdditionalAppiumOption("autoGrantPermissions", true);
         options.AddAdditionalAppiumOption("noReset", false); // Fresh app state for each test
         options.AddAdditionalAppiumOption("fullReset", false); // But don't uninstall between tests
+        options.AddAdditionalAppiumOption("androidSdkRoot", AppiumConfig.AndroidSdkRoot); // ensure SDK path is explicit
 
         // MAUI-specific optimizations
         options.AddAdditionalAppiumOption("waitForIdleTimeout", 0); // MAUI apps don't always go idle

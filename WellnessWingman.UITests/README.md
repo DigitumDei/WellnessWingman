@@ -71,15 +71,18 @@ The following environment variables can be used to configure test execution:
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `APPIUM_SERVER_URL` | Appium server URL | `http://127.0.0.1:4723` |
-| `ANDROID_DEVICE_NAME` | Device/emulator name | `emulator-5554` |
-| `ANDROID_PLATFORM_VERSION` | Android version | `14.0` |
+| `ANDROID_DEVICE_NAME` | Device/emulator name | First connected device (fallback `emulator-5554`) |
+| `ANDROID_UDID` | Specific device/emulator serial (overrides auto-detect) | Inherits `ANDROID_DEVICE_NAME` |
+| `ANDROID_PLATFORM_VERSION` | Android version | `16` |
 | `WELLNESS_WINGMAN_APK_PATH` | Path to APK file | Auto-detected from build output |
+| `WELLNESS_WINGMAN_APP_PACKAGE` | App package id | `com.digitumdei.WellnessWingman` |
+| `WELLNESS_WINGMAN_APP_ACTIVITY` | App main activity (optional) | Auto-detected from manifest |
 
 ### APK Path
 
 By default, tests look for the APK at:
 ```
-WellnessWingman/bin/Debug/net10.0-android/com.digitumDei.wellnesswingman-Signed.apk
+WellnessWingman/bin/Debug/net10.0-android/com.digitumdei.WellnessWingman-Signed.apk
 ```
 
 To use a custom APK location, set the `WELLNESS_WINGMAN_APK_PATH` environment variable.
