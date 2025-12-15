@@ -123,15 +123,7 @@ public abstract class BasePage
     /// </summary>
     protected bool ElementExists(By locator)
     {
-        try
-        {
-            Driver.FindElement(locator);
-            return true;
-        }
-        catch (NoSuchElementException)
-        {
-            return false;
-        }
+        return Driver.FindElements(locator).Count > 0;
     }
 
     /// <summary>

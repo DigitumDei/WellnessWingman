@@ -52,7 +52,10 @@ public static class AppiumDriverFactory
         options.AddAdditionalAppiumOption("autoGrantPermissions", true);
         options.AddAdditionalAppiumOption("noReset", false); // Fresh app state for each test
         options.AddAdditionalAppiumOption("fullReset", false); // But don't uninstall between tests
-        options.AddAdditionalAppiumOption("androidSdkRoot", AppiumConfig.AndroidSdkRoot); // ensure SDK path is explicit
+        if (!string.IsNullOrWhiteSpace(AppiumConfig.AndroidSdkRoot))
+        {
+            options.AddAdditionalAppiumOption("androidSdkRoot", AppiumConfig.AndroidSdkRoot); // ensure SDK path is explicit
+        }
 
         // MAUI-specific optimizations
         options.AddAdditionalAppiumOption("waitForIdleTimeout", 0); // MAUI apps don't always go idle
@@ -75,10 +78,6 @@ public static class AppiumDriverFactory
         catch (Exception ex)
         {
             Console.WriteLine($"Error while quitting driver: {ex.Message}");
-        }
-        finally
-        {
-            driver.Dispose();
         }
     }
 }

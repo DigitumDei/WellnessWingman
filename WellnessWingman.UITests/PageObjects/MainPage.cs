@@ -85,14 +85,22 @@ public class MainPage : BasePage
     {
         try
         {
-            // Look for meal cards, exercise cards, or sleep cards
-            var entries = Driver.FindElements(MobileBy.AndroidUIAutomator(
+            // Try to find entries collection first
+            var entriesCollection = FindByAutomationId(EntriesCollectionId);
+            if (entriesCollection != null)
+            {
+                var entries = entriesCollection.FindElements(MobileBy.ClassName("android.view.ViewGroup"));
+                return entries.Count;
+            }
+
+            // Fallback to generic selector (less reliable)
+            var allEntries = Driver.FindElements(MobileBy.AndroidUIAutomator(
                 "new UiSelector().className(\"android.view.ViewGroup\")"));
-            // This is a rough count - will need refinement once AutomationIds are added
-            return entries.Count;
+            return allEntries.Count;
         }
-        catch
+        catch (OpenQA.Selenium.WebDriverException ex)
         {
+            Console.WriteLine($"Error getting entries count: {ex.Message}");
             return 0;
         }
     }

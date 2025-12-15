@@ -21,9 +21,9 @@ public class AppiumConfig
     public static string AndroidUdid => Environment.GetEnvironmentVariable("ANDROID_UDID") ?? ResolveDeviceId();
 
     /// <summary>
-    /// Android platform version (default: 14.0)
+    /// Android platform version (default: 14)
     /// </summary>
-    public static string AndroidPlatformVersion => Environment.GetEnvironmentVariable("ANDROID_PLATFORM_VERSION") ?? "16";
+    public static string AndroidPlatformVersion => Environment.GetEnvironmentVariable("ANDROID_PLATFORM_VERSION") ?? "14";
 
     /// <summary>
     /// Path to the WellnessWingman APK file
@@ -52,12 +52,11 @@ public class AppiumConfig
     public static int CommandTimeoutSeconds => 120;
 
     /// <summary>
-    /// Android SDK root used by Appium (falls back to common default if env vars are missing)
+    /// Android SDK root used by Appium (must be set via ANDROID_SDK_ROOT or ANDROID_HOME environment variable)
     /// </summary>
-    public static string AndroidSdkRoot =>
+    public static string? AndroidSdkRoot =>
         Environment.GetEnvironmentVariable("ANDROID_SDK_ROOT") ??
-        Environment.GetEnvironmentVariable("ANDROID_HOME") ??
-        @"C:\Program Files (x86)\Android\android-sdk";
+        Environment.GetEnvironmentVariable("ANDROID_HOME");
 
     /// <summary>
     /// Gets the project root directory
