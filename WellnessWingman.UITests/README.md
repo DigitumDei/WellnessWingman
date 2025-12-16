@@ -73,7 +73,7 @@ The following environment variables can be used to configure test execution:
 | `APPIUM_SERVER_URL` | Appium server URL | `http://127.0.0.1:4723` |
 | `ANDROID_DEVICE_NAME` | Device/emulator name | First connected device (fallback `emulator-5554`) |
 | `ANDROID_UDID` | Specific device/emulator serial (overrides auto-detect) | Inherits `ANDROID_DEVICE_NAME` |
-| `ANDROID_PLATFORM_VERSION` | Android version | `16` |
+| `ANDROID_PLATFORM_VERSION` | Android version | `14` |
 | `WELLNESS_WINGMAN_APK_PATH` | Path to APK file | Auto-detected from build output |
 | `WELLNESS_WINGMAN_APP_PACKAGE` | App package id | `com.digitumdei.WellnessWingman` |
 | `WELLNESS_WINGMAN_APP_ACTIVITY` | App main activity (optional) | Auto-detected from manifest |
