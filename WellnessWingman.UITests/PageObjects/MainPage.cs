@@ -141,8 +141,9 @@ public class MainPage : BasePage
                 "new UiSelector().resourceId(\"android:id/action_bar_title\")"));
             return titleElement.Text;
         }
-        catch
+        catch (OpenQA.Selenium.WebDriverException ex)
         {
+            Console.WriteLine($"Error getting page title: {ex.Message}");
             return string.Empty;
         }
     }
