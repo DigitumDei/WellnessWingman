@@ -181,7 +181,6 @@ public partial class MainPage : ContentPage
         _isProcessingPending = true;
 
         PendingPhotoCapture? pending = null;
-        bool finalized = false;
 
         try
         {
@@ -199,29 +198,19 @@ public partial class MainPage : ContentPage
                 return;
             }
 
-            _logger.LogInformation("Processing pending photo captured at {CapturedAtUtc}.", pending.CapturedAtUtc);
-            var entry = await _finalizationService.FinalizeAsync(pending, description: null);
-            finalized = true;
-
-            if (entry is not null && BindingContext is EntryLogViewModel vm)
+            // Navigate to PhotoReviewPage so user can add notes/voice recording
+            // instead of directly finalizing without user input
+            _logger.LogInformation("Processing pending photo captured at {CapturedAtUtc}. Navigating to review page.", pending.CapturedAtUtc);
+            await Shell.Current.GoToAsync(nameof(PhotoReviewPage), new Dictionary<string, object>
             {
-                try
-                {
-                    await vm.AddPendingEntryAsync(entry);
-                }
-                catch (Exception uiEx)
-                {
-                    _logger.LogError(uiEx, "ProcessPendingCaptureAsync: Failed to add entry {EntryId} to UI collection.", entry.EntryId);
-                }
-            }
-
-            await _pendingPhotoStore.ClearAsync();
+                ["PendingCapture"] = pending
+            });
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to process pending photo capture.");
 
-            if (pending is not null && !finalized)
+            if (pending is not null)
             {
                 CleanupCaptureFiles(pending);
                 await _pendingPhotoStore.ClearAsync();

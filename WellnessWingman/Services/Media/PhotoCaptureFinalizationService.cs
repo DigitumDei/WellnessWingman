@@ -87,7 +87,8 @@ public class PhotoCaptureFinalizationService : IPhotoCaptureFinalizationService
                     PreviewBlobPath = capture.PreviewRelativePath
                 },
                 DataSchemaVersion = 0,
-                ProcessingStatus = ProcessingStatus.Pending
+                ProcessingStatus = ProcessingStatus.Pending,
+                UserNotes = initialDetails
             };
 
             await _trackedEntryRepository.AddAsync(newEntry);
