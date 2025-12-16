@@ -12,6 +12,25 @@ public abstract class BaseTest : IDisposable
     protected MainPage? MainPage { get; private set; }
 
     /// <summary>
+    /// Determines if UI tests should run based on environment configuration
+    /// </summary>
+    /// <returns>Skip reason if tests should be skipped, null if tests should run</returns>
+    public static string? ShouldSkipUiTests()
+    {
+        var runUiTests = Environment.GetEnvironmentVariable("RUN_UI_TESTS");
+
+        // If RUN_UI_TESTS is not set or is "false", skip tests
+        if (string.IsNullOrWhiteSpace(runUiTests) ||
+            !bool.TryParse(runUiTests, out var shouldRun) ||
+            !shouldRun)
+        {
+            return "UI tests are disabled. Set environment variable RUN_UI_TESTS=true to enable them.";
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// Initializes the Appium driver and launches the app
     /// </summary>
     protected void SetupDriver()

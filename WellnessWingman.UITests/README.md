@@ -70,13 +70,17 @@ The following environment variables can be used to configure test execution:
 
 | Variable | Description | Default |
 |----------|-------------|---------|
+| `RUN_UI_TESTS` | Enable/disable UI test execution | `false` (tests are skipped) |
 | `APPIUM_SERVER_URL` | Appium server URL | `http://127.0.0.1:4723` |
 | `ANDROID_DEVICE_NAME` | Device/emulator name | First connected device (fallback `emulator-5554`) |
 | `ANDROID_UDID` | Specific device/emulator serial (overrides auto-detect) | Inherits `ANDROID_DEVICE_NAME` |
 | `ANDROID_PLATFORM_VERSION` | Android version | `14` |
+| `ANDROID_SDK_ROOT` or `ANDROID_HOME` | Android SDK location | No default (must be set) |
 | `WELLNESS_WINGMAN_APK_PATH` | Path to APK file | Auto-detected from build output |
 | `WELLNESS_WINGMAN_APP_PACKAGE` | App package id | `com.digitumdei.WellnessWingman` |
 | `WELLNESS_WINGMAN_APP_ACTIVITY` | App main activity (optional) | Auto-detected from manifest |
+
+**Important**: UI tests are disabled by default to prevent failures in environments without Appium. Set `RUN_UI_TESTS=true` to enable them.
 
 ### APK Path
 
@@ -104,6 +108,8 @@ dotnet publish WellnessWingman/WellnessWingman.csproj -c Release -f net10.0-andr
 
 ## Running Tests
 
+**Important**: UI tests are disabled by default. You must set `RUN_UI_TESTS=true` to enable them.
+
 ### Start Appium Server
 
 In a separate terminal, start the Appium server:
@@ -113,6 +119,25 @@ appium
 ```
 
 The server should start on `http://127.0.0.1:4723`
+
+### Enable UI Tests
+
+Set the environment variable to enable UI tests:
+
+**Windows (PowerShell)**:
+```powershell
+$env:RUN_UI_TESTS="true"
+```
+
+**Windows (Command Prompt)**:
+```cmd
+set RUN_UI_TESTS=true
+```
+
+**macOS/Linux (Bash/Zsh)**:
+```bash
+export RUN_UI_TESTS=true
+```
 
 ### Run All Tests
 
