@@ -29,6 +29,9 @@ public interface IBackgroundAnalysisService
 
 public class BackgroundAnalysisService : IBackgroundAnalysisService
 {
+    private const string OriginalNotesPrefix = "Original user notes: ";
+    private const string CorrectionPrefix = "\n\nCorrection: ";
+
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<BackgroundAnalysisService> _logger;
     private readonly IBackgroundExecutionService _backgroundExecution;
@@ -176,7 +179,7 @@ public class BackgroundAnalysisService : IBackgroundAnalysisService
 
                     // Combine original user notes with the correction for context
                     var combinedContext = !string.IsNullOrWhiteSpace(entry.UserNotes)
-                        ? $"Original user notes: {entry.UserNotes}\n\nCorrection: {correction}"
+                        ? $"{OriginalNotesPrefix}{entry.UserNotes}{CorrectionPrefix}{correction}"
                         : correction;
 
                     var result = await orchestrator.ProcessCorrectionAsync(entry, existingAnalysis, combinedContext, cancellationToken).ConfigureAwait(false);
