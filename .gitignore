@@ -368,3 +368,6 @@ FodyWeavers.xsd
 healthhelper_design.db3
 /.idea
 /WellnessWingman/wellnesswingman.keystore
+
+.gemini/
+gha-creds-*.json

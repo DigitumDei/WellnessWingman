@@ -92,7 +92,13 @@ public partial class MainPage : ContentPage
             _isCapturing = true;
             _logger.LogInformation("TakePhotoButton_Clicked: Starting photo capture");
 
-            await ProcessPendingCaptureAsync();
+            // Check for and handle any pending capture from a previous session
+            // If one was found, we've navigated to review page - don't open camera
+            if (await ProcessPendingCaptureAsync())
+            {
+                _logger.LogInformation("TakePhotoButton_Clicked: Pending capture handled, skipping new capture");
+                return;
+            }
 
             if (!await EnsureCameraPermissionsAsync())
             {
@@ -170,12 +176,16 @@ public partial class MainPage : ContentPage
         }
     }
 
-    private async Task ProcessPendingCaptureAsync()
+    /// <summary>
+    /// Checks for and processes any pending photo capture from a previous session.
+    /// </summary>
+    /// <returns>True if a pending capture was found and handled, false otherwise.</returns>
+    private async Task<bool> ProcessPendingCaptureAsync()
     {
         if (_isProcessingPending)
         {
             _logger.LogDebug("ProcessPendingCaptureAsync: Already running. Skipping duplicate invocation.");
-            return;
+            return false;
         }
 
         _isProcessingPending = true;
@@ -187,7 +197,7 @@ public partial class MainPage : ContentPage
             pending = await _pendingPhotoStore.GetAsync();
             if (pending is null)
             {
-                return;
+                return false;
             }
 
             if (!File.Exists(pending.OriginalAbsolutePath))
@@ -195,7 +205,7 @@ public partial class MainPage : ContentPage
                 _logger.LogWarning("Pending photo capture missing original file at {Path}. Clearing pending state.", pending.OriginalAbsolutePath);
                 CleanupCaptureFiles(pending);
                 await _pendingPhotoStore.ClearAsync();
-                return;
+                return false;
             }
 
             // Navigate to PhotoReviewPage so user can add notes/voice recording
@@ -205,6 +215,7 @@ public partial class MainPage : ContentPage
             {
                 ["PendingCapture"] = pending
             });
+            return true;
         }
         catch (Exception ex)
         {
@@ -220,6 +231,7 @@ public partial class MainPage : ContentPage
             {
                 await DisplayAlertAsync("Photo Error", "We captured a photo but couldn't import it. Please try again.", "OK");
             });
+            return false;
         }
         finally
         {
