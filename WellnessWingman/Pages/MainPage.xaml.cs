@@ -92,7 +92,13 @@ public partial class MainPage : ContentPage
             _isCapturing = true;
             _logger.LogInformation("TakePhotoButton_Clicked: Starting photo capture");
 
-            await ProcessPendingCaptureAsync();
+            // Check for and handle any pending capture from a previous session
+            // If one was found, we've navigated to review page - don't open camera
+            if (await ProcessPendingCaptureAsync())
+            {
+                _logger.LogInformation("TakePhotoButton_Clicked: Pending capture handled, skipping new capture");
+                return;
+            }
 
             if (!await EnsureCameraPermissionsAsync())
             {
@@ -170,25 +176,28 @@ public partial class MainPage : ContentPage
         }
     }
 
-    private async Task ProcessPendingCaptureAsync()
+    /// <summary>
+    /// Checks for and processes any pending photo capture from a previous session.
+    /// </summary>
+    /// <returns>True if a pending capture was found and handled, false otherwise.</returns>
+    private async Task<bool> ProcessPendingCaptureAsync()
     {
         if (_isProcessingPending)
         {
             _logger.LogDebug("ProcessPendingCaptureAsync: Already running. Skipping duplicate invocation.");
-            return;
+            return false;
         }
 
         _isProcessingPending = true;
 
         PendingPhotoCapture? pending = null;
-        bool finalized = false;
 
         try
         {
             pending = await _pendingPhotoStore.GetAsync();
             if (pending is null)
             {
-                return;
+                return false;
             }
 
             if (!File.Exists(pending.OriginalAbsolutePath))
@@ -196,32 +205,23 @@ public partial class MainPage : ContentPage
                 _logger.LogWarning("Pending photo capture missing original file at {Path}. Clearing pending state.", pending.OriginalAbsolutePath);
                 CleanupCaptureFiles(pending);
                 await _pendingPhotoStore.ClearAsync();
-                return;
+                return false;
             }
 
-            _logger.LogInformation("Processing pending photo captured at {CapturedAtUtc}.", pending.CapturedAtUtc);
-            var entry = await _finalizationService.FinalizeAsync(pending, description: null);
-            finalized = true;
-
-            if (entry is not null && BindingContext is EntryLogViewModel vm)
+            // Navigate to PhotoReviewPage so user can add notes/voice recording
+            // instead of directly finalizing without user input
+            _logger.LogInformation("Processing pending photo captured at {CapturedAtUtc}. Navigating to review page.", pending.CapturedAtUtc);
+            await Shell.Current.GoToAsync(nameof(PhotoReviewPage), new Dictionary<string, object>
             {
-                try
-                {
-                    await vm.AddPendingEntryAsync(entry);
-                }
-                catch (Exception uiEx)
-                {
-                    _logger.LogError(uiEx, "ProcessPendingCaptureAsync: Failed to add entry {EntryId} to UI collection.", entry.EntryId);
-                }
-            }
-
-            await _pendingPhotoStore.ClearAsync();
+                ["PendingCapture"] = pending
+            });
+            return true;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to process pending photo capture.");
 
-            if (pending is not null && !finalized)
+            if (pending is not null)
             {
                 CleanupCaptureFiles(pending);
                 await _pendingPhotoStore.ClearAsync();
@@ -231,6 +231,7 @@ public partial class MainPage : ContentPage
             {
                 await DisplayAlertAsync("Photo Error", "We captured a photo but couldn't import it. Please try again.", "OK");
             });
+            return false;
         }
         finally
         {

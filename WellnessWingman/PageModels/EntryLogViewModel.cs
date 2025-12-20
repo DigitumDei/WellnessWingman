@@ -889,7 +889,22 @@ namespace WellnessWingman.PageModels;
         await _trackedEntryRepository.UpdateProcessingStatusAsync(entry.EntryId, ProcessingStatus.Pending);
         _logger.LogInformation("Status persisted to database for entry {EntryId}.", entry.EntryId);
 
-        await _backgroundAnalysisService.QueueEntryAsync(entry.EntryId);
+        // Check if this is a retry of a correction (has existing analysis AND UserNotes)
+        var trackedEntry = await _trackedEntryRepository.GetByIdAsync(entry.EntryId);
+        var existingAnalysis = await _entryAnalysisRepository.GetByTrackedEntryIdAsync(entry.EntryId);
+
+        if (existingAnalysis is not null && !string.IsNullOrWhiteSpace(trackedEntry?.UserNotes))
+        {
+            // Retry as correction to include existing analysis context
+            _logger.LogInformation("Retrying as correction for entry {EntryId} (has existing analysis and UserNotes).", entry.EntryId);
+            await _backgroundAnalysisService.QueueCorrectionAsync(entry.EntryId, trackedEntry.UserNotes);
+        }
+        else
+        {
+            // Fresh analysis (will still use UserNotes if available)
+            await _backgroundAnalysisService.QueueEntryAsync(entry.EntryId);
+        }
+
         _logger.LogInformation("Analysis re-queued for entry {EntryId}.", entry.EntryId);
     }
 }

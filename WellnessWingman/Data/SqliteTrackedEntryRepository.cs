@@ -153,6 +153,7 @@ public class SqliteTrackedEntryRepository : ITrackedEntryRepository
         trackedEntry.DataPayload = JsonSerializer.Serialize(entry.Payload, entry.Payload.GetType());
         trackedEntry.ProcessingStatus = entry.ProcessingStatus;
         trackedEntry.ExternalId = entry.ExternalId;
+        trackedEntry.UserNotes = entry.UserNotes;
 
         await _context.SaveChangesAsync();
         _context.Entry(trackedEntry).State = EntityState.Detached;

@@ -323,6 +323,12 @@ public partial class MealDetailViewModel : ObservableObject
                 return;
             }
 
+            // Update UserNotes with the combined/updated correction text
+            // This allows notes to grow over time with each correction
+            trackedEntry.UserNotes = trimmedCorrection;
+            await _trackedEntryRepository.UpdateAsync(trackedEntry);
+            _logger.LogDebug("Updated UserNotes for entry {EntryId}.", Meal.EntryId);
+
             // Queue the correction for background processing
             await _backgroundAnalysisService.QueueCorrectionAsync(Meal.EntryId, trimmedCorrection!);
 
@@ -673,10 +679,37 @@ public partial class MealDetailViewModel : ObservableObject
         OnPropertyChanged(nameof(CorrectionToggleButtonText));
         OnPropertyChanged(nameof(IsRecordingButtonEnabled));
 
-        if (!value)
+        if (value)
+        {
+            // Prepopulate with existing UserNotes so user can build upon them
+            _ = LoadUserNotesIntoCorrectionTextAsync();
+        }
+        else
         {
             _ = ResetRecordingStateAsync();
             CorrectionText = string.Empty;
+        }
+    }
+
+    private async Task LoadUserNotesIntoCorrectionTextAsync()
+    {
+        if (Meal is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var trackedEntry = await _trackedEntryRepository.GetByIdAsync(Meal.EntryId);
+            if (trackedEntry is not null && !string.IsNullOrWhiteSpace(trackedEntry.UserNotes))
+            {
+                CorrectionText = trackedEntry.UserNotes;
+                _logger.LogDebug("Prepopulated correction text with UserNotes for entry {EntryId}.", Meal.EntryId);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to load UserNotes for entry {EntryId}.", Meal.EntryId);
         }
     }
 

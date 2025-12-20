@@ -17,6 +17,12 @@ public class TrackedEntry
     public int DataSchemaVersion { get; set; }
     public ProcessingStatus ProcessingStatus { get; set; } = ProcessingStatus.Pending;
 
+    /// <summary>
+    /// User-provided notes (text or voice transcription) captured at time of photo submission.
+    /// This field persists independently of LLM analysis and remains available for corrections.
+    /// </summary>
+    public string? UserNotes { get; set; }
+
     [NotMapped]
     public IEntryPayload Payload { get; set; } = new PendingEntryPayload();
 

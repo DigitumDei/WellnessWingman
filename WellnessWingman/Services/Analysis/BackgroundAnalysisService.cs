@@ -29,6 +29,9 @@ public interface IBackgroundAnalysisService
 
 public class BackgroundAnalysisService : IBackgroundAnalysisService
 {
+    private const string OriginalNotesPrefix = "Original user notes: ";
+    private const string CorrectionPrefix = "\n\nCorrection: ";
+
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<BackgroundAnalysisService> _logger;
     private readonly IBackgroundExecutionService _backgroundExecution;
@@ -84,7 +87,12 @@ public class BackgroundAnalysisService : IBackgroundAnalysisService
                     return;
                 }
 
-                var result = await orchestrator.ProcessEntryAsync(entry, userProvidedDetails, cancellationToken).ConfigureAwait(false);
+                // Use provided details, or fall back to persisted UserNotes from the entry
+                var effectiveDetails = !string.IsNullOrWhiteSpace(userProvidedDetails)
+                    ? userProvidedDetails
+                    : entry.UserNotes;
+
+                var result = await orchestrator.ProcessEntryAsync(entry, effectiveDetails, cancellationToken).ConfigureAwait(false);
 
                 // Check cancellation after LLM call
                 if (cancellationToken.IsCancellationRequested)
@@ -169,7 +177,12 @@ public class BackgroundAnalysisService : IBackgroundAnalysisService
                         return;
                     }
 
-                    var result = await orchestrator.ProcessCorrectionAsync(entry, existingAnalysis, correction, cancellationToken).ConfigureAwait(false);
+                    // Combine original user notes with the correction for context
+                    var combinedContext = !string.IsNullOrWhiteSpace(entry.UserNotes)
+                        ? $"{OriginalNotesPrefix}{entry.UserNotes}{CorrectionPrefix}{correction}"
+                        : correction;
+
+                    var result = await orchestrator.ProcessCorrectionAsync(entry, existingAnalysis, combinedContext, cancellationToken).ConfigureAwait(false);
 
                     // Check cancellation after LLM call
                     if (cancellationToken.IsCancellationRequested)
