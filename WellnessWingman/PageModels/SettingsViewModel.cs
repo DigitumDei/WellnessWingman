@@ -24,6 +24,9 @@ public partial class SettingsViewModel : ObservableObject
     private string apiKey = string.Empty;
 
     [ObservableProperty]
+    private string modelId = string.Empty;
+
+    [ObservableProperty]
     private bool isApiKeyMasked = true;
 
     public ObservableCollection<LlmProvider> Providers { get; }
@@ -52,6 +55,19 @@ public partial class SettingsViewModel : ObservableObject
             if (_appSettings.ApiKeys.TryGetValue(SelectedProvider, out var key))
             {
                 ApiKey = key;
+            }
+            else
+            {
+                ApiKey = string.Empty;
+            }
+
+            if (_appSettings.ModelPreferences.TryGetValue(SelectedProvider, out var model))
+            {
+                ModelId = model;
+            }
+            else
+            {
+                ModelId = string.Empty;
             }
         }
         catch (Exception ex)
@@ -118,6 +134,15 @@ public partial class SettingsViewModel : ObservableObject
         {
             ApiKey = string.Empty;
         }
+
+        if (_appSettings.ModelPreferences.TryGetValue(value, out var model))
+        {
+            ModelId = model;
+        }
+        else
+        {
+            ModelId = string.Empty;
+        }
     }
 
     partial void OnApiKeyChanged(string value)
@@ -129,6 +154,18 @@ public partial class SettingsViewModel : ObservableObject
         else
         {
             _appSettings.ApiKeys[SelectedProvider] = value;
+        }
+    }
+
+    partial void OnModelIdChanged(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            _appSettings.ModelPreferences.Remove(SelectedProvider);
+        }
+        else
+        {
+            _appSettings.ModelPreferences[SelectedProvider] = value.Trim();
         }
     }
 
