@@ -50,7 +50,7 @@ public class ExerciseMetrics
     public double? MaxHeartRate { get; set; }
 
     [JsonPropertyName("steps")]
-    public int? Steps { get; set; }
+    public double? Steps { get; set; }
 
     [JsonPropertyName("elevationGain")]
     public double? ElevationGain { get; set; }

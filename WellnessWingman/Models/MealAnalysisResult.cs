@@ -64,7 +64,7 @@ public class FoodItem
     /// Estimated calories for this item.
     /// </summary>
     [JsonPropertyName("calories")]
-    public int? Calories { get; set; }
+    public double? Calories { get; set; }
 
     /// <summary>
     /// Confidence in the detection of this food item (0.0 to 1.0).
@@ -79,7 +79,7 @@ public class NutritionEstimate
     /// Total estimated calories for the meal.
     /// </summary>
     [JsonPropertyName("totalCalories")]
-    public int? TotalCalories { get; set; }
+    public double? TotalCalories { get; set; }
 
     /// <summary>
     /// Protein in grams.
