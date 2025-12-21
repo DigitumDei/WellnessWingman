@@ -41,6 +41,12 @@
             </ImageButton>
         </Grid>
 
+        <Label Text="Model"
+               AutomationProperties.Name="ModelLabel" />
+        <Entry Text="{Binding ModelId}"
+               Placeholder="e.g. gpt-5-mini"
+               AutomationProperties.Name="ModelEntry" />
+
         <Button Text="Save"
                 Command="{Binding SaveSettingsCommand}"
                 AutomationProperties.Name="SaveSettingsButton" />
