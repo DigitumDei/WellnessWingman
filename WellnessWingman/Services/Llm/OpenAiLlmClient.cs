@@ -102,7 +102,7 @@ public class OpenAiLlmClient : ILLmClient
         var client = new OpenAIClient(context.ApiKey);
         var chatClient = client.GetChatClient(context.ModelId);
 
-        var messages = CreateDailySummaryChatRequest(summaryRequest, existingSummaryJson);
+        var messages = await CreateDailySummaryChatRequestAsync(summaryRequest, existingSummaryJson).ConfigureAwait(false);
 
         try
         {
@@ -185,6 +185,8 @@ public class OpenAiLlmClient : ILLmClient
         string? existingAnalysisJson,
         string? userProvidedDetails)
     {
+        var schema = await PromptSchemas.GetUnifiedAnalysisSchemaAsync().ConfigureAwait(false);
+
         var systemPrompt = $@"You are a helpful assistant that analyzes images to track health and wellness.
 
 First, determine the entry type based on the image contents:
@@ -200,7 +202,7 @@ Then provide a detailed analysis for the detected type:
 - Other: briefly describe the content and provide any helpful observations.
 
 Return JSON that exactly matches this schema:
-{GetUnifiedAnalysisSchema()}
+{schema}
 
 Important rules:
 - Only populate the analysis object that matches the detected entryType; set the others to null.
@@ -281,10 +283,12 @@ Important rules:
         return builder.ToString();
     }
 
-    private static List<ChatMessage> CreateDailySummaryChatRequest(
+    private static async Task<List<ChatMessage>> CreateDailySummaryChatRequestAsync(
         DailySummaryRequest summaryRequest,
         string? existingSummaryJson)
     {
+        var schema = await PromptSchemas.GetDailySummarySchemaAsync().ConfigureAwait(false);
+
         var systemPrompt = $@"You are a helpful wellness coach generating a daily summary from the day's tracked activities.
 Entries may include meals, exercise sessions, sleep logs, and other health-related items.
 The user will provide pre-calculated nutritional totals. Use these numbers for your analysis; do not recalculate them.
@@ -292,7 +296,7 @@ Focus your response on qualitative insights, timing, balance, and specific recom
 Do not request or expect images – only use the supplied analysis data.
 
 You MUST return a JSON object matching this exact schema:
-{GetDailySummarySchema()}
+{schema}
 
 Important rules:
 - Always include every required property from the schema
@@ -372,220 +376,5 @@ Important rules:
         }
 
         return messages;
-    }
-
-    private static string GetUnifiedAnalysisSchema()
-    {
-        return """
-        Example meal entry:
-        {
-          "schemaVersion": "1.0",
-          "entryType": "Meal",
-          "confidence": 0.87,
-          "mealAnalysis": {
-            "schemaVersion": "1.0",
-            "foodItems": [
-              {
-                "name": "grilled salmon",
-                "portionSize": "180g",
-                "calories": 360,
-                "confidence": 0.92
-              },
-              {
-                "name": "steamed broccoli",
-                "portionSize": "1 cup",
-                "calories": 55,
-                "confidence": 0.88
-              }
-            ],
-            "nutrition": {
-              "totalCalories": 540,
-              "protein": 42,
-              "carbohydrates": 18,
-              "fat": 28,
-              "fiber": 6,
-              "sugar": 4,
-              "sodium": 510
-            },
-            "healthInsights": {
-              "healthScore": 8.2,
-              "summary": "Balanced meal with lean protein and vegetables.",
-              "positives": [
-                "High in protein",
-                "Includes cruciferous vegetables"
-              ],
-              "improvements": [
-                "Add a complex carbohydrate for sustained energy"
-              ],
-              "recommendations": [
-                "Consider adding brown rice or quinoa on the side"
-              ]
-            },
-            "confidence": 0.87,
-            "warnings": []
-          },
-          "exerciseAnalysis": null,
-          "sleepAnalysis": null,
-          "otherAnalysis": null,
-          "warnings": []
-        }
-
-        Example exercise entry:
-        {
-          "schemaVersion": "1.0",
-          "entryType": "Exercise",
-          "confidence": 0.9,
-          "mealAnalysis": null,
-          "exerciseAnalysis": {
-            "schemaVersion": "1.0",
-            "activityType": "Outdoor run",
-            "metrics": {
-              "distance": 5.2,
-              "distanceUnit": "kilometers",
-              "durationMinutes": 31.4,
-              "averagePace": "06:02 /km",
-              "averageSpeed": 9.9,
-              "speedUnit": "km/h",
-              "calories": 410,
-              "averageHeartRate": 152,
-              "maxHeartRate": 172,
-              "steps": 6800,
-              "elevationGain": 120,
-              "elevationUnit": "meters"
-            },
-            "insights": {
-              "summary": "Negative split run with steady pacing.",
-              "positives": [
-                "Strong heart rate control",
-                "Consistent pacing across splits"
-              ],
-              "improvements": [
-                "Extend cooldown with light stretching"
-              ],
-              "recommendations": [
-                "Include interval training later this week"
-              ]
-            },
-            "warnings": []
-          },
-          "sleepAnalysis": null,
-          "otherAnalysis": null,
-          "warnings": []
-        }
-
-        Example sleep entry:
-        {
-          "schemaVersion": "1.0",
-          "entryType": "Sleep",
-          "confidence": 0.82,
-          "mealAnalysis": null,
-          "exerciseAnalysis": null,
-          "sleepAnalysis": {
-            "durationHours": 7.2,
-            "sleepScore": 86,
-            "qualitySummary": "Restorative sleep with brief wake periods.",
-            "environmentNotes": [
-              "Dark room",
-              "Ambient temperature 20C"
-            ],
-            "recommendations": [
-              "Maintain consistent bedtime routine",
-              "Consider earlier screen cutoff to improve latency"
-            ]
-          },
-          "otherAnalysis": null,
-          "warnings": []
-        }
-
-        Example other entry:
-        {
-          "schemaVersion": "1.0",
-          "entryType": "Other",
-          "confidence": 0.76,
-          "mealAnalysis": null,
-          "exerciseAnalysis": null,
-          "sleepAnalysis": null,
-          "otherAnalysis": {
-            "summary": "Health-related document screenshot (lab results).",
-            "tags": [
-              "Medical",
-              "Bloodwork",
-              "Follow-up"
-            ],
-            "recommendations": [
-              "Schedule follow-up with physician",
-              "Log key biomarker changes in notes"
-            ]
-          },
-          "warnings": []
-        }
-        """;
-    }
-
-    private static string GetDailySummarySchema()
-    {
-        return """
-        {
-          "type": "object",
-          "properties": {
-            "schemaVersion": {
-              "type": "string",
-              "description": "Schema version, always '1.0'"
-            },
-            "totals": {
-              "type": "object",
-              "properties": {
-                "calories": { "type": ["number", "null"], "description": "Total calories for the day" },
-                "protein": { "type": ["number", "null"], "description": "Total protein (g)" },
-                "carbohydrates": { "type": ["number", "null"], "description": "Total carbohydrates (g)" },
-                "fat": { "type": ["number", "null"], "description": "Total fat (g)" },
-                "fiber": { "type": ["number", "null"], "description": "Total fiber (g)" },
-                "sugar": { "type": ["number", "null"], "description": "Total sugar (g)" },
-                "sodium": { "type": ["number", "null"], "description": "Total sodium (mg)" }
-              },
-              "required": ["calories", "protein", "carbohydrates", "fat", "fiber", "sugar", "sodium"],
-              "additionalProperties": false
-            },
-            "balance": {
-              "type": "object",
-              "properties": {
-                "overall": { "type": ["string", "null"], "description": "Overall nutritional balance assessment" },
-                "macroBalance": { "type": ["string", "null"], "description": "Macro nutrient balance observations" },
-                "timing": { "type": ["string", "null"], "description": "Meal timing observations" },
-                "variety": { "type": ["string", "null"], "description": "Variety and diversity assessment" }
-              },
-              "required": ["overall", "macroBalance", "timing", "variety"],
-              "additionalProperties": false
-            },
-            "insights": {
-              "type": "array",
-              "items": { "type": "string" },
-              "description": "Key insights about the day's nutrition"
-            },
-            "recommendations": {
-              "type": "array",
-              "items": { "type": "string" },
-              "description": "Actionable recommendations for future meals"
-            },
-            "entriesIncluded": {
-              "type": "array",
-              "items": {
-                "type": "object",
-                "properties": {
-                  "entryId": { "type": "integer", "description": "TrackedEntry identifier" },
-                  "entryType": { "type": "string", "description": "EntryType string such as Meal, Exercise, Sleep, Other" },
-                  "capturedAt": { "type": "string", "format": "date-time", "description": "Capture timestamp in ISO 8601" },
-                  "summary": { "type": ["string", "null"], "description": "Short summary of what occurred" }
-                },
-                "required": ["entryId", "entryType", "capturedAt", "summary"],
-                "additionalProperties": false
-              },
-              "description": "Entries represented in the summary"
-            }
-          },
-          "required": ["schemaVersion", "totals", "balance", "insights", "recommendations", "entriesIncluded"],
-          "additionalProperties": false
-        }
-        """;
     }
 }

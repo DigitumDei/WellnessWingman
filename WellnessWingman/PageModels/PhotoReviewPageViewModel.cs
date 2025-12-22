@@ -21,7 +21,7 @@ public partial class PhotoReviewPageViewModel : ObservableObject
     private readonly IPhotoCaptureFinalizationService _finalizationService;
     private readonly IPendingPhotoStore _pendingPhotoStore;
     private readonly IAudioRecordingService _audioRecordingService;
-    private readonly IAudioTranscriptionService _audioTranscriptionService;
+    private readonly IAudioTranscriptionServiceFactory _audioTranscriptionServiceFactory;
     private readonly ILogger<PhotoReviewPageViewModel> _logger;
 
     private PendingPhotoCapture? _pendingCapture;
@@ -33,13 +33,13 @@ public partial class PhotoReviewPageViewModel : ObservableObject
         IPhotoCaptureFinalizationService finalizationService,
         IPendingPhotoStore pendingPhotoStore,
         IAudioRecordingService audioRecordingService,
-        IAudioTranscriptionService audioTranscriptionService,
+        IAudioTranscriptionServiceFactory audioTranscriptionServiceFactory,
         ILogger<PhotoReviewPageViewModel> logger)
     {
         _finalizationService = finalizationService;
         _pendingPhotoStore = pendingPhotoStore;
         _audioRecordingService = audioRecordingService;
-        _audioTranscriptionService = audioTranscriptionService;
+        _audioTranscriptionServiceFactory = audioTranscriptionServiceFactory;
         _logger = logger;
     }
 
@@ -347,7 +347,8 @@ public partial class PhotoReviewPageViewModel : ObservableObject
             IsTranscribing = true;
             OnPropertyChanged(nameof(IsRecordingButtonEnabled));
 
-            var transcriptionResult = await _audioTranscriptionService.TranscribeAsync(result.AudioFilePath);
+            var transcriptionService = await _audioTranscriptionServiceFactory.GetServiceAsync();
+            var transcriptionResult = await transcriptionService.TranscribeAsync(result.AudioFilePath);
 
             IsTranscribing = false;
             OnPropertyChanged(nameof(IsRecordingButtonEnabled));

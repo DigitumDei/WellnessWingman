@@ -15,12 +15,13 @@ public interface IAnalysisOrchestrator
 public class AnalysisOrchestrator : IAnalysisOrchestrator
 {
     private const string DefaultOpenAiVisionModel = "gpt-5-mini";
+    private const string DefaultGeminiVisionModel = "gemini-1.5-flash";
 
     private readonly IAppSettingsRepository _appSettingsRepository;
     private readonly IEntryAnalysisRepository _entryAnalysisRepository;
     private readonly IDailySummaryService _dailySummaryService;
     private readonly ITrackedEntryRepository _trackedEntryRepository;
-    private readonly ILLmClient _llmClient;
+    private readonly ILlmClientFactory _llmClientFactory;
     private readonly MealAnalysisValidator _validator;
     private readonly ILogger<AnalysisOrchestrator> _logger;
 
@@ -29,7 +30,7 @@ public class AnalysisOrchestrator : IAnalysisOrchestrator
         IEntryAnalysisRepository entryAnalysisRepository,
         IDailySummaryService dailySummaryService,
         ITrackedEntryRepository trackedEntryRepository,
-        ILLmClient llmClient,
+        ILlmClientFactory llmClientFactory,
         MealAnalysisValidator validator,
         ILogger<AnalysisOrchestrator> logger)
     {
@@ -37,7 +38,7 @@ public class AnalysisOrchestrator : IAnalysisOrchestrator
         _entryAnalysisRepository = entryAnalysisRepository;
         _dailySummaryService = dailySummaryService;
         _trackedEntryRepository = trackedEntryRepository;
-        _llmClient = llmClient;
+        _llmClientFactory = llmClientFactory;
         _validator = validator;
         _logger = logger;
     }
@@ -89,12 +90,6 @@ public class AnalysisOrchestrator : IAnalysisOrchestrator
         {
             var settings = await _appSettingsRepository.GetAppSettingsAsync().ConfigureAwait(false);
 
-            if (settings.SelectedProvider != LlmProvider.OpenAI)
-            {
-                _logger.LogInformation("Selected provider {Provider} is not yet supported; skipping analysis for entry {EntryId}.", settings.SelectedProvider, entry.EntryId);
-                return AnalysisInvocationResult.NotSupported(settings.SelectedProvider);
-            }
-
             var modelId = ResolveModelId(settings);
             if (string.IsNullOrWhiteSpace(modelId))
             {
@@ -115,7 +110,18 @@ public class AnalysisOrchestrator : IAnalysisOrchestrator
                 ApiKey = apiKey
             };
 
-            var llmResult = await _llmClient.InvokeAnalysisAsync(entry, context, existingAnalysis?.InsightsJson, userProvidedDetails).ConfigureAwait(false);
+            ILLmClient llmClient;
+            try
+            {
+                llmClient = _llmClientFactory.GetClient(settings.SelectedProvider);
+            }
+            catch (NotSupportedException ex)
+            {
+                _logger.LogWarning(ex, "Selected provider {Provider} is not supported; skipping analysis for entry {EntryId}.", settings.SelectedProvider, entry.EntryId);
+                return AnalysisInvocationResult.NotSupported(settings.SelectedProvider);
+            }
+
+            var llmResult = await llmClient.InvokeAnalysisAsync(entry, context, existingAnalysis?.InsightsJson, userProvidedDetails).ConfigureAwait(false);
             if (llmResult.Analysis is null)
             {
                 _logger.LogWarning("LLM returned no analysis for entry {EntryId}.", entry.EntryId);
@@ -270,6 +276,7 @@ public class AnalysisOrchestrator : IAnalysisOrchestrator
         return settings.SelectedProvider switch
         {
             LlmProvider.OpenAI => DefaultOpenAiVisionModel,
+            LlmProvider.Gemini => DefaultGeminiVisionModel,
             _ => string.Empty
         };
     }

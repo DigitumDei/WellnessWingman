@@ -1,0 +1,61 @@
+{
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "description": "Schema version, always '1.0'"
+    },
+    "totals": {
+      "type": "object",
+      "properties": {
+        "calories": { "type": ["number", "null"], "description": "Total calories for the day" },
+        "protein": { "type": ["number", "null"], "description": "Total protein (g)" },
+        "carbohydrates": { "type": ["number", "null"], "description": "Total carbohydrates (g)" },
+        "fat": { "type": ["number", "null"], "description": "Total fat (g)" },
+        "fiber": { "type": ["number", "null"], "description": "Total fiber (g)" },
+        "sugar": { "type": ["number", "null"], "description": "Total sugar (g)" },
+        "sodium": { "type": ["number", "null"], "description": "Total sodium (mg)" }
+      },
+      "required": ["calories", "protein", "carbohydrates", "fat", "fiber", "sugar", "sodium"],
+      "additionalProperties": false
+    },
+    "balance": {
+      "type": "object",
+      "properties": {
+        "overall": { "type": ["string", "null"], "description": "Overall nutritional balance assessment" },
+        "macroBalance": { "type": ["string", "null"], "description": "Macro nutrient balance observations" },
+        "timing": { "type": ["string", "null"], "description": "Meal timing observations" },
+        "variety": { "type": ["string", "null"], "description": "Variety and diversity assessment" }
+      },
+      "required": ["overall", "macroBalance", "timing", "variety"],
+      "additionalProperties": false
+    },
+    "insights": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Key insights about the day's nutrition"
+    },
+    "recommendations": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Actionable recommendations for future meals"
+    },
+    "entriesIncluded": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "entryId": { "type": "integer", "description": "TrackedEntry identifier" },
+          "entryType": { "type": "string", "description": "EntryType string such as Meal, Exercise, Sleep, Other" },
+          "capturedAt": { "type": "string", "format": "date-time", "description": "Capture timestamp in ISO 8601" },
+          "summary": { "type": ["string", "null"], "description": "Short summary of what occurred" }
+        },
+        "required": ["entryId", "entryType", "capturedAt", "summary"],
+        "additionalProperties": false
+      },
+      "description": "Entries represented in the summary"
+    }
+  },
+  "required": ["schemaVersion", "totals", "balance", "insights", "recommendations", "entriesIncluded"],
+  "additionalProperties": false
+}
