@@ -18,7 +18,7 @@ public partial class MealDetailViewModel : ObservableObject
     private readonly IEntryAnalysisRepository _entryAnalysisRepository;
     private readonly IBackgroundAnalysisService _backgroundAnalysisService;
     private readonly IAudioRecordingService _audioRecordingService;
-    private readonly IAudioTranscriptionService _audioTranscriptionService;
+    private readonly IAudioTranscriptionServiceFactory _audioTranscriptionServiceFactory;
     private readonly ILogger<MealDetailViewModel> _logger;
 
     private Timer? _recordingTimer;
@@ -67,14 +67,14 @@ public partial class MealDetailViewModel : ObservableObject
         IEntryAnalysisRepository entryAnalysisRepository,
         IBackgroundAnalysisService backgroundAnalysisService,
         IAudioRecordingService audioRecordingService,
-        IAudioTranscriptionService audioTranscriptionService,
+        IAudioTranscriptionServiceFactory audioTranscriptionServiceFactory,
         ILogger<MealDetailViewModel> logger)
     {
         _trackedEntryRepository = trackedEntryRepository;
         _entryAnalysisRepository = entryAnalysisRepository;
         _backgroundAnalysisService = backgroundAnalysisService;
         _audioRecordingService = audioRecordingService;
-        _audioTranscriptionService = audioTranscriptionService;
+        _audioTranscriptionServiceFactory = audioTranscriptionServiceFactory;
         _logger = logger;
     }
 
@@ -438,7 +438,8 @@ public partial class MealDetailViewModel : ObservableObject
 
             IsTranscribing = true;
 
-            var transcriptionResult = await _audioTranscriptionService.TranscribeAsync(result.AudioFilePath);
+            var transcriptionService = await _audioTranscriptionServiceFactory.GetServiceAsync();
+            var transcriptionResult = await transcriptionService.TranscribeAsync(result.AudioFilePath);
 
             IsTranscribing = false;
 

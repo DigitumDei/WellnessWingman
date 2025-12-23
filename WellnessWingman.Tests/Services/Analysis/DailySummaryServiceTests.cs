@@ -85,11 +85,12 @@ public class DailySummaryServiceTests
         });
 
         var llmClient = new CapturingLlmClient();
+        var llmClientFactory = new MockLlmClientFactory(llmClient);
         var service = new DailySummaryService(
             settingsRepo,
             analysisRepo,
             trackedRepo,
-            llmClient,
+            llmClientFactory,
             new DailyTotalsCalculator(),
             NullLogger<DailySummaryService>.Instance);
 
@@ -230,5 +231,17 @@ public class DailySummaryServiceTests
                 }
             });
         }
+    }
+
+    private sealed class MockLlmClientFactory : ILlmClientFactory
+    {
+        private readonly ILLmClient _client;
+
+        public MockLlmClientFactory(ILLmClient client)
+        {
+            _client = client;
+        }
+
+        public ILLmClient GetClient(LlmProvider provider) => _client;
     }
 }

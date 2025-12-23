@@ -20,11 +20,12 @@ public interface IDailySummaryService
 public class DailySummaryService : IDailySummaryService
 {
     private const string DefaultOpenAiModel = "gpt-5-mini";
+    private const string DefaultGeminiModel = "gemini-1.5-flash";
 
     private readonly IAppSettingsRepository _appSettingsRepository;
     private readonly IEntryAnalysisRepository _entryAnalysisRepository;
     private readonly ITrackedEntryRepository _trackedEntryRepository;
-    private readonly ILLmClient _llmClient;
+    private readonly ILlmClientFactory _llmClientFactory;
     private readonly DailyTotalsCalculator _dailyTotalsCalculator;
     private readonly ILogger<DailySummaryService> _logger;
 
@@ -32,14 +33,14 @@ public class DailySummaryService : IDailySummaryService
         IAppSettingsRepository appSettingsRepository,
         IEntryAnalysisRepository entryAnalysisRepository,
         ITrackedEntryRepository trackedEntryRepository,
-        ILLmClient llmClient,
+        ILlmClientFactory llmClientFactory,
         DailyTotalsCalculator dailyTotalsCalculator,
         ILogger<DailySummaryService> logger)
     {
         _appSettingsRepository = appSettingsRepository;
         _entryAnalysisRepository = entryAnalysisRepository;
         _trackedEntryRepository = trackedEntryRepository;
-        _llmClient = llmClient;
+        _llmClientFactory = llmClientFactory;
         _dailyTotalsCalculator = dailyTotalsCalculator;
         _logger = logger;
     }
@@ -51,12 +52,6 @@ public class DailySummaryService : IDailySummaryService
         try
         {
             var settings = await _appSettingsRepository.GetAppSettingsAsync().ConfigureAwait(false);
-
-            if (settings.SelectedProvider != LlmProvider.OpenAI)
-            {
-                _logger.LogInformation("Provider {Provider} is not supported for daily summaries.", settings.SelectedProvider);
-                return AnalysisInvocationResult.NotSupported(settings.SelectedProvider);
-            }
 
             var modelId = ResolveModelId(settings);
             if (string.IsNullOrWhiteSpace(modelId))
@@ -161,7 +156,18 @@ public class DailySummaryService : IDailySummaryService
 
             var existingSummaryJson = existingSummary?.InsightsJson;
 
-            var llmResult = await _llmClient
+            ILLmClient llmClient;
+            try
+            {
+                llmClient = _llmClientFactory.GetClient(settings.SelectedProvider);
+            }
+            catch (NotSupportedException ex)
+            {
+                _logger.LogInformation(ex, "Provider {Provider} is not supported for daily summaries.", settings.SelectedProvider);
+                return AnalysisInvocationResult.NotSupported(settings.SelectedProvider);
+            }
+
+            var llmResult = await llmClient
                 .InvokeDailySummaryAsync(summaryRequest, context, existingSummaryJson)
                 .ConfigureAwait(false);
 
@@ -234,6 +240,7 @@ public class DailySummaryService : IDailySummaryService
         return settings.SelectedProvider switch
         {
             LlmProvider.OpenAI => DefaultOpenAiModel,
+            LlmProvider.Gemini => DefaultGeminiModel,
             _ => string.Empty
         };
     }

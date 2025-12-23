@@ -60,5 +60,6 @@
     <Compile Include="..\WellnessWingman\Services\Analysis\DailySummaryService.cs" Link="Services\Analysis\DailySummaryService.cs" />
     <Compile Include="..\WellnessWingman\Services\Analysis\WeekSummaryBuilder.cs" Link="Services\Analysis\WeekSummaryBuilder.cs" />
     <Compile Include="..\WellnessWingman\Services\Llm\ILLmClient.cs" Link="Services\Llm\ILLmClient.cs" />
+    <Compile Include="..\WellnessWingman\Services\Llm\ILlmClientFactory.cs" Link="Services\Llm\ILlmClientFactory.cs" />
   </ItemGroup>
 </Project>
