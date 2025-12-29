@@ -147,4 +147,26 @@ public class MainPage : BasePage
             return string.Empty;
         }
     }
+
+    /// <summary>
+    /// Opens Settings via the flyout menu
+    /// </summary>
+    public SettingsPage OpenSettings()
+    {
+        // Open flyout menu by swiping from left edge (Shell flyout gesture)
+        SwipeRight();
+
+        // Wait for flyout to animate
+        Thread.Sleep(500);
+
+        // Tap Settings in the flyout
+        var settingsItem = FindByText("Settings");
+        if (settingsItem == null)
+        {
+            throw new InvalidOperationException("Settings menu item not found in flyout");
+        }
+        Tap(settingsItem);
+
+        return new SettingsPage(Driver);
+    }
 }

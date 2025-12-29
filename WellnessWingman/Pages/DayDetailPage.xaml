@@ -225,13 +225,16 @@
                 </SwipeView.RightItems>
                 <!-- Date Navigation -->
                 <Grid ColumnDefinitions="Auto,*,Auto" VerticalOptions="Center">
-                    <Button Text="&lt;" Command="{Binding GoToPreviousDayCommand}" />
+                    <Button Text="&lt;" Command="{Binding GoToPreviousDayCommand}"
+                            AutomationProperties.AutomationId="DayDetailPreviousDayButton" />
                     <Label Grid.Column="1"
                            Text="{Binding HistoricalDate, StringFormat='{0:ddd, MMM d, yyyy}'}"
                            HorizontalOptions="Center"
                            VerticalOptions="Center"
-                           Style="{StaticResource Headline}" />
-                    <Button Grid.Column="2" Text="&gt;" Command="{Binding GoToNextDayCommand}" />
+                           Style="{StaticResource Headline}"
+                           AutomationProperties.AutomationId="DayDetailDateLabel" />
+                    <Button Grid.Column="2" Text="&gt;" Command="{Binding GoToNextDayCommand}"
+                            AutomationProperties.AutomationId="DayDetailNextDayButton" />
                 </Grid>
             </SwipeView>
 
@@ -284,11 +287,13 @@
                         <Button Text="Get More Details"
                                 Command="{Binding GenerateDailySummaryCommand}"
                                 IsVisible="{Binding ShowGenerateSummaryButton}"
-                                IsEnabled="{Binding IsGeneratingSummary, Converter={StaticResource InvertedBoolConverter}}" />
+                                IsEnabled="{Binding IsGeneratingSummary, Converter={StaticResource InvertedBoolConverter}}"
+                                AutomationProperties.AutomationId="DayDetailSummaryButton" />
 
                         <Button Text="View Analysis"
                                 Command="{Binding ViewDailySummaryCommand}"
-                                IsVisible="{Binding ShowViewAnalysisButton}" />
+                                IsVisible="{Binding ShowViewAnalysisButton}"
+                                AutomationProperties.AutomationId="DayDetailViewAnalysisButton" />
 
                         <VerticalStackLayout Spacing="4" 
                                              IsVisible="{Binding IsSummaryProcessing}" 
@@ -310,7 +315,8 @@
                             ItemTemplate="{StaticResource EntryCardTemplateSelector}"
                             SelectionMode="Single"
                             SelectionChanged="EntriesCollection_SelectionChanged"
-                            Margin="0,8,0,0">
+                            Margin="0,8,0,0"
+                            AutomationProperties.AutomationId="DayDetailEntriesCollection">
                 <CollectionView.EmptyView>
                     <VerticalStackLayout Padding="32" Spacing="12" HorizontalOptions="Center" VerticalOptions="Center">
                         <Label Text="No entries tracked for this day." HorizontalTextAlignment="Center" Style="{StaticResource Body1}" />

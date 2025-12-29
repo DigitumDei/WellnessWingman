@@ -41,4 +41,71 @@ public static class GeminiResponseParser
 
         return builder.ToString();
     }
+
+    public static string? ExtractFirstJsonObject(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return null;
+        }
+
+        var start = -1;
+        var depth = 0;
+        var inString = false;
+        var escape = false;
+
+        for (var i = 0; i < text.Length; i++)
+        {
+            var ch = text[i];
+
+            if (start >= 0)
+            {
+                if (escape)
+                {
+                    escape = false;
+                    continue;
+                }
+
+                if (ch == '\\')
+                {
+                    escape = true;
+                    continue;
+                }
+
+                if (ch == '"')
+                {
+                    inString = !inString;
+                    continue;
+                }
+
+                if (inString)
+                {
+                    continue;
+                }
+
+                if (ch == '{')
+                {
+                    depth++;
+                }
+                else if (ch == '}')
+                {
+                    depth--;
+                    if (depth == 0)
+                    {
+                        return text.Substring(start, i - start + 1);
+                    }
+                }
+
+                continue;
+            }
+
+            if (ch == '{')
+            {
+                start = i;
+                depth = 1;
+            }
+        }
+
+        return null;
+    }
 }
