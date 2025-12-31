@@ -14,6 +14,9 @@ public static class AppiumDriverFactory
     /// </summary>
     public static AndroidDriver CreateAndroidDriver()
     {
+        // Create marker file for mock services BEFORE launching the app
+        CreateMockServicesMarkerFileIfNeeded();
+
         var serverUri = new Uri(AppiumConfig.AppiumServerUrl);
         var options = CreateAndroidOptions();
 
@@ -21,6 +24,68 @@ public static class AppiumDriverFactory
         driver.Manage().Timeouts().ImplicitWait = TimeSpan.FromSeconds(AppiumConfig.ImplicitWaitSeconds);
 
         return driver;
+    }
+
+    /// <summary>
+    /// Creates the mock services marker file using adb before the app launches
+    /// </summary>
+    private static void CreateMockServicesMarkerFileIfNeeded()
+    {
+        var useMockServices = Environment.GetEnvironmentVariable("USE_MOCK_SERVICES");
+        if (string.IsNullOrWhiteSpace(useMockServices) || !useMockServices.Equals("true", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        try
+        {
+            // Create marker file in app's data directory using adb
+            var appDataPath = $"/data/data/{AppiumConfig.AppPackage}/files";
+            var markerFile = $"{appDataPath}/.use_mock_services";
+
+            // First, ensure the app data directory exists (app might not be installed yet)
+            RunAdbCommand($"shell mkdir -p {appDataPath}");
+
+            // Create the marker file
+            RunAdbCommand($"shell touch {markerFile}");
+
+            Console.WriteLine($"Created mock services marker file: {markerFile}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Warning: Could not create mock services marker file: {ex.Message}");
+            Console.WriteLine("Tests may run without mock services if the file cannot be created.");
+        }
+    }
+
+    /// <summary>
+    /// Runs an adb command
+    /// </summary>
+    private static void RunAdbCommand(string arguments)
+    {
+        var startInfo = new System.Diagnostics.ProcessStartInfo
+        {
+            FileName = "adb",
+            Arguments = arguments,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+
+        using var process = System.Diagnostics.Process.Start(startInfo);
+        if (process == null)
+        {
+            throw new InvalidOperationException("Failed to start adb process");
+        }
+
+        process.WaitForExit(10000);
+
+        if (process.ExitCode != 0)
+        {
+            var error = process.StandardError.ReadToEnd();
+            throw new InvalidOperationException($"adb command failed: {error}");
+        }
     }
 
     /// <summary>
@@ -50,7 +115,7 @@ public static class AppiumDriverFactory
         // Performance and stability options
         options.AddAdditionalAppiumOption("newCommandTimeout", AppiumConfig.CommandTimeoutSeconds);
         options.AddAdditionalAppiumOption("autoGrantPermissions", true);
-        options.AddAdditionalAppiumOption("noReset", false); // Fresh app state for each test
+        options.AddAdditionalAppiumOption("noReset", true); // Don't clear app data (preserves marker file for mock services)
         options.AddAdditionalAppiumOption("fullReset", false); // But don't uninstall between tests
         if (!string.IsNullOrWhiteSpace(AppiumConfig.AndroidSdkRoot))
         {

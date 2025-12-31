@@ -49,4 +49,30 @@ public class WeekViewPage : BasePage
         SwipeLeft();
         return new MonthViewPage(Driver);
     }
+
+    /// <summary>
+    /// Taps the first day in the week view to navigate to day detail
+    /// </summary>
+    public void TapFirstDay()
+    {
+        // Try to find a day element in the week days collection
+        var weekDaysCollection = FindByAutomationId("WeekDaysCollection");
+        if (weekDaysCollection != null)
+        {
+            // Find the first clickable day
+            var days = weekDaysCollection.FindElements(MobileBy.ClassName("android.view.ViewGroup"));
+            if (days.Count > 0)
+            {
+                Tap((OpenQA.Selenium.Appium.AppiumElement)days[0]);
+                return;
+            }
+        }
+
+        // Fallback: try to find by text patterns
+        var todayElement = FindByPartialText("Today") ?? FindByPartialText("Mon") ?? FindByPartialText("Tue");
+        if (todayElement != null)
+        {
+            Tap(todayElement);
+        }
+    }
 }

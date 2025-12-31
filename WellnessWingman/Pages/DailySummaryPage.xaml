@@ -9,10 +9,12 @@
     <ScrollView>
         <VerticalStackLayout Spacing="16" Padding="24">
             <Label Text="Daily Summary"
-                   Style="{StaticResource Headline}" />
+                   Style="{StaticResource Headline}"
+                   AutomationProperties.AutomationId="DailySummaryTitleLabel" />
 
             <ActivityIndicator IsRunning="{Binding IsBusy}"
-                               IsVisible="{Binding IsBusy}" />
+                               IsVisible="{Binding IsBusy}"
+                               AutomationProperties.AutomationId="DailySummaryActivityIndicator" />
 
             <Label Text="{Binding GeneratedAtText}"
                    Style="{StaticResource Caption1}" />
@@ -43,7 +45,8 @@
                     <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="*,*,*,*" RowSpacing="12">
                         <!-- Row 0: Macros -->
                         <VerticalStackLayout Grid.Row="0" Grid.Column="0">
-                            <Label Text="{Binding Totals.Calories, StringFormat='{0:F0}'}" FontAttributes="Bold" HorizontalOptions="Center" FontSize="18"/>
+                            <Label Text="{Binding Totals.Calories, StringFormat='{0:F0}'}" FontAttributes="Bold" HorizontalOptions="Center" FontSize="18"
+                                   AutomationProperties.AutomationId="DailySummaryCaloriesLabel"/>
                             <Label Text="Cals" Style="{StaticResource Caption1}" HorizontalOptions="Center" />
                         </VerticalStackLayout>
                         <VerticalStackLayout Grid.Row="0" Grid.Column="1">
@@ -99,7 +102,8 @@
             <Label Text="Insights"
                    Style="{StaticResource Body2Strong}" />
             <VerticalStackLayout BindableLayout.ItemsSource="{Binding Insights}"
-                                 Spacing="8">
+                                 Spacing="8"
+                                 AutomationProperties.AutomationId="DailySummaryInsightsList">
                 <BindableLayout.ItemTemplate>
                     <DataTemplate x:DataType="x:String">
                         <Label Text="{Binding .}"
@@ -116,7 +120,8 @@
             <Label Text="Recommendations"
                    Style="{StaticResource Body2Strong}" />
             <VerticalStackLayout BindableLayout.ItemsSource="{Binding Recommendations}"
-                                 Spacing="8">
+                                 Spacing="8"
+                                 AutomationProperties.AutomationId="DailySummaryRecommendationsList">
                 <BindableLayout.ItemTemplate>
                     <DataTemplate x:DataType="x:String">
                         <Label Text="{Binding .}"
@@ -154,7 +159,8 @@
 
             <Button Text="Regenerate Summary"
                     Command="{Binding RegenerateCommand}"
-                    IsEnabled="{Binding IsBusy, Converter={StaticResource InvertedBoolConverter}}" />
+                    IsEnabled="{Binding IsBusy, Converter={StaticResource InvertedBoolConverter}}"
+                    AutomationProperties.AutomationId="DailySummaryRegenerateButton" />
         </VerticalStackLayout>
     </ScrollView>
 </ContentPage>

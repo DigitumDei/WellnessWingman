@@ -10,24 +10,29 @@
             <Image Source="{Binding Meal.FullPath}"
                    Aspect="AspectFit"
                    HeightRequest="300"
+                   AutomationProperties.AutomationId="MealDetailImage"
                    SemanticProperties.Description="Meal photo" />
 
             <Label Text="Description" Style="{StaticResource Title2}" />
             <Editor Text="{Binding EditableDescription}"
                     AutoSize="TextChanges"
-                    Placeholder="Enter a description for your meal..." />
+                    Placeholder="Enter a description for your meal..."
+                    AutomationProperties.AutomationId="MealDetailDescriptionEditor" />
             <Button Text="Save Description"
                     Command="{Binding SaveDescriptionCommand}"
-                    Margin="0,8,0,0" />
+                    Margin="0,8,0,0"
+                    AutomationProperties.AutomationId="MealDetailSaveDescriptionButton" />
 
             <Label Text="{Binding Meal.LocalCapturedAt, StringFormat='Captured {0:MMM d, h:mm tt}'}" Style="{StaticResource Caption1}" />
 
             <Label Text="Analysis" Style="{StaticResource Title2}" Margin="0,16,0,0" />
-            <Label Text="{Binding AnalysisText}" Style="{StaticResource Body1}" />
+            <Label Text="{Binding AnalysisText}" Style="{StaticResource Body1}"
+                   AutomationProperties.AutomationId="MealDetailAnalysisLabel" />
 
             <Button Text="{Binding CorrectionToggleButtonText}"
                     Command="{Binding ToggleCorrectionCommand}"
-                    Margin="0,16,0,0" />
+                    Margin="0,16,0,0"
+                    AutomationProperties.AutomationId="MealDetailCorrectionToggleButton" />
 
             <Border IsVisible="{Binding IsCorrectionMode}"
                     Padding="16">
@@ -53,6 +58,7 @@
                                 TextColor="White"
                                 Command="{Binding ToggleRecordingCommand}"
                                 IsEnabled="{Binding IsRecordingButtonEnabled}"
+                                AutomationProperties.AutomationId="MealDetailVoiceButton"
                                 SemanticProperties.Description="{Binding RecordingButtonText}" />
                     </Grid>
 
@@ -83,12 +89,15 @@
                     <Editor Text="{Binding CorrectionText}"
                             Placeholder="Describe what's actually in the meal or what needs to change (or use the mic above)."
                             AutoSize="TextChanges"
-                            MinimumHeightRequest="120" />
+                            MinimumHeightRequest="120"
+                            AutomationProperties.AutomationId="MealDetailCorrectionEditor" />
                     <ActivityIndicator IsVisible="{Binding IsSubmittingCorrection}"
                                        IsRunning="{Binding IsSubmittingCorrection}"
-                                       HorizontalOptions="Start" />
+                                       HorizontalOptions="Start"
+                                       AutomationProperties.AutomationId="MealDetailActivityIndicator" />
                     <Button Text="Send correction"
-                            Command="{Binding SubmitCorrectionCommand}" />
+                            Command="{Binding SubmitCorrectionCommand}"
+                            AutomationProperties.AutomationId="MealDetailSubmitCorrectionButton" />
                 </VerticalStackLayout>
             </Border>
 
@@ -96,7 +105,8 @@
                     Command="{Binding DeleteCommand}"
                     BackgroundColor="{StaticResource Error}"
                     TextColor="{StaticResource OnError}"
-                    Margin="0,16,0,0" />
+                    Margin="0,16,0,0"
+                    AutomationProperties.AutomationId="MealDetailDeleteButton" />
         </VerticalStackLayout>
     </ScrollView>
 </ContentPage>

@@ -10,6 +10,7 @@
             <Image Source="{Binding PreviewImage}"
                    Aspect="AspectFit"
                    HeightRequest="260"
+                   AutomationProperties.AutomationId="PhotoReviewImage"
                    SemanticProperties.Description="Captured photo preview" />
 
             <Label Text="{Binding CaptureInfo}"
@@ -35,6 +36,7 @@
                         TextColor="White"
                         Command="{Binding ToggleRecordingCommand}"
                         IsEnabled="{Binding IsRecordingButtonEnabled}"
+                        AutomationProperties.AutomationId="PhotoReviewVoiceButton"
                         SemanticProperties.Description="{Binding RecordingButtonText}" />
             </Grid>
 
@@ -69,19 +71,23 @@
                     AutoSize="TextChanges"
                     MaximumHeightRequest="200"
                     IsEnabled="{Binding IsSubmitting, Converter={StaticResource InvertedBoolConverter}}"
+                    AutomationProperties.AutomationId="PhotoReviewDescriptionEditor"
                     SemanticProperties.Description="Optional context to help AI analysis" />
 
             <ActivityIndicator IsRunning="{Binding IsSubmitting}"
-                               IsVisible="{Binding IsSubmitting}" />
+                               IsVisible="{Binding IsSubmitting}"
+                               AutomationProperties.AutomationId="PhotoReviewActivityIndicator" />
 
             <Button Text="Save Entry"
                     Command="{Binding SubmitCommand}"
                     IsEnabled="{Binding IsSubmitting, Converter={StaticResource InvertedBoolConverter}}"
+                    AutomationProperties.AutomationId="PhotoReviewSaveButton"
                     SemanticProperties.Description="Save entry with optional description" />
 
             <Button Text="Cancel"
                     Command="{Binding CancelCommand}"
                     IsEnabled="{Binding IsSubmitting, Converter={StaticResource InvertedBoolConverter}}"
+                    AutomationProperties.AutomationId="PhotoReviewCancelButton"
                     SemanticProperties.Description="Cancel and discard photo"
                     BackgroundColor="{StaticResource Gray200}" />
         </VerticalStackLayout>

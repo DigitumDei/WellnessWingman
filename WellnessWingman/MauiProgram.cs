@@ -57,22 +57,57 @@ public static class MauiProgram
         builder.Services.AddSingleton<IPendingPhotoStore, FilePendingPhotoStore>();
         builder.Services.AddScoped<IPhotoCaptureFinalizationService, PhotoCaptureFinalizationService>();
 
+        // Enable mock services for UI testing
+        // Check environment variable first, then fall back to DEBUG mode check
+        var useMockServices = Environment.GetEnvironmentVariable("USE_MOCK_SERVICES") == "true";
+
+#if DEBUG
+        // In DEBUG builds, also check for a marker file that UI tests can create
+        var appDataDir = FileSystem.AppDataDirectory;
+        var mockMarkerFile = Path.Combine(appDataDir, ".use_mock_services");
+        if (File.Exists(mockMarkerFile))
+        {
+            useMockServices = true;
+        }
+#endif
+
 #if ANDROID
         builder.Services.AddSingleton<IPhotoResizer, AndroidPhotoResizer>();
-        builder.Services.AddSingleton<ICameraCaptureService, AndroidCameraCaptureService>();
+        if (useMockServices)
+        {
+            builder.Services.AddSingleton<ICameraCaptureService, MockCameraCaptureService>();
+        }
+        else
+        {
+            builder.Services.AddSingleton<ICameraCaptureService, AndroidCameraCaptureService>();
+        }
         builder.Services.AddSingleton<IAudioRecordingService, AndroidAudioRecordingService>();
         builder.Services.AddScoped<IShareIntentProcessor, ShareIntentProcessor>();
         builder.Services.AddSingleton<IBackgroundExecutionService, WellnessWingman.Platforms.Android.Services.AndroidBackgroundExecutionService>();
         builder.Services.AddSingleton<INotificationPermissionService, WellnessWingman.Platforms.Android.Services.AndroidNotificationPermissionService>();
 #elif IOS
         builder.Services.AddSingleton<IPhotoResizer, NoOpPhotoResizer>();
-        builder.Services.AddSingleton<ICameraCaptureService, MediaPickerCameraCaptureService>();
+        if (useMockServices)
+        {
+            builder.Services.AddSingleton<ICameraCaptureService, MockCameraCaptureService>();
+        }
+        else
+        {
+            builder.Services.AddSingleton<ICameraCaptureService, MediaPickerCameraCaptureService>();
+        }
         builder.Services.AddSingleton<IAudioRecordingService, IOSAudioRecordingService>();
         builder.Services.AddSingleton<IBackgroundExecutionService, WellnessWingman.Platforms.iOS.Services.IOSBackgroundExecutionService>();
         builder.Services.AddSingleton<INotificationPermissionService, NoOpNotificationPermissionService>();
 #else
         builder.Services.AddSingleton<IPhotoResizer, NoOpPhotoResizer>();
-        builder.Services.AddSingleton<ICameraCaptureService, MediaPickerCameraCaptureService>();
+        if (useMockServices)
+        {
+            builder.Services.AddSingleton<ICameraCaptureService, MockCameraCaptureService>();
+        }
+        else
+        {
+            builder.Services.AddSingleton<ICameraCaptureService, MediaPickerCameraCaptureService>();
+        }
         builder.Services.AddSingleton<IAudioRecordingService, NoOpAudioRecordingService>();
         builder.Services.AddSingleton<IBackgroundExecutionService, NoOpBackgroundExecutionService>();
         builder.Services.AddSingleton<INotificationPermissionService, NoOpNotificationPermissionService>();
@@ -115,12 +150,22 @@ public static class MauiProgram
         builder.Services.AddTransient<IDailySummaryService, DailySummaryService>();
         builder.Services.AddTransient<DailyTotalsCalculator>();
         builder.Services.AddTransient<UnifiedAnalysisHelper>(); // New service
-        builder.Services.AddTransient<OpenAiLlmClient>();
-        builder.Services.AddTransient<GeminiLlmClient>();
-        builder.Services.AddTransient<ILlmClientFactory, LlmClientFactory>();
-        builder.Services.AddTransient<OpenAiAudioTranscriptionService>();
-        builder.Services.AddTransient<GeminiAudioTranscriptionService>();
-        builder.Services.AddTransient<IAudioTranscriptionServiceFactory, AudioTranscriptionServiceFactory>();
+        if (useMockServices)
+        {
+            builder.Services.AddTransient<MockLlmClient>();
+            builder.Services.AddTransient<ILlmClientFactory, MockLlmClientFactory>();
+            builder.Services.AddTransient<MockAudioTranscriptionService>();
+            builder.Services.AddTransient<IAudioTranscriptionServiceFactory, MockAudioTranscriptionServiceFactory>();
+        }
+        else
+        {
+            builder.Services.AddTransient<OpenAiLlmClient>();
+            builder.Services.AddTransient<GeminiLlmClient>();
+            builder.Services.AddTransient<ILlmClientFactory, LlmClientFactory>();
+            builder.Services.AddTransient<OpenAiAudioTranscriptionService>();
+            builder.Services.AddTransient<GeminiAudioTranscriptionService>();
+            builder.Services.AddTransient<IAudioTranscriptionServiceFactory, AudioTranscriptionServiceFactory>();
+        }
         builder.Services.AddSingleton<MealAnalysisValidator>();
         builder.Services.AddTransient<WeekSummaryBuilder>();
 

@@ -74,11 +74,16 @@ public class GeminiLlmClient : ILLmClient
                 }).ConfigureAwait(false);
 
             var insights = GeminiResponseParser.ExtractText(response);
+            var normalizedInsights = GeminiResponseParser.ExtractFirstJsonObject(insights) ?? insights;
+            if (!string.Equals(insights, normalizedInsights, StringComparison.Ordinal))
+            {
+                _logger.LogInformation("Trimmed Gemini response to first JSON object for entry {EntryId}.", entry.EntryId);
+            }
 
             UnifiedAnalysisResult? parsedResult = null;
             try
             {
-                parsedResult = JsonSerializer.Deserialize<UnifiedAnalysisResult>(insights);
+                parsedResult = JsonSerializer.Deserialize<UnifiedAnalysisResult>(normalizedInsights);
                 _logger.LogInformation(
                     "Parsed unified analysis for entry {EntryId} detected as {EntryType}.",
                     entry.EntryId,
@@ -86,7 +91,7 @@ public class GeminiLlmClient : ILLmClient
             }
             catch (JsonException jsonEx)
             {
-                _logger.LogWarning(jsonEx, "Failed to parse unified analysis response. Storing raw JSON. Response: {Response}", insights);
+                _logger.LogWarning(jsonEx, "Failed to parse unified analysis response. Storing raw JSON. Response: {Response}", normalizedInsights);
             }
 
             var analysis = new EntryAnalysis
@@ -95,7 +100,7 @@ public class GeminiLlmClient : ILLmClient
                 ProviderId = context.Provider.ToString(),
                 Model = context.ModelId,
                 CapturedAt = DateTime.UtcNow,
-                InsightsJson = insights,
+                InsightsJson = normalizedInsights,
                 SchemaVersion = parsedResult?.SchemaVersion ?? "unknown"
             };
 
@@ -136,11 +141,16 @@ public class GeminiLlmClient : ILLmClient
                 }).ConfigureAwait(false);
 
             var insights = GeminiResponseParser.ExtractText(response);
+            var normalizedInsights = GeminiResponseParser.ExtractFirstJsonObject(insights) ?? insights;
+            if (!string.Equals(insights, normalizedInsights, StringComparison.Ordinal))
+            {
+                _logger.LogInformation("Trimmed Gemini response to first JSON object for summary entry {EntryId}.", summaryRequest.SummaryEntryId);
+            }
 
             DailySummaryResult? parsedResult = null;
             try
             {
-                parsedResult = JsonSerializer.Deserialize<DailySummaryResult>(insights);
+                parsedResult = JsonSerializer.Deserialize<DailySummaryResult>(normalizedInsights);
                 _logger.LogInformation(
                     "Parsed structured daily summary for {SummaryDate} covering {EntryCount} entries.",
                     summaryRequest.SummaryDate.ToString("yyyy-MM-dd"),
@@ -148,7 +158,7 @@ public class GeminiLlmClient : ILLmClient
             }
             catch (JsonException jsonEx)
             {
-                _logger.LogWarning(jsonEx, "Failed to parse structured daily summary response. Storing raw JSON. Response: {Response}", insights);
+                _logger.LogWarning(jsonEx, "Failed to parse structured daily summary response. Storing raw JSON. Response: {Response}", normalizedInsights);
             }
 
             var analysis = new EntryAnalysis
@@ -157,7 +167,7 @@ public class GeminiLlmClient : ILLmClient
                 ProviderId = context.Provider.ToString(),
                 Model = context.ModelId,
                 CapturedAt = DateTime.UtcNow,
-                InsightsJson = insights,
+                InsightsJson = normalizedInsights,
                 SchemaVersion = parsedResult?.SchemaVersion ?? "unknown"
             };
 
