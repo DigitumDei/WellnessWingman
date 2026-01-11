@@ -147,4 +147,25 @@ public class MainPage : BasePage
             return string.Empty;
         }
     }
+
+    /// <summary>
+    /// Opens Settings via the flyout menu
+    /// </summary>
+    public SettingsPage OpenSettings()
+    {
+        // Open flyout menu by swiping from left edge (Shell flyout gesture)
+        SwipeRight();
+
+        // Wait for the settings item to appear in the flyout
+        var wait = new OpenQA.Selenium.Support.UI.WebDriverWait(Driver, TimeSpan.FromSeconds(10));
+        var settingsItem = wait.Until(_ => FindByText("Settings"));
+
+        if (settingsItem == null)
+        {
+            throw new InvalidOperationException("Settings menu item not found in flyout");
+        }
+        Tap(settingsItem);
+
+        return new SettingsPage(Driver);
+    }
 }

@@ -12,8 +12,15 @@ public class SettingsPage : BasePage
     {
     }
 
-    // Element locators - these will be updated once AutomationIds are added to XAML
+    // Element locators
     private const string SettingsTitle = "Settings";
+    private const string ProviderPickerId = "LlmProviderPicker";
+    private const string ApiKeyEntryId = "ApiKeyEntry";
+    private const string SaveButtonId = "SaveSettingsButton";
+
+    public AppiumElement? ProviderPicker => FindByAutomationId(ProviderPickerId);
+    public AppiumElement? ApiKeyEntry => FindByAutomationId(ApiKeyEntryId);
+    public AppiumElement? SaveButton => FindByAutomationId(SaveButtonId);
 
     /// <summary>
     /// Checks if the settings page is displayed
@@ -30,5 +37,61 @@ public class SettingsPage : BasePage
     {
         WaitForElement(MobileBy.AndroidUIAutomator(
             $"new UiSelector().text(\"{SettingsTitle}\")"), timeoutSeconds);
+    }
+
+    /// <summary>
+    /// Checks if the provider picker is visible
+    /// </summary>
+    public bool IsProviderPickerVisible()
+    {
+        return ProviderPicker?.Displayed ?? false;
+    }
+
+    /// <summary>
+    /// Checks if the API key entry is visible
+    /// </summary>
+    public bool IsApiKeyEntryVisible()
+    {
+        return ApiKeyEntry?.Displayed ?? false;
+    }
+
+    /// <summary>
+    /// Checks if the save button is visible
+    /// </summary>
+    public bool IsSaveButtonVisible()
+    {
+        return SaveButton?.Displayed ?? false;
+    }
+
+    /// <summary>
+    /// Enters an API key
+    /// </summary>
+    public void EnterApiKey(string apiKey)
+    {
+        var entry = ApiKeyEntry;
+        if (entry != null)
+        {
+            EnterText(entry, apiKey);
+        }
+    }
+
+    /// <summary>
+    /// Gets the current API key text
+    /// </summary>
+    public string? GetApiKeyText()
+    {
+        return ApiKeyEntry?.Text;
+    }
+
+    /// <summary>
+    /// Taps the save button
+    /// </summary>
+    public void TapSaveButton()
+    {
+        var button = SaveButton;
+        if (button != null)
+        {
+            Tap(button);
+        }
     }
 }

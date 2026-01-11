@@ -12,10 +12,15 @@ public abstract class BaseTest : IDisposable
     protected MainPage? MainPage { get; private set; }
 
     /// <summary>
+    /// Static property that determines if UI tests should be skipped
+    /// </summary>
+    public static string? SkipReason { get; } = ShouldSkipUiTests();
+
+    /// <summary>
     /// Determines if UI tests should run based on environment configuration
     /// </summary>
     /// <returns>Skip reason if tests should be skipped, null if tests should run</returns>
-    public static string? ShouldSkipUiTests()
+    private static string? ShouldSkipUiTests()
     {
         var runUiTests = Environment.GetEnvironmentVariable("RUN_UI_TESTS");
 
