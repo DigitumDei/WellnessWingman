@@ -12,8 +12,7 @@ public class NavigationTests : BaseTest
 {
     public NavigationTests()
     {
-        var skipReason = ShouldSkipUiTests();
-        if (skipReason == null)
+        if (SkipReason == null)
         {
             SetupDriver();
         }
@@ -23,8 +22,7 @@ public class NavigationTests : BaseTest
     [Trait("Category", "Navigation")]
     public void MainPage_CanNavigateToSettings()
     {
-        var skipReason = ShouldSkipUiTests();
-        if (skipReason != null) return;
+        if (SkipReason != null) return;
 
         // Arrange
         MainPage!.WaitForPageLoad();

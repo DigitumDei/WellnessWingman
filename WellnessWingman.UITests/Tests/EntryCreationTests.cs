@@ -12,8 +12,7 @@ public class EntryCreationTests : BaseTest
 {
     public EntryCreationTests()
     {
-        var skipReason = ShouldSkipUiTests();
-        if (skipReason == null)
+        if (SkipReason == null)
         {
             SetupDriver();
         }
@@ -23,8 +22,7 @@ public class EntryCreationTests : BaseTest
     [Trait("Category", "EntryCreation")]
     public void TakePhoto_ShowsPhotoReviewPage()
     {
-        var skipReason = ShouldSkipUiTests();
-        if (skipReason != null) return;
+        if (SkipReason != null) return;
 
         // Arrange
         MainPage!.WaitForPageLoad();
@@ -41,8 +39,7 @@ public class EntryCreationTests : BaseTest
     [Trait("Category", "EntryCreation")]
     public void PhotoReview_CancelButton_ReturnsToMainPage()
     {
-        var skipReason = ShouldSkipUiTests();
-        if (skipReason != null) return;
+        if (SkipReason != null) return;
 
         // Arrange
         MainPage!.WaitForPageLoad();
@@ -62,8 +59,7 @@ public class EntryCreationTests : BaseTest
     [Trait("Category", "EntryCreation")]
     public void PhotoReview_SaveButton_CreatesEntryAndReturnsToMain()
     {
-        var skipReason = ShouldSkipUiTests();
-        if (skipReason != null) return;
+        if (SkipReason != null) return;
 
         // Arrange
         MainPage!.WaitForPageLoad();
@@ -84,8 +80,7 @@ public class EntryCreationTests : BaseTest
     [Trait("Category", "EntryCreation")]
     public void PhotoReview_CanAddDescription()
     {
-        var skipReason = ShouldSkipUiTests();
-        if (skipReason != null) return;
+        if (SkipReason != null) return;
 
         // Arrange
         MainPage!.WaitForPageLoad();

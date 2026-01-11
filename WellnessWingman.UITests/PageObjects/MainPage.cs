@@ -156,11 +156,10 @@ public class MainPage : BasePage
         // Open flyout menu by swiping from left edge (Shell flyout gesture)
         SwipeRight();
 
-        // Wait for flyout to animate
-        Thread.Sleep(500);
+        // Wait for the settings item to appear in the flyout
+        var wait = new OpenQA.Selenium.Support.UI.WebDriverWait(Driver, TimeSpan.FromSeconds(10));
+        var settingsItem = wait.Until(_ => FindByText("Settings"));
 
-        // Tap Settings in the flyout
-        var settingsItem = FindByText("Settings");
         if (settingsItem == null)
         {
             throw new InvalidOperationException("Settings menu item not found in flyout");

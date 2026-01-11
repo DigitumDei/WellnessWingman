@@ -10,10 +10,7 @@ public class SmokeTests : BaseTest
 {
     public SmokeTests()
     {
-        // Skip attribute on individual tests doesn't work with dynamic values,
-        // so we check here and skip test execution
-        var skipReason = ShouldSkipUiTests();
-        if (skipReason == null)
+        if (SkipReason == null)
         {
             SetupDriver();
         }
@@ -23,13 +20,7 @@ public class SmokeTests : BaseTest
     [Trait("Category", "Smoke")]
     public void AppLaunches_Successfully()
     {
-        // Skip if UI tests are disabled
-        var skipReason = ShouldSkipUiTests();
-        if (skipReason != null)
-        {
-            // Test passes without running when UI tests are disabled
-            return;
-        }
+        if (SkipReason != null) return;
 
         // Assert
         Assert.NotNull(Driver);
@@ -40,13 +31,7 @@ public class SmokeTests : BaseTest
     [Trait("Category", "Smoke")]
     public void MainPage_IsDisplayed_OnAppLaunch()
     {
-        // Skip if UI tests are disabled
-        var skipReason = ShouldSkipUiTests();
-        if (skipReason != null)
-        {
-            // Test passes without running when UI tests are disabled
-            return;
-        }
+        if (SkipReason != null) return;
 
         // Act
         MainPage!.WaitForPageLoad();
@@ -59,13 +44,7 @@ public class SmokeTests : BaseTest
     [Trait("Category", "Smoke")]
     public void TakePhotoButton_IsVisible_OnMainPage()
     {
-        // Skip if UI tests are disabled
-        var skipReason = ShouldSkipUiTests();
-        if (skipReason != null)
-        {
-            // Test passes without running when UI tests are disabled
-            return;
-        }
+        if (SkipReason != null) return;
 
         // Arrange
         MainPage!.WaitForPageLoad();
@@ -81,13 +60,7 @@ public class SmokeTests : BaseTest
     [Trait("Category", "Smoke")]
     public void RecentEntriesSection_IsVisible_OnMainPage()
     {
-        // Skip if UI tests are disabled
-        var skipReason = ShouldSkipUiTests();
-        if (skipReason != null)
-        {
-            // Test passes without running when UI tests are disabled
-            return;
-        }
+        if (SkipReason != null) return;
 
         // Arrange
         MainPage!.WaitForPageLoad();

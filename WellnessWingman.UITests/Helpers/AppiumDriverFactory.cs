@@ -9,6 +9,8 @@ namespace WellnessWingman.UITests.Helpers;
 /// </summary>
 public static class AppiumDriverFactory
 {
+    private const int AdbCommandTimeoutMs = 10000;
+
     /// <summary>
     /// Creates a new AndroidDriver instance with appropriate capabilities
     /// </summary>
@@ -53,8 +55,9 @@ public static class AppiumDriverFactory
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Warning: Could not create mock services marker file: {ex.Message}");
-            Console.WriteLine("Tests may run without mock services if the file cannot be created.");
+            Console.WriteLine($"Error: Could not create mock services marker file: {ex.Message}");
+            Console.WriteLine("Aborting test run as mock services are required but could not be configured.");
+            throw new InvalidOperationException("Failed to create mock services marker file. See console output for details.", ex);
         }
     }
 
@@ -79,7 +82,7 @@ public static class AppiumDriverFactory
             throw new InvalidOperationException("Failed to start adb process");
         }
 
-        process.WaitForExit(10000);
+        process.WaitForExit(AdbCommandTimeoutMs);
 
         if (process.ExitCode != 0)
         {

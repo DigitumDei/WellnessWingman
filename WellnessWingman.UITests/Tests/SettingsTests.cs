@@ -11,8 +11,7 @@ public class SettingsTests : BaseTest
 {
     public SettingsTests()
     {
-        var skipReason = ShouldSkipUiTests();
-        if (skipReason == null)
+        if (SkipReason == null)
         {
             SetupDriver();
         }
@@ -22,8 +21,7 @@ public class SettingsTests : BaseTest
     [Trait("Category", "Settings")]
     public void Settings_ProviderPicker_IsVisible()
     {
-        var skipReason = ShouldSkipUiTests();
-        if (skipReason != null) return;
+        if (SkipReason != null) return;
 
         // Arrange
         MainPage!.WaitForPageLoad();
@@ -38,8 +36,7 @@ public class SettingsTests : BaseTest
     [Trait("Category", "Settings")]
     public void Settings_ApiKeyEntry_IsVisible()
     {
-        var skipReason = ShouldSkipUiTests();
-        if (skipReason != null) return;
+        if (SkipReason != null) return;
 
         // Arrange
         MainPage!.WaitForPageLoad();
@@ -53,8 +50,7 @@ public class SettingsTests : BaseTest
     [Trait("Category", "Settings")]
     public void Settings_SaveButton_IsVisible()
     {
-        var skipReason = ShouldSkipUiTests();
-        if (skipReason != null) return;
+        if (SkipReason != null) return;
 
         // Arrange
         MainPage!.WaitForPageLoad();
@@ -68,8 +64,7 @@ public class SettingsTests : BaseTest
     [Trait("Category", "Settings")]
     public void Settings_CanEnterApiKey()
     {
-        var skipReason = ShouldSkipUiTests();
-        if (skipReason != null) return;
+        if (SkipReason != null) return;
 
         // Arrange
         MainPage!.WaitForPageLoad();
