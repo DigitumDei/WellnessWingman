@@ -145,9 +145,16 @@ public partial class DailySummaryViewModel : ObservableObject
             {
                 await MainThread.InvokeOnMainThreadAsync(() =>
                 {
-                    StatusMessage = ProcessingStatus is ProcessingStatus.Pending or ProcessingStatus.Processing
-                        ? "Your summary is still processing. Please check back soon."
-                        : "No analysis data is available for this summary yet.";
+                    StatusMessage = ProcessingStatus switch
+                    {
+                        ProcessingStatus.Pending or ProcessingStatus.Processing =>
+                            "Your summary is still processing. Please check back soon.",
+                        ProcessingStatus.Failed =>
+                            "We couldn't generate the summary. Try regenerating it.",
+                        ProcessingStatus.Skipped =>
+                            "Summary generation is unavailable. Check your AI provider settings and try again.",
+                        _ => "No analysis data is available for this summary yet."
+                    };
                 });
                 return;
             }
@@ -261,9 +268,6 @@ public partial class DailySummaryViewModel : ObservableObject
                 GeneratedAtOffsetMinutes = offsetMinutes
             };
             entry.Payload = payload;
-            entry.CapturedAt = regenerateCapturedAtUtc;
-            entry.CapturedAtTimeZoneId = timeZoneId;
-            entry.CapturedAtOffsetMinutes = offsetMinutes;
             entry.ProcessingStatus = ProcessingStatus.Pending;
             entry.DataSchemaVersion = payload.SchemaVersion;
 

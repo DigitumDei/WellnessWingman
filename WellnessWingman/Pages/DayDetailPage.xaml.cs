@@ -21,6 +21,7 @@ namespace WellnessWingman.Pages
         {
             base.OnAppearing();
             _backgroundAnalysisService.StatusChanged += OnEntryStatusChanged;
+            _ = ViewModel.ReloadEntriesAsync();
         }
 
         protected override void OnDisappearing()
