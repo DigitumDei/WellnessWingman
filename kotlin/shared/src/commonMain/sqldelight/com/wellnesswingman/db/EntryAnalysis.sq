@@ -1,0 +1,90 @@
+-- EntryAnalysis table schema
+
+CREATE TABLE EntryAnalysis (
+    analysisId INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    entryId INTEGER NOT NULL,
+    externalId TEXT,
+    providerId TEXT NOT NULL DEFAULT '',
+    model TEXT NOT NULL DEFAULT '',
+    capturedAt INTEGER NOT NULL,
+    insightsJson TEXT NOT NULL DEFAULT '',
+    schemaVersion TEXT NOT NULL DEFAULT '1.0',
+    FOREIGN KEY (entryId) REFERENCES TrackedEntry(entryId) ON DELETE CASCADE
+);
+
+-- Index for foreign key
+CREATE INDEX idx_entry_analysis_entry_id ON EntryAnalysis(entryId);
+
+-- Queries
+
+-- Get all analyses
+getAllAnalyses:
+SELECT * FROM EntryAnalysis
+ORDER BY capturedAt DESC;
+
+-- Get analysis by ID
+getAnalysisById:
+SELECT * FROM EntryAnalysis
+WHERE analysisId = ?;
+
+-- Get analysis by external ID
+getAnalysisByExternalId:
+SELECT * FROM EntryAnalysis
+WHERE externalId = ?;
+
+-- Get analyses for a specific entry
+getAnalysesForEntry:
+SELECT * FROM EntryAnalysis
+WHERE entryId = ?
+ORDER BY capturedAt DESC;
+
+-- Get latest analysis for an entry
+getLatestAnalysisForEntry:
+SELECT * FROM EntryAnalysis
+WHERE entryId = ?
+ORDER BY capturedAt DESC
+LIMIT 1;
+
+-- Get analyses by provider
+getAnalysesByProvider:
+SELECT * FROM EntryAnalysis
+WHERE providerId = ?
+ORDER BY capturedAt DESC;
+
+-- Get analyses by model
+getAnalysesByModel:
+SELECT * FROM EntryAnalysis
+WHERE model = ?
+ORDER BY capturedAt DESC;
+
+-- Insert analysis
+insertAnalysis:
+INSERT INTO EntryAnalysis(
+    entryId,
+    externalId,
+    providerId,
+    model,
+    capturedAt,
+    insightsJson,
+    schemaVersion
+) VALUES (?, ?, ?, ?, ?, ?, ?);
+
+-- Update analysis
+updateAnalysis:
+UPDATE EntryAnalysis
+SET insightsJson = ?, schemaVersion = ?
+WHERE analysisId = ?;
+
+-- Delete analysis
+deleteAnalysis:
+DELETE FROM EntryAnalysis
+WHERE analysisId = ?;
+
+-- Delete analyses for entry
+deleteAnalysesForEntry:
+DELETE FROM EntryAnalysis
+WHERE entryId = ?;
+
+-- Get last inserted row ID
+lastInsertRowId:
+SELECT last_insert_rowid();
