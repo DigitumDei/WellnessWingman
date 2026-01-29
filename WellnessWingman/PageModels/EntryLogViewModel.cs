@@ -52,12 +52,10 @@ namespace WellnessWingman.PageModels;
     [NotifyPropertyChangedFor(nameof(IsSummaryProcessing))]
     private bool isGeneratingSummary;
 
-    public bool ShowGenerateSummaryButton => SummaryCard is null;
-    
-    public bool ShowViewAnalysisButton => SummaryCard is not null && 
-                                         (SummaryCard.IsClickable || 
-                                          SummaryCard.ProcessingStatus == ProcessingStatus.Failed || 
-                                          SummaryCard.ProcessingStatus == ProcessingStatus.Skipped);
+    public bool ShowGenerateSummaryButton => SummaryCard is null ||
+                                            SummaryCard.ProcessingStatus is ProcessingStatus.Failed or ProcessingStatus.Skipped;
+
+    public bool ShowViewAnalysisButton => SummaryCard is not null && SummaryCard.IsClickable;
 
     public bool IsSummaryProcessing => IsGeneratingSummary || 
                                        (SummaryCard is not null && 
@@ -243,8 +241,15 @@ namespace WellnessWingman.PageModels;
             var entryCountSnapshot = entriesForDay
                 .Where(entry => entry.EntryType != EntryType.DailySummary)
                 .Count(entry => entry.ProcessingStatus == ProcessingStatus.Completed);
-            var summaryCapturedAtUtc = DateTime.UtcNow;
-            var (summaryTimeZoneId, summaryOffsetMinutes) = DateTimeConverter.CaptureTimeZoneMetadata(summaryCapturedAtUtc);
+            var summaryTimeZone = TimeZoneInfo.Local;
+            var summaryCapturedAtUtc = IsHistoricalMode
+                ? TimeZoneInfo.ConvertTimeToUtc(
+                    DateTime.SpecifyKind(dateToQuery.Date.AddHours(12), DateTimeKind.Unspecified),
+                    summaryTimeZone)
+                : DateTime.UtcNow;
+            var (summaryTimeZoneId, summaryOffsetMinutes) = DateTimeConverter.CaptureTimeZoneMetadata(
+                summaryCapturedAtUtc,
+                summaryTimeZone);
 
             var summaryPayload = new DailySummaryPayload
             {
@@ -358,14 +363,19 @@ namespace WellnessWingman.PageModels;
 
     private bool CanGenerateSummary()
     {
-        if (IsHistoricalMode)
+        if (IsGeneratingSummary)
         {
             return false;
         }
 
-        if (IsGeneratingSummary)
+        if (IsHistoricalMode)
         {
-            return false;
+            if (SummaryCard is null)
+            {
+                return true;
+            }
+
+            return SummaryCard.ProcessingStatus is ProcessingStatus.Failed or ProcessingStatus.Skipped;
         }
 
         if (SummaryCard is null)
@@ -803,6 +813,7 @@ namespace WellnessWingman.PageModels;
 
                 UpdateSummaryOutdatedFlag();
                 GenerateDailySummaryCommand.NotifyCanExecuteChanged();
+                OnPropertyChanged(nameof(ShowGenerateSummaryButton));
                 OnPropertyChanged(nameof(ShowViewAnalysisButton));
                 OnPropertyChanged(nameof(IsSummaryProcessing));
             });
