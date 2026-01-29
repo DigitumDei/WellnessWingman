@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -24,7 +25,9 @@ import com.wellnesswingman.data.model.TrackedEntry
 import com.wellnesswingman.ui.components.EmptyState
 import com.wellnesswingman.ui.components.ErrorMessage
 import com.wellnesswingman.ui.components.LoadingIndicator
+import com.wellnesswingman.ui.screens.calendar.MonthViewScreen
 import com.wellnesswingman.ui.screens.detail.EntryDetailScreen
+import com.wellnesswingman.ui.screens.photo.PhotoReviewScreen
 import com.wellnesswingman.ui.screens.settings.SettingsScreen
 import com.wellnesswingman.util.DateTimeUtil
 import kotlinx.datetime.TimeZone
@@ -42,6 +45,9 @@ class MainScreen : Screen {
                 TopAppBar(
                     title = { Text("WellnessWingman") },
                     actions = {
+                        IconButton(onClick = { navigator.push(MonthViewScreen()) }) {
+                            Icon(Icons.Default.CalendarMonth, contentDescription = "Calendar")
+                        }
                         IconButton(onClick = { navigator.push(SettingsScreen()) }) {
                             Icon(Icons.Default.Settings, contentDescription = "Settings")
                         }
@@ -49,7 +55,7 @@ class MainScreen : Screen {
                 )
             },
             floatingActionButton = {
-                FloatingActionButton(onClick = { /* TODO: Navigate to add entry */ }) {
+                FloatingActionButton(onClick = { navigator.push(PhotoReviewScreen()) }) {
                     Icon(Icons.Default.Add, contentDescription = "Add Entry")
                 }
             }
