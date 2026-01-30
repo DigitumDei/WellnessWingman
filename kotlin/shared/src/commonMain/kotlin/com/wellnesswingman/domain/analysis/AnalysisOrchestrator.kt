@@ -69,8 +69,8 @@ class AnalysisOrchestrator(
             // Create and save the analysis
             val analysis = EntryAnalysis(
                 entryId = entry.entryId,
-                providerId = llmClientFactory.create(llmClientFactory.createForCurrentProvider().javaClass.simpleName
-                    .let { if (it.contains("OpenAi")) "openai" else "gemini" }),
+                providerId = llmClient.javaClass.simpleName
+                    .let { if (it.contains("OpenAi")) "openai" else "gemini" },
                 model = result.diagnostics.model,
                 capturedAt = Clock.System.now(),
                 insightsJson = result.content,

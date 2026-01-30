@@ -13,6 +13,7 @@ import com.aallam.openai.client.OpenAI
 import com.aallam.openai.client.LoggingConfig
 import io.ktor.utils.io.core.toByteArray
 import kotlinx.datetime.Clock
+import okio.Buffer
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 
@@ -81,7 +82,7 @@ class OpenAiLlmClient(
         val request = TranscriptionRequest(
             audio = FileSource(
                 name = "audio.$extension",
-                source = audioBytes
+                source = Buffer().write(audioBytes)
             ),
             model = ModelId("whisper-1")
         )
