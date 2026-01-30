@@ -14,16 +14,17 @@ kotlin {
         }
     }
 
-    listOf(
-        iosX64(),
-        iosArm64(),
-        iosSimulatorArm64()
-    ).forEach {
-        it.binaries.framework {
-            baseName = "shared"
-            isStatic = true
-        }
-    }
+    // iOS targets temporarily disabled - requires compatible Gradle wrapper
+    // listOf(
+    //     iosX64(),
+    //     iosArm64(),
+    //     iosSimulatorArm64()
+    // ).forEach {
+    //     it.binaries.framework {
+    //         baseName = "shared"
+    //         isStatic = true
+    //     }
+    // }
 
     jvm("desktop") {
         compilations.all {
@@ -71,6 +72,7 @@ kotlin {
                 implementation(libs.coroutines.test)
                 implementation(libs.mockk)
                 implementation(libs.turbine)
+                implementation(libs.sqldelight.driver.jdbc)
             }
         }
 
@@ -82,23 +84,24 @@ kotlin {
             }
         }
 
-        val iosMain by creating {
-            dependsOn(commonMain)
-            dependencies {
-                implementation(libs.sqldelight.driver.native)
-                implementation(libs.ktor.client.darwin)
-            }
-        }
-
-        val iosX64Main by getting {
-            dependsOn(iosMain)
-        }
-        val iosArm64Main by getting {
-            dependsOn(iosMain)
-        }
-        val iosSimulatorArm64Main by getting {
-            dependsOn(iosMain)
-        }
+        // iOS source sets temporarily disabled
+        // val iosMain by creating {
+        //     dependsOn(commonMain)
+        //     dependencies {
+        //         implementation(libs.sqldelight.driver.native)
+        //         implementation(libs.ktor.client.darwin)
+        //     }
+        // }
+        //
+        // val iosX64Main by getting {
+        //     dependsOn(iosMain)
+        // }
+        // val iosArm64Main by getting {
+        //     dependsOn(iosMain)
+        // }
+        // val iosSimulatorArm64Main by getting {
+        //     dependsOn(iosMain)
+        // }
 
         val desktopMain by getting {
             dependencies {

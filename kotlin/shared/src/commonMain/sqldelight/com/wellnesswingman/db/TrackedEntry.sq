@@ -112,7 +112,7 @@ WHERE entryId = ?;
 
 -- Count entries by type
 countEntriesByType:
-SELECT entryType, COUNT(*) as count
+SELECT entryType, COUNT(*) AS entry_count
 FROM TrackedEntry
 GROUP BY entryType;
 
