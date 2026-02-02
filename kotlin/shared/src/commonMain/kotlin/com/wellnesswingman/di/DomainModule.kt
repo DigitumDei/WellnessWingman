@@ -1,10 +1,17 @@
 package com.wellnesswingman.di
 
 import com.wellnesswingman.domain.analysis.AnalysisOrchestrator
+import com.wellnesswingman.domain.analysis.BackgroundAnalysisService
 import com.wellnesswingman.domain.analysis.DailySummaryService
 import com.wellnesswingman.domain.analysis.DailyTotalsCalculator
+import com.wellnesswingman.domain.analysis.DefaultBackgroundAnalysisService
+import com.wellnesswingman.domain.analysis.DefaultStaleEntryRecoveryService
+import com.wellnesswingman.domain.analysis.StaleEntryRecoveryService
+import com.wellnesswingman.domain.events.DefaultStatusChangeNotifier
+import com.wellnesswingman.domain.events.StatusChangeNotifier
 import com.wellnesswingman.domain.llm.LlmClientFactory
-import org.koin.core.module.dsl.factoryOf
+import com.wellnesswingman.domain.navigation.CalendarNavigationService
+import com.wellnesswingman.domain.navigation.HistoricalNavigationContext
 import org.koin.core.module.dsl.singleOf
 import org.koin.dsl.module
 
@@ -18,7 +25,31 @@ val domainModule = module {
     // LLM
     singleOf(::LlmClientFactory)
 
+    // Event system
+    single<StatusChangeNotifier> { DefaultStatusChangeNotifier() }
+
+    // Navigation
+    single { HistoricalNavigationContext() }
+    single { CalendarNavigationService(get()) }
+
     // Services
     singleOf(::AnalysisOrchestrator)
     singleOf(::DailySummaryService)
+
+    // Background services
+    single<BackgroundAnalysisService> {
+        DefaultBackgroundAnalysisService(
+            trackedEntryRepository = get(),
+            entryAnalysisRepository = get(),
+            analysisOrchestrator = get(),
+            backgroundExecutionService = get(),
+            statusChangeNotifier = get()
+        )
+    }
+
+    single<StaleEntryRecoveryService> {
+        DefaultStaleEntryRecoveryService(
+            trackedEntryRepository = get()
+        )
+    }
 }

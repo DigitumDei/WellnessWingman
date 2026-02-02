@@ -4,6 +4,8 @@ import com.russhwolf.settings.PreferencesSettings
 import com.russhwolf.settings.Settings
 import com.wellnesswingman.data.db.DriverFactory
 import com.wellnesswingman.platform.AudioRecordingService
+import com.wellnesswingman.platform.BackgroundExecutionService
+import com.wellnesswingman.platform.DesktopBackgroundExecutionService
 import com.wellnesswingman.platform.DiagnosticShare
 import org.koin.dsl.module
 import java.util.prefs.Preferences
@@ -24,4 +26,7 @@ val platformModule = module {
     // Platform services
     single { AudioRecordingService() }
     single { DiagnosticShare() }
+
+    // Background execution service (no-op on desktop)
+    single<BackgroundExecutionService> { DesktopBackgroundExecutionService() }
 }

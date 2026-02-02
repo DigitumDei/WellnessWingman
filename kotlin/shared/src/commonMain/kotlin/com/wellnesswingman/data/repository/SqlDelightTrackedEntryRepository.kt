@@ -6,12 +6,15 @@ import com.wellnesswingman.data.model.EntryType
 import com.wellnesswingman.data.model.ProcessingStatus
 import com.wellnesswingman.data.model.TrackedEntry
 import com.wellnesswingman.db.WellnessWingmanDatabase
+import com.wellnesswingman.util.DateTimeConverter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.Instant
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.TimeZone
 
 /**
  * SQLDelight implementation of TrackedEntryRepository.
@@ -50,6 +53,18 @@ class SqlDelightTrackedEntryRepository(
             .executeAsList()
             .map { it.toTrackedEntry() }
     }
+
+    override suspend fun getEntriesForDay(date: LocalDate): List<TrackedEntry> =
+        withContext(Dispatchers.IO) {
+            val (start, end) = DateTimeConverter.getUtcBoundsForLocalDay(
+                date,
+                TimeZone.currentSystemDefault()
+            )
+            queries.getEntriesForDay(
+                start.toEpochMilliseconds(),
+                end.toEpochMilliseconds()
+            ).executeAsList().map { it.toTrackedEntry() }
+        }
 
     override suspend fun getEntriesForWeek(
         startMillis: Long,
@@ -99,6 +114,11 @@ class SqlDelightTrackedEntryRepository(
     override suspend fun updateEntryStatus(id: Long, status: ProcessingStatus) =
         withContext(Dispatchers.IO) {
             queries.updateEntryStatus(status.toStorageString(), id)
+        }
+
+    override suspend fun updateEntryType(id: Long, entryType: EntryType) =
+        withContext(Dispatchers.IO) {
+            queries.updateEntryType(entryType.toStorageString(), id)
         }
 
     override suspend fun updateEntryPayload(id: Long, payload: String, schemaVersion: Int) =

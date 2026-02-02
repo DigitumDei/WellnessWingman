@@ -4,20 +4,22 @@ import cafe.adriel.voyager.core.model.ScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import com.wellnesswingman.data.model.EntryAnalysis
 import com.wellnesswingman.data.model.EntryType
+import com.wellnesswingman.data.model.ProcessingStatus
 import com.wellnesswingman.data.model.TrackedEntry
 import com.wellnesswingman.data.model.analysis.ExerciseAnalysisResult
 import com.wellnesswingman.data.model.analysis.MealAnalysisResult
 import com.wellnesswingman.data.model.analysis.SleepAnalysisResult
+import com.wellnesswingman.data.model.analysis.UnifiedAnalysisResult
 import com.wellnesswingman.data.repository.EntryAnalysisRepository
 import com.wellnesswingman.data.repository.TrackedEntryRepository
-import com.wellnesswingman.domain.analysis.AnalysisOrchestrator
+import com.wellnesswingman.domain.analysis.BackgroundAnalysisService
+import com.wellnesswingman.domain.events.StatusChangeNotifier
 import com.wellnesswingman.platform.FileSystem
 import io.github.aakira.napier.Napier
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 
@@ -26,7 +28,8 @@ class EntryDetailViewModel(
     private val trackedEntryRepository: TrackedEntryRepository,
     private val entryAnalysisRepository: EntryAnalysisRepository,
     private val fileSystem: FileSystem,
-    private val analysisOrchestrator: AnalysisOrchestrator
+    private val backgroundAnalysisService: BackgroundAnalysisService,
+    private val statusChangeNotifier: StatusChangeNotifier
 ) : ScreenModel {
 
     private val json = Json {
@@ -37,8 +40,25 @@ class EntryDetailViewModel(
     private val _uiState = MutableStateFlow<EntryDetailUiState>(EntryDetailUiState.Loading)
     val uiState: StateFlow<EntryDetailUiState> = _uiState.asStateFlow()
 
+    // Correction mode state
+    private val _correctionState = MutableStateFlow(CorrectionState())
+    val correctionState: StateFlow<CorrectionState> = _correctionState.asStateFlow()
+
     init {
         loadEntry()
+        subscribeToStatusChanges()
+    }
+
+    private fun subscribeToStatusChanges() {
+        screenModelScope.launch {
+            statusChangeNotifier.statusChanges.collect { event ->
+                if (event.entryId == entryId && event.status == ProcessingStatus.COMPLETED) {
+                    Napier.i("Analysis completed for entry $entryId, reloading")
+                    loadEntry()
+                    exitCorrectionMode()
+                }
+            }
+        }
     }
 
     private fun loadEntry() {
@@ -84,20 +104,32 @@ class EntryDetailViewModel(
         if (analysis == null) return null
 
         return try {
-            when (entryType) {
-                EntryType.MEAL -> {
-                    val mealAnalysis = json.decodeFromString<MealAnalysisResult>(analysis.insightsJson)
-                    ParsedAnalysis.Meal(mealAnalysis)
+            // Try unified format first
+            try {
+                val unified = json.decodeFromString<UnifiedAnalysisResult>(analysis.insightsJson)
+                when {
+                    unified.mealAnalysis != null -> ParsedAnalysis.Meal(unified.mealAnalysis)
+                    unified.exerciseAnalysis != null -> ParsedAnalysis.Exercise(unified.exerciseAnalysis)
+                    unified.sleepAnalysis != null -> ParsedAnalysis.Sleep(unified.sleepAnalysis)
+                    else -> null
                 }
-                EntryType.EXERCISE -> {
-                    val exerciseAnalysis = json.decodeFromString<ExerciseAnalysisResult>(analysis.insightsJson)
-                    ParsedAnalysis.Exercise(exerciseAnalysis)
+            } catch (e: Exception) {
+                // Fall back to type-specific parsing
+                when (entryType) {
+                    EntryType.MEAL -> {
+                        val mealAnalysis = json.decodeFromString<MealAnalysisResult>(analysis.insightsJson)
+                        ParsedAnalysis.Meal(mealAnalysis)
+                    }
+                    EntryType.EXERCISE -> {
+                        val exerciseAnalysis = json.decodeFromString<ExerciseAnalysisResult>(analysis.insightsJson)
+                        ParsedAnalysis.Exercise(exerciseAnalysis)
+                    }
+                    EntryType.SLEEP -> {
+                        val sleepAnalysis = json.decodeFromString<SleepAnalysisResult>(analysis.insightsJson)
+                        ParsedAnalysis.Sleep(sleepAnalysis)
+                    }
+                    else -> null
                 }
-                EntryType.SLEEP -> {
-                    val sleepAnalysis = json.decodeFromString<SleepAnalysisResult>(analysis.insightsJson)
-                    ParsedAnalysis.Sleep(sleepAnalysis)
-                }
-                else -> null
             }
         } catch (e: Exception) {
             Napier.e("Failed to parse analysis for entry $entryId: ${e.message}", e)
@@ -126,23 +158,102 @@ class EntryDetailViewModel(
                     return@launch
                 }
 
-                // Start analysis in background
-                CoroutineScope(Dispatchers.Default).launch {
-                    try {
-                        Napier.i("Retrying analysis for entry $entryId")
-                        analysisOrchestrator.processEntry(entry, entry.userNotes)
-                        Napier.i("Analysis retry completed for entry $entryId")
-
-                        // Reload entry to show updated status
-                        screenModelScope.launch {
-                            loadEntry()
-                        }
-                    } catch (e: Exception) {
-                        Napier.e("Analysis retry failed for entry $entryId", e)
-                    }
-                }
+                Napier.i("Queueing analysis retry for entry $entryId")
+                backgroundAnalysisService.queueEntry(entryId, entry.userNotes)
             } catch (e: Exception) {
                 Napier.e("Failed to start analysis retry for entry $entryId", e)
+            }
+        }
+    }
+
+    // Correction mode methods
+
+    /**
+     * Enters correction mode and pre-populates with existing user notes.
+     */
+    fun enterCorrectionMode() {
+        screenModelScope.launch {
+            val currentState = _uiState.value
+            if (currentState is EntryDetailUiState.Success) {
+                _correctionState.update {
+                    CorrectionState(
+                        isActive = true,
+                        correctionText = currentState.entry.userNotes ?: ""
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * Exits correction mode and clears state.
+     */
+    fun exitCorrectionMode() {
+        _correctionState.update {
+            CorrectionState(isActive = false)
+        }
+    }
+
+    /**
+     * Updates the correction text.
+     */
+    fun updateCorrectionText(text: String) {
+        _correctionState.update { it.copy(correctionText = text) }
+    }
+
+    /**
+     * Appends transcribed text to the correction.
+     */
+    fun appendTranscription(transcribedText: String) {
+        _correctionState.update { state ->
+            val newText = if (state.correctionText.isBlank()) {
+                transcribedText
+            } else {
+                "${state.correctionText}\n$transcribedText"
+            }
+            state.copy(correctionText = newText, isTranscribing = false)
+        }
+    }
+
+    /**
+     * Sets the transcribing state.
+     */
+    fun setTranscribing(isTranscribing: Boolean) {
+        _correctionState.update { it.copy(isTranscribing = isTranscribing) }
+    }
+
+    /**
+     * Sets the recording state.
+     */
+    fun setRecording(isRecording: Boolean) {
+        _correctionState.update { it.copy(isRecording = isRecording) }
+    }
+
+    /**
+     * Submits the correction for re-analysis.
+     */
+    fun submitCorrection() {
+        screenModelScope.launch {
+            val correctionText = _correctionState.value.correctionText.trim()
+            if (correctionText.isBlank()) {
+                Napier.w("Cannot submit empty correction")
+                return@launch
+            }
+
+            try {
+                _correctionState.update { it.copy(isSubmitting = true) }
+
+                // Save the correction text to user notes
+                trackedEntryRepository.updateUserNotes(entryId, correctionText)
+
+                // Queue correction analysis
+                Napier.i("Queueing correction analysis for entry $entryId")
+                backgroundAnalysisService.queueCorrection(entryId, correctionText)
+
+                // The status change subscription will handle reloading when complete
+            } catch (e: Exception) {
+                Napier.e("Failed to submit correction for entry $entryId", e)
+                _correctionState.update { it.copy(isSubmitting = false) }
             }
         }
     }
@@ -189,4 +300,19 @@ sealed class ParsedAnalysis {
     data class Meal(val result: MealAnalysisResult) : ParsedAnalysis()
     data class Exercise(val result: ExerciseAnalysisResult) : ParsedAnalysis()
     data class Sleep(val result: SleepAnalysisResult) : ParsedAnalysis()
+}
+
+/**
+ * State for correction mode.
+ */
+data class CorrectionState(
+    val isActive: Boolean = false,
+    val correctionText: String = "",
+    val isRecording: Boolean = false,
+    val isTranscribing: Boolean = false,
+    val isSubmitting: Boolean = false,
+    val recordingDurationSeconds: Int = 0
+) {
+    val canSubmit: Boolean
+        get() = isActive && correctionText.isNotBlank() && !isSubmitting && !isRecording && !isTranscribing
 }

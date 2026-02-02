@@ -5,6 +5,7 @@ import com.wellnesswingman.db.WellnessWingmanDatabase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.withContext
+import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDate
 
 /**
@@ -55,14 +56,15 @@ class SqlDelightDailySummaryRepository(
             externalId = summary.externalId,
             summaryDate = summary.summaryDate.toEpochDays().toLong(),
             highlights = summary.highlights,
-            recommendations = summary.recommendations
+            recommendations = summary.recommendations,
+            generatedAt = summary.generatedAt?.toEpochMilliseconds()
         )
         queries.lastInsertRowId().executeAsOne()
     }
 
     override suspend fun updateSummary(id: Long, highlights: String, recommendations: String) =
         withContext(Dispatchers.IO) {
-            queries.updateSummary(highlights, recommendations, id)
+            queries.updateSummary(highlights, recommendations, null, id)
         }
 
     override suspend fun updateSummaryByDate(
@@ -70,7 +72,7 @@ class SqlDelightDailySummaryRepository(
         highlights: String,
         recommendations: String
     ) = withContext(Dispatchers.IO) {
-        queries.updateSummaryByDate(highlights, recommendations, date.toEpochDays().toLong())
+        queries.updateSummaryByDate(highlights, recommendations, null, date.toEpochDays().toLong())
     }
 
     override suspend fun deleteSummary(id: Long) = withContext(Dispatchers.IO) {
@@ -94,7 +96,8 @@ class SqlDelightDailySummaryRepository(
             externalId = externalId,
             summaryDate = LocalDate.fromEpochDays(summaryDate.toInt()),
             highlights = highlights,
-            recommendations = recommendations
+            recommendations = recommendations,
+            generatedAt = generatedAt?.let { Instant.fromEpochMilliseconds(it) }
         )
     }
 }

@@ -4,7 +4,9 @@ import com.russhwolf.settings.NSUserDefaultsSettings
 import com.russhwolf.settings.Settings
 import com.wellnesswingman.data.db.DriverFactory
 import com.wellnesswingman.platform.AudioRecordingService
+import com.wellnesswingman.platform.BackgroundExecutionService
 import com.wellnesswingman.platform.DiagnosticShare
+import com.wellnesswingman.platform.IosBackgroundExecutionService
 import org.koin.dsl.module
 import platform.Foundation.NSUserDefaults
 
@@ -24,4 +26,7 @@ val platformModule = module {
     // Platform services
     single { AudioRecordingService() }
     single { DiagnosticShare() }
+
+    // Background execution service (stub on iOS)
+    single<BackgroundExecutionService> { IosBackgroundExecutionService() }
 }

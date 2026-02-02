@@ -3,6 +3,7 @@ package com.wellnesswingman.domain.llm
 import com.aallam.openai.api.chat.ChatCompletion
 import com.aallam.openai.api.chat.ChatCompletionRequest
 import com.aallam.openai.api.chat.ChatMessage
+import com.aallam.openai.api.chat.ChatResponseFormat
 import com.aallam.openai.api.chat.ChatRole
 import com.aallam.openai.api.chat.ImagePart
 import com.aallam.openai.api.chat.TextPart
@@ -57,7 +58,8 @@ class OpenAiLlmClient(
                         ImagePart(url = "data:image/jpeg;base64,$base64Image")
                     )
                 )
-            )
+            ),
+            responseFormat = if (jsonSchema != null) ChatResponseFormat.JsonObject else null
         )
 
         io.github.aakira.napier.Napier.d("Sending request to OpenAI...")
@@ -115,7 +117,8 @@ class OpenAiLlmClient(
                     role = ChatRole.User,
                     content = prompt
                 )
-            )
+            ),
+            responseFormat = if (jsonSchema != null) ChatResponseFormat.JsonObject else null
         )
 
         val completion = client.chatCompletion(request)

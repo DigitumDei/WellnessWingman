@@ -24,5 +24,14 @@ val viewModelModule = module {
     factoryOf(::WeekViewModel)
     factoryOf(::YearViewModel)
     factoryOf(::DayDetailViewModel)
-    factory { params -> EntryDetailViewModel(params.get(), get(), get(), get(), get()) }
+    factory { params ->
+        EntryDetailViewModel(
+            entryId = params.get(),
+            trackedEntryRepository = get(),
+            entryAnalysisRepository = get(),
+            fileSystem = get(),
+            backgroundAnalysisService = get(),
+            statusChangeNotifier = get()
+        )
+    }
 }

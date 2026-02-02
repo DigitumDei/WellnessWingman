@@ -4,12 +4,14 @@ import com.wellnesswingman.data.model.EntryAnalysis
 import com.wellnesswingman.data.model.EntryType
 import com.wellnesswingman.data.model.ProcessingStatus
 import com.wellnesswingman.data.model.TrackedEntry
+import com.wellnesswingman.data.model.analysis.UnifiedAnalysisResult
 import com.wellnesswingman.data.repository.EntryAnalysisRepository
 import com.wellnesswingman.data.repository.TrackedEntryRepository
 import com.wellnesswingman.domain.llm.LlmClientFactory
 import com.wellnesswingman.platform.FileSystem
 import io.github.aakira.napier.Napier
 import kotlinx.datetime.Clock
+import kotlinx.serialization.json.Json
 
 /**
  * Result of an analysis invocation.
@@ -34,6 +36,12 @@ class AnalysisOrchestrator(
     private val llmClientFactory: LlmClientFactory,
     private val fileSystem: FileSystem
 ) {
+    private val json = Json {
+        ignoreUnknownKeys = true
+        isLenient = true
+    }
+
+    private val validator = AnalysisValidator()
 
     /**
      * Processes a tracked entry and generates its analysis.
@@ -56,25 +64,41 @@ class AnalysisOrchestrator(
             // Get the LLM client
             val llmClient = llmClientFactory.createForCurrentProvider()
 
-            // Build the prompt based on entry type
-            val prompt = buildPrompt(entry, userProvidedDetails)
+            // Build the prompt - use unified prompt for auto-detection
+            val prompt = buildUnifiedPrompt(entry, userProvidedDetails)
 
             // Analyze the entry
             val result = if (entry.blobPath != null) {
                 try {
                     if (fileSystem.exists(entry.blobPath)) {
                         val imageBytes = fileSystem.readBytes(entry.blobPath)
-                        llmClient.analyzeImage(imageBytes, prompt, getJsonSchema(entry.entryType))
+                        llmClient.analyzeImage(imageBytes, prompt, null)
                     } else {
                         Napier.w("Image file not found: ${entry.blobPath}")
-                        llmClient.generateCompletion(prompt, getJsonSchema(entry.entryType))
+                        llmClient.generateCompletion(prompt, null)
                     }
                 } catch (e: Exception) {
                     Napier.e("Failed to load image bytes", e)
-                    llmClient.generateCompletion(prompt, getJsonSchema(entry.entryType))
+                    llmClient.generateCompletion(prompt, null)
                 }
             } else {
-                llmClient.generateCompletion(prompt, getJsonSchema(entry.entryType))
+                llmClient.generateCompletion(prompt, null)
+            }
+
+            // Validate and extract detected entry type
+            val validationResult = validator.validateUnifiedAnalysis(result.content)
+            validator.logValidation(entry.entryId, validationResult)
+
+            // Try to detect and update entry type from analysis
+            try {
+                val unifiedResult = json.decodeFromString<UnifiedAnalysisResult>(result.content)
+                val detectedType = normalizeEntryType(unifiedResult.entryType)
+                if (detectedType != null && entry.entryType == EntryType.UNKNOWN) {
+                    Napier.i("Updating entry ${entry.entryId} type from UNKNOWN to $detectedType")
+                    trackedEntryRepository.updateEntryType(entry.entryId, detectedType)
+                }
+            } catch (e: Exception) {
+                Napier.w("Failed to parse unified analysis for type detection: ${e.message}")
             }
 
             // Create and save the analysis
@@ -105,99 +129,120 @@ class AnalysisOrchestrator(
     }
 
     /**
-     * Builds an analysis prompt for the given entry.
+     * Builds a unified analysis prompt that can detect entry type automatically.
      */
-    private fun buildPrompt(entry: TrackedEntry, userProvidedDetails: String?): String {
-        val basePrompt = when (entry.entryType) {
-            EntryType.MEAL -> buildMealPrompt(userProvidedDetails)
-            EntryType.EXERCISE -> buildExercisePrompt(userProvidedDetails)
-            EntryType.SLEEP -> buildSleepPrompt(userProvidedDetails)
-            else -> "Analyze this entry and provide insights."
-        }
-
-        // Include user notes if available
-        val userNotes = entry.userNotes
-        return if (userNotes != null && userNotes.isNotBlank()) {
-            "$basePrompt\n\nUser notes: $userNotes"
-        } else {
-            basePrompt
-        }
-    }
-
-    /**
-     * Builds a prompt for meal analysis.
-     */
-    private fun buildMealPrompt(userProvidedDetails: String?): String {
-        return """
-            You are a nutrition analysis expert with vision capabilities. Analyze the meal in the provided image and extract detailed nutritional information.
-
-            Look at the image carefully and identify all visible food items, estimate portion sizes, and calculate nutritional values.
-
-            You MUST return your response as a valid JSON object (not plain text) with the following exact structure:
-            {
-              "schemaVersion": "1.0",
-              "foodItems": [
-                {
-                  "name": "Food item name",
-                  "portionSize": "Estimated portion",
-                  "calories": <number>,
-                  "confidence": <0.0-1.0>
-                }
-              ],
-              "nutrition": {
-                "totalCalories": <number>,
-                "protein": <grams>,
-                "carbohydrates": <grams>,
-                "fat": <grams>,
-                "fiber": <grams>,
-                "sugar": <grams>,
-                "sodium": <milligrams>
-              },
-              "healthInsights": {
-                "healthScore": <0-10>,
-                "summary": "Brief health summary",
-                "positives": ["Positive aspect 1", "Positive aspect 2"],
-                "improvements": ["Area for improvement"],
-                "recommendations": ["Recommendation 1"]
-              },
-              "confidence": <0.0-1.0>,
-              "warnings": []
+    private fun buildUnifiedPrompt(entry: TrackedEntry, userProvidedDetails: String?): String {
+        val userContext = buildString {
+            if (entry.userNotes?.isNotBlank() == true) {
+                append("User notes: ${entry.userNotes}\n\n")
             }
+            if (userProvidedDetails?.isNotBlank() == true) {
+                append("Additional context: $userProvidedDetails\n\n")
+            }
+        }
 
-            ${if (userProvidedDetails != null) "Additional context: $userProvidedDetails" else ""}
-        """.trimIndent()
-    }
-
-    /**
-     * Builds a prompt for exercise analysis.
-     */
-    private fun buildExercisePrompt(userProvidedDetails: String?): String {
         return """
-            Analyze this exercise activity and provide detailed metrics.
+You are a health and wellness analysis assistant with vision capabilities. Analyze the provided content (image and/or text) and determine the type of health-related entry, then provide detailed analysis.
 
-            Return your response as a JSON object following the exercise schema.
-            ${if (userProvidedDetails != null) "Additional context: $userProvidedDetails" else ""}
+ENTRY TYPE DETECTION:
+First, determine what type of entry this is:
+- "Meal" - Food, beverages, nutrition-related content
+- "Exercise" - Physical activity, workouts, sports, fitness tracking screenshots
+- "Sleep" - Sleep tracking data, sleep-related information
+- "Other" - Health documents, lab results, medical information, or anything else health-related
+
+IMPORTANT: You MUST return a valid JSON object with the following structure. Only populate the analysis field that matches the detected entry type.
+
+$userContext
+
+REQUIRED JSON RESPONSE FORMAT:
+{
+  "schemaVersion": "1.0",
+  "entryType": "<Meal|Exercise|Sleep|Other>",
+  "confidence": <0.0-1.0>,
+  "mealAnalysis": {
+    "schemaVersion": "1.0",
+    "foodItems": [
+      {"name": "Food name", "portionSize": "size estimate", "calories": <number>, "confidence": <0.0-1.0>}
+    ],
+    "nutrition": {
+      "totalCalories": <number>,
+      "protein": <grams>,
+      "carbohydrates": <grams>,
+      "fat": <grams>,
+      "fiber": <grams>,
+      "sugar": <grams>,
+      "sodium": <milligrams>
+    },
+    "healthInsights": {
+      "healthScore": <0-10>,
+      "summary": "Brief health summary",
+      "positives": ["positive aspect"],
+      "improvements": ["improvement area"],
+      "recommendations": ["recommendation"]
+    },
+    "confidence": <0.0-1.0>,
+    "warnings": []
+  },
+  "exerciseAnalysis": {
+    "schemaVersion": "1.0",
+    "activityType": "Activity name",
+    "metrics": {
+      "distance": <number or null>,
+      "distanceUnit": "km or miles",
+      "durationMinutes": <number>,
+      "calories": <number>,
+      "averageHeartRate": <number or null>,
+      "steps": <number or null>
+    },
+    "insights": {
+      "summary": "Brief summary",
+      "positives": ["positive aspect"],
+      "improvements": ["improvement area"],
+      "recommendations": ["recommendation"]
+    },
+    "warnings": []
+  },
+  "sleepAnalysis": {
+    "durationHours": <number>,
+    "sleepScore": <0-100>,
+    "qualitySummary": "Quality description",
+    "environmentNotes": ["note"],
+    "recommendations": ["recommendation"]
+  },
+  "otherAnalysis": {
+    "summary": "Description of what this entry contains",
+    "tags": ["relevant", "tags"],
+    "recommendations": ["recommendation"]
+  },
+  "warnings": []
+}
+
+GUIDELINES:
+1. Set the appropriate analysis field based on detected entry type; set others to null
+2. Provide confidence scores (0.0-1.0) based on image clarity and certainty
+3. For meals: Identify all visible food items and estimate portions carefully
+4. For exercise: Extract metrics from fitness tracker screenshots or estimate from images
+5. For sleep: Extract data from sleep tracker screenshots or provide estimates
+6. Add warnings array if there are any issues with the analysis
+7. Health score (0-10): 10 = excellent, 7-9 = good, 5-6 = moderate, below 5 = needs improvement
+
+ONLY return the JSON object, no other text.
         """.trimIndent()
     }
 
     /**
-     * Builds a prompt for sleep analysis.
+     * Normalizes entry type string to EntryType enum.
      */
-    private fun buildSleepPrompt(userProvidedDetails: String?): String {
-        return """
-            Analyze this sleep data and provide insights.
+    private fun normalizeEntryType(value: String?): EntryType? {
+        if (value.isNullOrBlank()) return null
 
-            Return your response as a JSON object following the sleep schema.
-            ${if (userProvidedDetails != null) "Additional context: $userProvidedDetails" else ""}
-        """.trimIndent()
-    }
-
-    /**
-     * Gets the JSON schema for the given entry type.
-     */
-    private fun getJsonSchema(entryType: EntryType): String? {
-        // For now, return null to let the LLM use its default format
-        // TODO: Implement proper JSON schemas for each type
-        return null
+        return when (value.lowercase().trim()) {
+            "meal", "food" -> EntryType.MEAL
+            "exercise", "workout", "activity" -> EntryType.EXERCISE
+            "sleep" -> EntryType.SLEEP
+            "other" -> EntryType.OTHER
+            else -> null
+        }
     }
 }

@@ -5,7 +5,8 @@ CREATE TABLE DailySummary (
     externalId TEXT,
     summaryDate INTEGER NOT NULL,
     highlights TEXT NOT NULL DEFAULT '',
-    recommendations TEXT NOT NULL DEFAULT ''
+    recommendations TEXT NOT NULL DEFAULT '',
+    generatedAt INTEGER
 );
 
 -- Index for date queries
@@ -51,19 +52,20 @@ INSERT INTO DailySummary(
     externalId,
     summaryDate,
     highlights,
-    recommendations
-) VALUES (?, ?, ?, ?);
+    recommendations,
+    generatedAt
+) VALUES (?, ?, ?, ?, ?);
 
 -- Update summary
 updateSummary:
 UPDATE DailySummary
-SET highlights = ?, recommendations = ?
+SET highlights = ?, recommendations = ?, generatedAt = ?
 WHERE summaryId = ?;
 
 -- Update summary by date
 updateSummaryByDate:
 UPDATE DailySummary
-SET highlights = ?, recommendations = ?
+SET highlights = ?, recommendations = ?, generatedAt = ?
 WHERE summaryDate = ?;
 
 -- Delete summary

@@ -4,7 +4,9 @@ import android.content.Context
 import com.russhwolf.settings.Settings
 import com.russhwolf.settings.SharedPreferencesSettings
 import com.wellnesswingman.data.db.DriverFactory
+import com.wellnesswingman.platform.AndroidBackgroundExecutionService
 import com.wellnesswingman.platform.AudioRecordingService
+import com.wellnesswingman.platform.BackgroundExecutionService
 import com.wellnesswingman.platform.CameraCaptureService
 import com.wellnesswingman.platform.DiagnosticLogger
 import com.wellnesswingman.platform.DiagnosticShare
@@ -37,4 +39,7 @@ val platformModule = module {
     single { PhotoResizer() }
     single { DiagnosticLogger(get<Context>()) }
     single { DiagnosticShare(get<Context>(), get()) }
+
+    // Background execution service
+    single<BackgroundExecutionService> { AndroidBackgroundExecutionService(get()) }
 }

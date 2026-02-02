@@ -93,6 +93,12 @@ UPDATE TrackedEntry
 SET processingStatus = ?
 WHERE entryId = ?;
 
+-- Update entry type
+updateEntryType:
+UPDATE TrackedEntry
+SET entryType = ?
+WHERE entryId = ?;
+
 -- Update entry payload
 updateEntryPayload:
 UPDATE TrackedEntry
