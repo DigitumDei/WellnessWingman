@@ -46,7 +46,10 @@ class CalendarViewModel(
                     .toInstant(TimeZone.currentSystemDefault())
 
                 // Get entries for the month
-                val entries = trackedEntryRepository.getEntriesBetween(startInstant, endInstant)
+                val entries = trackedEntryRepository.getEntriesForDay(
+                    startInstant.toEpochMilliseconds(),
+                    endInstant.toEpochMilliseconds()
+                )
 
                 // Group by date
                 val entriesByDate = entries.groupBy { entry ->

@@ -30,20 +30,21 @@ kotlin/
 
 ## Tech Stack
 
-- **Language:** Kotlin 1.9.22
-- **UI Framework:** Compose Multiplatform 1.6.0
-- **Database:** SQLDelight 2.0.1
+- **Language:** Kotlin 2.1.0
+- **UI Framework:** Compose Multiplatform 1.7.0
+- **Database:** SQLDelight 2.0.2
 - **Dependency Injection:** Koin 3.5.3
-- **HTTP Client:** Ktor 2.3.8
-- **LLM Integration:** openai-kotlin 3.7.0
-- **Navigation:** Voyager 1.0.0
+- **HTTP Client:** Ktor 2.3.12
+- **LLM Integration:** openai-kotlin 3.7.2
+- **Navigation:** Voyager 1.1.0-beta02
+- **Image Loading:** Coil 2.5.0
 - **Logging:** Napier 2.7.1
 - **Testing:** kotlin.test, MockK, Turbine
-- **Code Coverage:** Kover 0.7.5
+- **Code Coverage:** Kover 0.8.3
 
 ## Current Implementation Status
 
-### ✅ Completed (17 of 24 tasks - 70.8%)
+### ✅ Completed (21 of 24 tasks - 87.5%)
 
 #### **Phase 1: Foundation (100% Complete)**
 1. **Project Structure** - Full KMP setup with Gradle and modules
@@ -59,46 +60,63 @@ kotlin/
 9. **Platform Services** - FileSystem, Camera, PhotoResizer (expect/actual)
 10. **Dependency Injection** - Complete Koin setup
 
-#### **Phase 3: UI Layer (71% Complete)**
+#### **Phase 3: UI Layer (100% Complete)**
 11. **Compose UI Theme** - Material3 theme with light/dark modes
 12. **Navigation** - Voyager setup with screen transitions
 13. **MainScreen** - Entry list with pull-to-refresh
 14. **SettingsScreen** - API key configuration and provider selection
 15. **Detail Screens** - Unified entry detail view for Meal/Exercise/Sleep
+16. **PhotoReviewScreen** - Photo capture and review UI
+17. **Calendar Views** - Week, Month, Year, Day timeline views
 18. **DailySummaryScreen** - Daily summary generation and display
 19. **Android App Module** - MainActivity and Application class with full DI
 
-### 🚧 Pending (7 of 24 tasks - Optional)
+#### **Phase 4: Testing & Quality (67% Complete)**
+20. **Unit Tests** - 39 tests passing with kotlin.test
+21. **Code Coverage** - Kover setup with 25.5% baseline coverage
+24. **Documentation** - README, RUNNING_THE_APP.md, BUILD_FIXES_NEEDED.md
 
-16. **PhotoReviewScreen** - Photo capture and review UI
-17. **Calendar Views** - Week, Month, Year, Day timeline views
-20. **Unit Tests** - Port tests to kotlin.test
-21. **Code Coverage** - Kover setup
+### 🚧 Pending (3 of 24 tasks - Optional)
+
 22. **E2E Tests** - Maestro flows
-23. **iOS App Module** - Basic iOS setup
+23. **iOS App Module** - Blocked by Gradle 9.3 compatibility issues with iOS targets
+    - iOS platform implementations exist in `shared/src/iosMain`
+    - Targets disabled temporarily pending Kotlin/Gradle compatibility updates
 
 ## Building the Project
 
 ### Prerequisites
 
-- JDK 11 or higher
-- Android Studio (for Android development)
-- Xcode (for iOS development, macOS only)
+- **JDK 17** (configured in `gradle.properties`)
+- **Gradle 9.3.0** (included via wrapper)
+- **Android Studio** (recommended for Android development)
+- **Xcode** (for iOS development, macOS only - currently disabled)
+
+### Quick Start
+
+See [RUNNING_THE_APP.md](RUNNING_THE_APP.md) for comprehensive guide on:
+- Building from command line
+- Running in emulator/device
+- Debugging in Android Studio
+- Viewing logs and troubleshooting
 
 ### Build Commands
 
 ```bash
-# Build all modules
-./gradlew build
+# Build Android debug APK
+.\gradlew.bat :androidApp:assembleDebug
 
-# Run tests
-./gradlew test
+# Run all unit tests (39 tests)
+.\gradlew.bat :shared:test
 
-# Generate code coverage report
-./gradlew koverHtmlReport
+# Generate code coverage report (HTML)
+.\gradlew.bat :shared:test :shared:koverHtmlReport
 
-# Build Android app
-./gradlew :androidApp:assembleDebug
+# View coverage report
+# Opens: shared/build/reports/kover/html/index.html
+
+# Verify coverage meets threshold
+.\gradlew.bat :shared:koverVerify
 ```
 
 ## Database

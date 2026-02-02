@@ -17,14 +17,17 @@ class LlmClientFactory(
         val apiKey = settingsRepository.getApiKey(provider)
             ?: throw IllegalStateException("API key not configured for $provider")
 
+        val model = settingsRepository.getModel(provider)
+            ?: throw IllegalStateException("Model not configured for $provider")
+
         return when (provider) {
             LlmProvider.OPENAI -> OpenAiLlmClient(
                 apiKey = apiKey,
-                model = "gpt-4o-mini"
+                model = model
             )
             LlmProvider.GEMINI -> GeminiLlmClient(
                 apiKey = apiKey,
-                model = "gemini-1.5-flash"
+                model = model
             )
         }
     }

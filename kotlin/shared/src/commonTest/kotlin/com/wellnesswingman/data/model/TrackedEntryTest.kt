@@ -18,8 +18,7 @@ class TrackedEntryTest {
         assertEquals(EntryType.MEAL, entry.entryType)
         assertEquals(ProcessingStatus.PENDING, entry.processingStatus)
         assertNull(entry.userNotes)
-        assertNull(entry.photoPath)
-        assertNull(entry.audioPath)
+        assertNull(entry.blobPath)
     }
 
     @Test
@@ -92,17 +91,15 @@ class TrackedEntryTest {
             capturedAt = Clock.System.now(),
             processingStatus = ProcessingStatus.COMPLETED,
             userNotes = "Test notes",
-            photoPath = "/path/to/photo.jpg",
-            audioPath = "/path/to/audio.m4a",
-            timezoneId = "America/New_York",
-            timezoneOffsetMinutes = -300
+            blobPath = "/path/to/photo.jpg",
+            capturedAtTimeZoneId = "America/New_York",
+            capturedAtOffsetMinutes = -300
         )
 
         assertEquals("ext-123", entry.externalId)
         assertEquals("Test notes", entry.userNotes)
-        assertEquals("/path/to/photo.jpg", entry.photoPath)
-        assertEquals("/path/to/audio.m4a", entry.audioPath)
-        assertEquals("America/New_York", entry.timezoneId)
-        assertEquals(-300, entry.timezoneOffsetMinutes)
+        assertEquals("/path/to/photo.jpg", entry.blobPath)
+        assertEquals("America/New_York", entry.capturedAtTimeZoneId)
+        assertEquals(-300, entry.capturedAtOffsetMinutes)
     }
 }

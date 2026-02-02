@@ -17,5 +17,7 @@ interface AppSettingsRepository {
     fun removeApiKey(provider: LlmProvider)
     fun getSelectedProvider(): LlmProvider
     fun setSelectedProvider(provider: LlmProvider)
+    fun getModel(provider: LlmProvider): String?
+    fun setModel(provider: LlmProvider, model: String)
     fun clear()
 }

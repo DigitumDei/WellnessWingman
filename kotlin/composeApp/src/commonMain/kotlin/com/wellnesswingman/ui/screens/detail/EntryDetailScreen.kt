@@ -1,14 +1,19 @@
 package com.wellnesswingman.ui.screens.detail
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.koin.getScreenModel
@@ -20,6 +25,9 @@ import com.wellnesswingman.ui.components.LoadingIndicator
 import com.wellnesswingman.util.DateTimeUtil
 import kotlinx.datetime.TimeZone
 import org.koin.core.parameter.parametersOf
+
+@Composable
+expect fun ImageDisplay(imageBytes: ByteArray?)
 
 data class EntryDetailScreen(val entryId: Long) : Screen {
     @Composable
@@ -62,6 +70,7 @@ data class EntryDetailScreen(val entryId: Long) : Screen {
                 )
                 is EntryDetailUiState.Success -> EntryDetailContent(
                     state = state,
+                    onRetryAnalysis = { viewModel.retryAnalysis() },
                     modifier = Modifier.padding(paddingValues)
                 )
                 is EntryDetailUiState.Deleted -> {}
@@ -97,6 +106,7 @@ data class EntryDetailScreen(val entryId: Long) : Screen {
 @Composable
 fun EntryDetailContent(
     state: EntryDetailUiState.Success,
+    onRetryAnalysis: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -106,6 +116,9 @@ fun EntryDetailContent(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        // Image (if available) - rendered platform-specifically
+        ImageDisplay(state.imageBytes)
+
         // Entry metadata
         Card {
             Column(
@@ -130,6 +143,76 @@ fun EntryDetailContent(
                     text = "Status: ${state.entry.processingStatus.name}",
                     style = MaterialTheme.typography.bodyMedium
                 )
+            }
+        }
+
+        // API key warning if analysis was skipped
+        if (state.entry.processingStatus.name == "SKIPPED") {
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer
+                )
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Settings,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                        Text(
+                            text = "AI Analysis Not Configured",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    }
+                    Text(
+                        text = "This entry was not analyzed because no API key is configured. Go to Settings to add your OpenAI or Gemini API key to enable AI-powered meal analysis.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(
+                        onClick = onRetryAnalysis,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.onErrorContainer,
+                            contentColor = MaterialTheme.colorScheme.errorContainer
+                        )
+                    ) {
+                        Icon(Icons.Default.Refresh, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Retry Analysis")
+                    }
+                }
+            }
+        }
+
+        // Retry/Regenerate button for FAILED or COMPLETED entries
+        if (state.entry.processingStatus.name == "FAILED") {
+            Button(
+                onClick = onRetryAnalysis,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Default.Refresh, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("Retry Analysis")
+            }
+        } else if (state.entry.processingStatus.name == "COMPLETED") {
+            OutlinedButton(
+                onClick = onRetryAnalysis,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Default.Refresh, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("Regenerate Analysis")
             }
         }
 
@@ -171,6 +254,39 @@ fun EntryDetailContent(
                                 text = "No analysis available yet",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                } else {
+                    // Analysis exists but failed to parse - show raw JSON
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = "Analysis Parse Error",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                            Text(
+                                text = "The analysis completed but couldn't be parsed. Raw response:",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                            Text(
+                                text = state.analysis.insightsJson,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 8.dp)
                             )
                         }
                     }

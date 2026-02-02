@@ -5,6 +5,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -82,6 +83,15 @@ class SettingsScreen : Screen {
                     singleLine = true
                 )
 
+                OutlinedTextField(
+                    value = uiState.openAiModel,
+                    onValueChange = { viewModel.updateOpenAiModel(it) },
+                    label = { Text("Model") },
+                    placeholder = { Text("gpt-4o") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+
                 Divider()
 
                 // Gemini API Key
@@ -99,6 +109,32 @@ class SettingsScreen : Screen {
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
                 )
+
+                OutlinedTextField(
+                    value = uiState.geminiModel,
+                    onValueChange = { viewModel.updateGeminiModel(it) },
+                    label = { Text("Model") },
+                    placeholder = { Text("gemini-1.5-flash") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+
+                Divider()
+
+                // Diagnostics
+                Text(
+                    text = "Diagnostics",
+                    style = MaterialTheme.typography.titleLarge
+                )
+
+                OutlinedButton(
+                    onClick = { viewModel.shareDiagnosticLogs() },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.Share, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Share Diagnostic Logs")
+                }
 
                 Spacer(modifier = Modifier.weight(1f))
 

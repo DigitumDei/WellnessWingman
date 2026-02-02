@@ -15,14 +15,14 @@ class MealAnalysisResultTest {
             foodItems = listOf(
                 FoodItem(
                     name = "Apple",
-                    quantity = "1 medium",
-                    estimatedCalories = 95
+                    portionSize = "1 medium",
+                    calories = 95.0
                 )
             ),
             nutrition = NutritionEstimate(
-                calories = 95,
+                totalCalories = 95.0,
                 protein = 0.5,
-                carbs = 25.0,
+                carbohydrates = 25.0,
                 fat = 0.3
             )
         )
@@ -42,14 +42,14 @@ class MealAnalysisResultTest {
             "foodItems": [
                 {
                     "name": "Chicken Breast",
-                    "quantity": "150g",
-                    "estimatedCalories": 165
+                    "portionSize": "150g",
+                    "calories": 165.0
                 }
             ],
             "nutrition": {
-                "calories": 165,
+                "totalCalories": 165.0,
                 "protein": 31.0,
-                "carbs": 0.0,
+                "carbohydrates": 0.0,
                 "fat": 3.6
             }
         }
@@ -60,7 +60,7 @@ class MealAnalysisResultTest {
         assertEquals("1.0", result.schemaVersion)
         assertEquals(1, result.foodItems.size)
         assertEquals("Chicken Breast", result.foodItems[0].name)
-        assertEquals(165, result.nutrition?.calories)
+        assertEquals(165.0, result.nutrition?.totalCalories)
         assertEquals(31.0, result.nutrition?.protein)
     }
 
@@ -69,8 +69,8 @@ class MealAnalysisResultTest {
         val result = MealAnalysisResult(
             schemaVersion = "1.0",
             healthInsights = HealthInsights(
-                generalComments = "Balanced meal",
-                suggestions = listOf("Add vegetables", "Drink water")
+                summary = "Balanced meal",
+                recommendations = listOf("Add vegetables", "Drink water")
             )
         )
 
@@ -84,26 +84,24 @@ class MealAnalysisResultTest {
     fun `FoodItem with all optional fields serializes correctly`() {
         val foodItem = FoodItem(
             name = "Oatmeal",
-            quantity = "1 cup",
-            estimatedCalories = 150,
-            brands = listOf("Quaker", "Bob's Red Mill"),
-            preparationMethod = "Cooked with milk",
-            portionDetails = "Served warm"
+            portionSize = "1 cup",
+            calories = 150.0,
+            confidence = 0.95
         )
 
         val jsonString = json.encodeToString(foodItem)
 
         assertTrue(jsonString.contains("Oatmeal"))
-        assertTrue(jsonString.contains("Quaker"))
-        assertTrue(jsonString.contains("Cooked with milk"))
+        assertTrue(jsonString.contains("1 cup"))
+        assertTrue(jsonString.contains("150"))
     }
 
     @Test
     fun `NutritionEstimate with all fields serializes correctly`() {
         val nutrition = NutritionEstimate(
-            calories = 500,
+            totalCalories = 500.0,
             protein = 25.5,
-            carbs = 60.0,
+            carbohydrates = 60.0,
             fat = 15.0,
             fiber = 8.0,
             sugar = 10.0,
@@ -115,6 +113,23 @@ class MealAnalysisResultTest {
         assertTrue(jsonString.contains("500"))
         assertTrue(jsonString.contains("25.5"))
         assertTrue(jsonString.contains("8.0"))
+    }
+
+    @Test
+    fun `HealthInsights with all fields serializes correctly`() {
+        val insights = HealthInsights(
+            healthScore = 8.5,
+            summary = "Healthy meal with good protein",
+            positives = listOf("High protein", "Low sugar"),
+            improvements = listOf("Add more vegetables"),
+            recommendations = listOf("Include leafy greens", "Reduce sodium")
+        )
+
+        val jsonString = json.encodeToString(insights)
+
+        assertTrue(jsonString.contains("8.5"))
+        assertTrue(jsonString.contains("High protein"))
+        assertTrue(jsonString.contains("Add more vegetables"))
     }
 
     @Test
@@ -133,19 +148,20 @@ class MealAnalysisResultTest {
         val original = MealAnalysisResult(
             schemaVersion = "1.0",
             foodItems = listOf(
-                FoodItem("Rice", "1 cup", 200),
-                FoodItem("Beans", "1/2 cup", 120)
+                FoodItem("Rice", "1 cup", 200.0),
+                FoodItem("Beans", "1/2 cup", 120.0)
             ),
             nutrition = NutritionEstimate(
-                calories = 320,
+                totalCalories = 320.0,
                 protein = 15.0,
-                carbs = 58.0,
+                carbohydrates = 58.0,
                 fat = 2.0
             ),
             healthInsights = HealthInsights(
-                generalComments = "Good fiber source",
-                suggestions = listOf("Add protein")
-            )
+                summary = "Good fiber source",
+                recommendations = listOf("Add protein")
+            ),
+            confidence = 0.92
         )
 
         val jsonString = json.encodeToString(original)
@@ -153,7 +169,8 @@ class MealAnalysisResultTest {
 
         assertEquals(original.schemaVersion, deserialized.schemaVersion)
         assertEquals(original.foodItems.size, deserialized.foodItems.size)
-        assertEquals(original.nutrition?.calories, deserialized.nutrition?.calories)
-        assertEquals(original.healthInsights?.generalComments, deserialized.healthInsights?.generalComments)
+        assertEquals(original.nutrition?.totalCalories, deserialized.nutrition?.totalCalories)
+        assertEquals(original.healthInsights?.summary, deserialized.healthInsights?.summary)
+        assertEquals(original.confidence, deserialized.confidence)
     }
 }

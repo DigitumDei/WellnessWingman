@@ -38,7 +38,10 @@ class YearViewModel(
                     .atTime(23, 59, 59)
                     .toInstant(TimeZone.currentSystemDefault())
 
-                val entries = trackedEntryRepository.getEntriesBetween(startInstant, endInstant)
+                val entries = trackedEntryRepository.getEntriesForDay(
+                    startInstant.toEpochMilliseconds(),
+                    endInstant.toEpochMilliseconds()
+                )
 
                 // Count entries by month
                 val entriesByMonth = entries

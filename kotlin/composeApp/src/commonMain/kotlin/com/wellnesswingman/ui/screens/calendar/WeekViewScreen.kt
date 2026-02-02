@@ -8,7 +8,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.filled.Today
+import androidx.compose.material.icons.filled.Event
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -52,7 +52,7 @@ class WeekViewScreen : Screen {
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Previous Week")
                         }
                         IconButton(onClick = { viewModel.today() }) {
-                            Icon(Icons.Default.Today, contentDescription = "Today")
+                            Icon(Icons.Default.Event, contentDescription = "Today")
                         }
                         IconButton(onClick = { viewModel.nextWeek() }) {
                             Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Next Week")

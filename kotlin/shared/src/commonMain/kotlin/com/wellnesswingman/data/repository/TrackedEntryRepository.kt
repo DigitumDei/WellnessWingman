@@ -2,6 +2,7 @@ package com.wellnesswingman.data.repository
 
 import com.wellnesswingman.data.model.ProcessingStatus
 import com.wellnesswingman.data.model.TrackedEntry
+import kotlinx.coroutines.flow.Flow
 import kotlinx.datetime.Instant
 
 /**
@@ -9,6 +10,7 @@ import kotlinx.datetime.Instant
  */
 interface TrackedEntryRepository {
     suspend fun getAllEntries(): List<TrackedEntry>
+    fun observeAllEntries(): Flow<List<TrackedEntry>>
     suspend fun getEntryById(id: Long): TrackedEntry?
     suspend fun getEntryByExternalId(externalId: String): TrackedEntry?
     suspend fun getEntriesForDay(startMillis: Long, endMillis: Long): List<TrackedEntry>

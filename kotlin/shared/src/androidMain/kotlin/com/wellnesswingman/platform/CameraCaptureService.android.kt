@@ -1,24 +1,23 @@
 package com.wellnesswingman.platform
 
 import android.content.Context
-import kotlinx.coroutines.suspendCancellableCoroutine
 
 /**
  * Android implementation of CameraCaptureService.
- * Note: Full implementation requires Activity context and ActivityResultContracts.
- * This is a placeholder that should be completed in the androidApp module.
+ *
+ * Note: Camera and gallery functionality is implemented directly in the UI layer
+ * using Compose's rememberLauncherForActivityResult, as ActivityResultContracts
+ * cannot be properly integrated with suspend functions.
+ *
+ * See: composeApp/src/androidMain/kotlin/com/wellnesswingman/ui/screens/photo/PhotoReviewScreen.android.kt
  */
 actual class CameraCaptureService(private val context: Context) {
 
     actual suspend fun capturePhoto(): CaptureResult {
-        // TODO: Implement using ActivityResultContracts.TakePicture
-        // This requires an Activity context which should be provided from the UI layer
-        return CaptureResult.Error("Camera capture not yet implemented. Use pickFromGallery() instead.")
+        return CaptureResult.Error("Camera capture not implemented in service layer. Use PhotoReviewScreen UI instead.")
     }
 
     actual suspend fun pickFromGallery(): CaptureResult? {
-        // TODO: Implement using ActivityResultContracts.GetContent
-        // This requires an Activity context which should be provided from the UI layer
-        return CaptureResult.Error("Gallery picker not yet implemented")
+        return CaptureResult.Error("Gallery picker not implemented in service layer. Use PhotoReviewScreen UI instead.")
     }
 }

@@ -7,6 +7,7 @@ import com.wellnesswingman.data.model.TrackedEntry
 import com.wellnesswingman.data.repository.EntryAnalysisRepository
 import com.wellnesswingman.data.repository.TrackedEntryRepository
 import com.wellnesswingman.domain.llm.LlmClientFactory
+import com.wellnesswingman.platform.FileSystem
 import io.github.aakira.napier.Napier
 import kotlinx.datetime.Clock
 
@@ -30,7 +31,8 @@ sealed class AnalysisInvocationResult {
 class AnalysisOrchestrator(
     private val trackedEntryRepository: TrackedEntryRepository,
     private val entryAnalysisRepository: EntryAnalysisRepository,
-    private val llmClientFactory: LlmClientFactory
+    private val llmClientFactory: LlmClientFactory,
+    private val fileSystem: FileSystem
 ) {
 
     /**
@@ -59,9 +61,18 @@ class AnalysisOrchestrator(
 
             // Analyze the entry
             val result = if (entry.blobPath != null) {
-                // TODO: Load image bytes from blob path
-                // For now, just use text-only analysis
-                llmClient.generateCompletion(prompt, getJsonSchema(entry.entryType))
+                try {
+                    if (fileSystem.exists(entry.blobPath)) {
+                        val imageBytes = fileSystem.readBytes(entry.blobPath)
+                        llmClient.analyzeImage(imageBytes, prompt, getJsonSchema(entry.entryType))
+                    } else {
+                        Napier.w("Image file not found: ${entry.blobPath}")
+                        llmClient.generateCompletion(prompt, getJsonSchema(entry.entryType))
+                    }
+                } catch (e: Exception) {
+                    Napier.e("Failed to load image bytes", e)
+                    llmClient.generateCompletion(prompt, getJsonSchema(entry.entryType))
+                }
             } else {
                 llmClient.generateCompletion(prompt, getJsonSchema(entry.entryType))
             }
@@ -118,9 +129,11 @@ class AnalysisOrchestrator(
      */
     private fun buildMealPrompt(userProvidedDetails: String?): String {
         return """
-            Analyze this meal photo and provide detailed nutritional information.
+            You are a nutrition analysis expert with vision capabilities. Analyze the meal in the provided image and extract detailed nutritional information.
 
-            Return your response as a JSON object with the following structure:
+            Look at the image carefully and identify all visible food items, estimate portion sizes, and calculate nutritional values.
+
+            You MUST return your response as a valid JSON object (not plain text) with the following exact structure:
             {
               "schemaVersion": "1.0",
               "foodItems": [

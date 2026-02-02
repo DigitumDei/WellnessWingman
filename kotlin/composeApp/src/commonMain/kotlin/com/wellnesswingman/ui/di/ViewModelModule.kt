@@ -24,5 +24,5 @@ val viewModelModule = module {
     factoryOf(::WeekViewModel)
     factoryOf(::YearViewModel)
     factoryOf(::DayDetailViewModel)
-    factory { params -> EntryDetailViewModel(params.get(), get(), get()) }
+    factory { params -> EntryDetailViewModel(params.get(), get(), get(), get(), get()) }
 }

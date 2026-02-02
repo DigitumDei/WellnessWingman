@@ -26,7 +26,10 @@ class DayDetailViewModel(
                 val startInstant = date.atStartOfDayIn(TimeZone.currentSystemDefault())
                 val endInstant = date.atTime(23, 59, 59).toInstant(TimeZone.currentSystemDefault())
 
-                val entries = trackedEntryRepository.getEntriesBetween(startInstant, endInstant)
+                val entries = trackedEntryRepository.getEntriesForDay(
+                    startInstant.toEpochMilliseconds(),
+                    endInstant.toEpochMilliseconds()
+                )
 
                 _uiState.value = if (entries.isEmpty()) {
                     DayDetailUiState.Empty

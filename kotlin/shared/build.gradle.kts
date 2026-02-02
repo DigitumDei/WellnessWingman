@@ -3,6 +3,7 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.android.library)
     alias(libs.plugins.sqldelight)
+    alias(libs.plugins.kover)
 }
 
 kotlin {
@@ -12,7 +13,10 @@ kotlin {
         }
     }
 
-    // iOS targets temporarily disabled - requires compatible Gradle wrapper
+    // iOS targets - temporarily disabled due to Gradle 9.3 compatibility issue
+    // Error: org.gradle.api.internal.plugins.DefaultArtifactPublicationSet
+    // This is a known issue with iOS framework publication in KMP with Gradle 9.x
+    // Will be re-enabled when upgrading to compatible Gradle version or Kotlin 2.2+
     // listOf(
     //     iosX64(),
     //     iosArm64(),
@@ -80,7 +84,7 @@ kotlin {
             }
         }
 
-        // iOS source sets temporarily disabled
+        // iOS source sets - temporarily disabled (see iOS targets comment above)
         // val iosMain by creating {
         //     dependsOn(commonMain)
         //     dependencies {
@@ -127,6 +131,32 @@ sqldelight {
         create("WellnessWingmanDatabase") {
             packageName.set("com.wellnesswingman.db")
             srcDirs.setFrom("src/commonMain/sqldelight")
+        }
+    }
+}
+
+kover {
+    reports {
+        filters {
+            excludes {
+                // Exclude generated code
+                packages("com.wellnesswingman.db")
+
+                // Exclude platform-specific implementations (tested via integration tests)
+                packages("com.wellnesswingman.platform")
+
+                // Exclude DI modules (simple wiring, no logic)
+                classes("*Module*")
+            }
+        }
+
+        verify {
+            rule {
+                // Current baseline: 25%
+                // TODO: Increase threshold as more tests are added
+                // Target: 70%+ for production code
+                minBound(25)
+            }
         }
     }
 }

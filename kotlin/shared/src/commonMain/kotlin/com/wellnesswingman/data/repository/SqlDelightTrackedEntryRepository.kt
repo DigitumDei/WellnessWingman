@@ -8,6 +8,8 @@ import com.wellnesswingman.data.model.TrackedEntry
 import com.wellnesswingman.db.WellnessWingmanDatabase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.Instant
 
@@ -22,6 +24,13 @@ class SqlDelightTrackedEntryRepository(
 
     override suspend fun getAllEntries(): List<TrackedEntry> = withContext(Dispatchers.IO) {
         queries.getAllEntries().executeAsList().map { it.toTrackedEntry() }
+    }
+
+    override fun observeAllEntries(): Flow<List<TrackedEntry>> {
+        return queries.getAllEntries()
+            .asFlow()
+            .mapToList(Dispatchers.IO)
+            .map { list -> list.map { it.toTrackedEntry() } }
     }
 
     override suspend fun getEntryById(id: Long): TrackedEntry? = withContext(Dispatchers.IO) {

@@ -41,6 +41,12 @@ class OpenAiLlmClient(
         // Encode image as base64
         val base64Image = Base64.encode(imageBytes)
 
+        io.github.aakira.napier.Napier.d("OpenAI analyzeImage called")
+        io.github.aakira.napier.Napier.d("Model: $model")
+        io.github.aakira.napier.Napier.d("Image bytes size: ${imageBytes.size}")
+        io.github.aakira.napier.Napier.d("Base64 image length: ${base64Image.length}")
+        io.github.aakira.napier.Napier.d("Prompt length: ${prompt.length}")
+
         val request = ChatCompletionRequest(
             model = ModelId(model),
             messages = listOf(
@@ -54,10 +60,15 @@ class OpenAiLlmClient(
             )
         )
 
+        io.github.aakira.napier.Napier.d("Sending request to OpenAI...")
         val completion = client.chatCompletion(request)
         val endTime = Clock.System.now()
 
         val content = completion.choices.firstOrNull()?.message?.content ?: ""
+
+        io.github.aakira.napier.Napier.d("OpenAI response received")
+        io.github.aakira.napier.Napier.d("Response length: ${content.length}")
+        io.github.aakira.napier.Napier.d("First 200 chars: ${content.take(200)}")
 
         return LlmAnalysisResult(
             content = content,

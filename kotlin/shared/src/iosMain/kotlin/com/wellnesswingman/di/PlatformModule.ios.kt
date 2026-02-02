@@ -3,6 +3,8 @@ package com.wellnesswingman.di
 import com.russhwolf.settings.NSUserDefaultsSettings
 import com.russhwolf.settings.Settings
 import com.wellnesswingman.data.db.DriverFactory
+import com.wellnesswingman.platform.AudioRecordingService
+import com.wellnesswingman.platform.DiagnosticShare
 import org.koin.dsl.module
 import platform.Foundation.NSUserDefaults
 
@@ -18,4 +20,8 @@ val platformModule = module {
     single<Settings> {
         NSUserDefaultsSettings(NSUserDefaults.standardUserDefaults)
     }
+
+    // Platform services
+    single { AudioRecordingService() }
+    single { DiagnosticShare() }
 }

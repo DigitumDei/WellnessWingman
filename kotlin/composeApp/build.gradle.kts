@@ -9,6 +9,7 @@ kotlin {
     androidTarget {
         compilerOptions {
             jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11)
+            freeCompilerArgs.add("-opt-in=androidx.compose.material3.ExperimentalMaterial3Api")
         }
     }
 
@@ -28,6 +29,7 @@ kotlin {
     jvm("desktop") {
         compilerOptions {
             jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11)
+            freeCompilerArgs.add("-opt-in=androidx.compose.material3.ExperimentalMaterial3Api")
         }
     }
 
@@ -41,6 +43,7 @@ kotlin {
                 implementation(compose.foundation)
                 implementation(compose.material3)
                 implementation(compose.ui)
+                implementation(compose.materialIconsExtended)
                 @OptIn(org.jetbrains.compose.ExperimentalComposeLibrary::class)
                 implementation(compose.components.resources)
 
@@ -55,13 +58,15 @@ kotlin {
 
                 // Coil for image loading
                 implementation(libs.coil.compose)
-                implementation(libs.coil.network.ktor)
 
                 // Coroutines
                 implementation(libs.coroutines.core)
 
                 // Datetime
                 implementation(libs.kotlinx.datetime)
+
+                // Serialization
+                implementation(libs.kotlinx.serialization.json)
 
                 // Logging
                 implementation(libs.napier)

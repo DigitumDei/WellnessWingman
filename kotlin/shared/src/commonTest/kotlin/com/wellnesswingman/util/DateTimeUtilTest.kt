@@ -10,21 +10,18 @@ class DateTimeUtilTest {
         val date = LocalDate(2024, 1, 15)
         val formatted = DateTimeUtil.formatDate(date)
 
-        // The format should be like "Jan 15, 2024" or similar locale-dependent format
-        assertTrue(formatted.contains("15"))
-        assertTrue(formatted.contains("2024"))
+        assertEquals("2024-01-15", formatted)
     }
 
     @Test
-    fun `formatDateTime returns correct format with timezone`() {
+    fun `formatDateTime returns correct format`() {
         val instant = Instant.parse("2024-01-15T14:30:00Z")
         val timezone = TimeZone.UTC
         val formatted = DateTimeUtil.formatDateTime(instant, timezone)
 
         // Should contain date and time information
-        assertTrue(formatted.contains("14") || formatted.contains("2")) // hour (24h or 12h format)
-        assertTrue(formatted.contains("30")) // minutes
-        assertTrue(formatted.contains("2024"))
+        assertTrue(formatted.contains("2024-01-15"))
+        assertTrue(formatted.contains("14:30"))
     }
 
     @Test
@@ -33,35 +30,89 @@ class DateTimeUtilTest {
         val timezone = TimeZone.UTC
         val formatted = DateTimeUtil.formatTime(instant, timezone)
 
-        // Should contain time information
-        assertTrue(formatted.contains("14") || formatted.contains("2")) // hour
-        assertTrue(formatted.contains("30")) // minutes
+        assertEquals("14:30", formatted)
     }
 
     @Test
-    fun `startOfDay returns instant at midnight`() {
+    fun `getDayBounds returns correct milliseconds`() {
         val date = LocalDate(2024, 1, 15)
         val timezone = TimeZone.UTC
-        val startOfDay = DateTimeUtil.startOfDay(date, timezone)
+        val (start, end) = DateTimeUtil.getDayBounds(date, timezone)
 
-        val dateTime = startOfDay.toLocalDateTime(timezone)
-        assertEquals(0, dateTime.hour)
-        assertEquals(0, dateTime.minute)
-        assertEquals(0, dateTime.second)
-        assertEquals(date, dateTime.date)
+        val startInstant = Instant.fromEpochMilliseconds(start)
+        val endInstant = Instant.fromEpochMilliseconds(end)
+
+        val startDate = startInstant.toLocalDateTime(timezone)
+        val endDate = endInstant.toLocalDateTime(timezone)
+
+        assertEquals(0, startDate.hour)
+        assertEquals(0, startDate.minute)
+        assertEquals(date, startDate.date)
+        assertEquals(date.plus(1, DateTimeUnit.DAY), endDate.date)
     }
 
     @Test
-    fun `endOfDay returns instant at end of day`() {
+    fun `getWeekBounds returns Monday to Monday`() {
+        // Jan 15, 2024 is a Monday
+        val monday = LocalDate(2024, 1, 15)
+        val timezone = TimeZone.UTC
+        val (start, end) = DateTimeUtil.getWeekBounds(monday, timezone)
+
+        val startInstant = Instant.fromEpochMilliseconds(start)
+        val endInstant = Instant.fromEpochMilliseconds(end)
+
+        val startDate = startInstant.toLocalDateTime(timezone).date
+        val endDate = endInstant.toLocalDateTime(timezone).date
+
+        assertEquals(monday, startDate)
+        assertEquals(monday.plus(7, DateTimeUnit.DAY), endDate)
+    }
+
+    @Test
+    fun `getWeekBounds from Wednesday returns previous Monday`() {
+        // Jan 17, 2024 is a Wednesday
+        val wednesday = LocalDate(2024, 1, 17)
+        val timezone = TimeZone.UTC
+        val (start, _) = DateTimeUtil.getWeekBounds(wednesday, timezone)
+
+        val startInstant = Instant.fromEpochMilliseconds(start)
+        val startDate = startInstant.toLocalDateTime(timezone).date
+
+        // Should be Monday Jan 15
+        assertEquals(LocalDate(2024, 1, 15), startDate)
+        assertEquals(DayOfWeek.MONDAY, startDate.dayOfWeek)
+    }
+
+    @Test
+    fun `getMonthBounds returns first day of month to first day of next month`() {
         val date = LocalDate(2024, 1, 15)
         val timezone = TimeZone.UTC
-        val endOfDay = DateTimeUtil.endOfDay(date, timezone)
+        val (start, end) = DateTimeUtil.getMonthBounds(date, timezone)
 
-        val dateTime = endOfDay.toLocalDateTime(timezone)
-        assertEquals(23, dateTime.hour)
-        assertEquals(59, dateTime.minute)
-        assertEquals(59, dateTime.second)
-        assertEquals(date, dateTime.date)
+        val startInstant = Instant.fromEpochMilliseconds(start)
+        val endInstant = Instant.fromEpochMilliseconds(end)
+
+        val startDate = startInstant.toLocalDateTime(timezone).date
+        val endDate = endInstant.toLocalDateTime(timezone).date
+
+        assertEquals(LocalDate(2024, 1, 1), startDate)
+        assertEquals(LocalDate(2024, 2, 1), endDate)
+    }
+
+    @Test
+    fun `getMonthBounds handles December correctly`() {
+        val date = LocalDate(2024, 12, 15)
+        val timezone = TimeZone.UTC
+        val (start, end) = DateTimeUtil.getMonthBounds(date, timezone)
+
+        val startInstant = Instant.fromEpochMilliseconds(start)
+        val endInstant = Instant.fromEpochMilliseconds(end)
+
+        val startDate = startInstant.toLocalDateTime(timezone).date
+        val endDate = endInstant.toLocalDateTime(timezone).date
+
+        assertEquals(LocalDate(2024, 12, 1), startDate)
+        assertEquals(LocalDate(2025, 1, 1), endDate)
     }
 
     @Test
@@ -74,48 +125,11 @@ class DateTimeUtilTest {
     }
 
     @Test
-    fun `isToday returns true for today's date`() {
-        val now = Clock.System.now()
-        val timezone = TimeZone.currentSystemDefault()
-        val today = now.toLocalDateTime(timezone).date
+    fun `toLocalDate handles timezone correctly`() {
+        // 11 PM UTC on Jan 15 is Jan 16 in +05:00 timezone
+        val instant = Instant.parse("2024-01-15T23:00:00Z")
+        val utcDate = DateTimeUtil.toLocalDate(instant, TimeZone.UTC)
 
-        assertTrue(DateTimeUtil.isToday(today, timezone))
-    }
-
-    @Test
-    fun `isToday returns false for yesterday`() {
-        val now = Clock.System.now()
-        val timezone = TimeZone.currentSystemDefault()
-        val yesterday = now.toLocalDateTime(timezone).date.minus(1, DateTimeUnit.DAY)
-
-        assertFalse(DateTimeUtil.isToday(yesterday, timezone))
-    }
-
-    @Test
-    fun `isToday returns false for tomorrow`() {
-        val now = Clock.System.now()
-        val timezone = TimeZone.currentSystemDefault()
-        val tomorrow = now.toLocalDateTime(timezone).date.plus(1, DateTimeUnit.DAY)
-
-        assertFalse(DateTimeUtil.isToday(tomorrow, timezone))
-    }
-
-    @Test
-    fun `daysAgo calculates correct number of days`() {
-        val now = Clock.System.now()
-        val timezone = TimeZone.currentSystemDefault()
-        val today = now.toLocalDateTime(timezone).date
-        val threeDaysAgo = today.minus(3, DateTimeUnit.DAY)
-
-        assertEquals(3, DateTimeUtil.daysAgo(threeDaysAgo, timezone))
-    }
-
-    @Test
-    fun `daysAgo returns 0 for today`() {
-        val now = Clock.System.now()
-        val timezone = TimeZone.currentSystemDefault()
-        val today = now.toLocalDateTime(timezone).date
-
-        assertEquals(0, DateTimeUtil.daysAgo(today, timezone))
+        assertEquals(LocalDate(2024, 1, 15), utcDate)
     }
 }

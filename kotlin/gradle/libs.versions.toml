@@ -1,9 +1,9 @@
 [versions]
-kotlin = "2.1.0"
-agp = "8.5.2"
+kotlin = "2.2.10"
+agp = "9.0.0"
 compose = "1.7.0"
 compose-compiler = "1.5.15"
-koin = "3.5.6"
+koin = "3.5.3"
 sqldelight = "2.0.2"
 ktor = "2.3.12"
 coroutines = "1.9.0"
@@ -12,11 +12,11 @@ napier = "2.7.1"
 kover = "0.8.3"
 mockk = "1.13.13"
 voyager = "1.1.0-beta02"
-coil = "3.0.0"
+coil = "2.5.0"
 kotlinx-datetime = "0.6.1"
 kotlinx-serialization = "1.7.3"
 multiplatform-settings = "1.2.0"
-androidx-work = "2.10.0"
+androidx-work = "2.9.0"
 androidx-lifecycle = "2.8.7"
 androidx-activity-compose = "1.8.2"
 
@@ -31,7 +31,7 @@ compose-ui-tooling-preview = { module = "org.jetbrains.compose.ui:ui-tooling-pre
 # Koin
 koin-core = { module = "io.insert-koin:koin-core", version.ref = "koin" }
 koin-android = { module = "io.insert-koin:koin-android", version.ref = "koin" }
-koin-compose = { module = "io.insert-koin:koin-compose", version.ref = "koin" }
+koin-compose = { module = "io.insert-koin:koin-androidx-compose", version.ref = "koin" }
 
 # SQLDelight
 sqldelight-driver-android = { module = "app.cash.sqldelight:android-driver", version.ref = "sqldelight" }
@@ -59,8 +59,7 @@ voyager-transitions = { module = "cafe.adriel.voyager:voyager-transitions", vers
 voyager-koin = { module = "cafe.adriel.voyager:voyager-koin", version.ref = "voyager" }
 
 # Coil (Image Loading)
-coil-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil" }
-coil-network-ktor = { module = "io.coil-kt.coil3:coil-network-ktor", version.ref = "coil" }
+coil-compose = { module = "io.coil-kt:coil-compose", version.ref = "coil" }
 
 # Other
 openai-kotlin = { module = "com.aallam.openai:openai-client", version.ref = "openai" }

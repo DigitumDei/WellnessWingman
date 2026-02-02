@@ -4,7 +4,10 @@ import android.content.Context
 import com.russhwolf.settings.Settings
 import com.russhwolf.settings.SharedPreferencesSettings
 import com.wellnesswingman.data.db.DriverFactory
+import com.wellnesswingman.platform.AudioRecordingService
 import com.wellnesswingman.platform.CameraCaptureService
+import com.wellnesswingman.platform.DiagnosticLogger
+import com.wellnesswingman.platform.DiagnosticShare
 import com.wellnesswingman.platform.FileSystem
 import com.wellnesswingman.platform.PhotoResizer
 import org.koin.dsl.module
@@ -30,5 +33,8 @@ val platformModule = module {
     // Platform services
     single { FileSystem(get<Context>()) }
     single { CameraCaptureService(get<Context>()) }
+    single { AudioRecordingService(get<Context>()) }
     single { PhotoResizer() }
+    single { DiagnosticLogger(get<Context>()) }
+    single { DiagnosticShare(get<Context>(), get()) }
 }

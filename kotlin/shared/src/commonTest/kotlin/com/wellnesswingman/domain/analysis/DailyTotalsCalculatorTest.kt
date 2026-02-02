@@ -1,8 +1,7 @@
 package com.wellnesswingman.domain.analysis
 
-import com.wellnesswingman.data.model.DailySummary
+import com.wellnesswingman.data.model.analysis.MealAnalysisResult
 import com.wellnesswingman.data.model.analysis.NutritionEstimate
-import kotlinx.datetime.LocalDate
 import kotlin.test.*
 
 class DailyTotalsCalculatorTest {
@@ -15,147 +14,106 @@ class DailyTotalsCalculatorTest {
     }
 
     @Test
-    fun `calculateTotals returns zero totals when summaryContent is null`() {
-        val summary = DailySummary(
-            summaryId = 1,
-            date = LocalDate(2024, 1, 1),
-            summaryContent = null,
-            highlights = "Test",
-            recommendations = "",
-            generatedAt = kotlinx.datetime.Clock.System.now()
-        )
+    fun `calculate returns zero totals when list is empty`() {
+        val result = calculator.calculate(emptyList())
 
-        val result = calculator.calculateTotals(summary)
-
-        assertEquals(0, result.totalCalories)
-        assertEquals(0.0, result.totalProtein)
-        assertEquals(0.0, result.totalCarbs)
-        assertEquals(0.0, result.totalFat)
+        assertEquals(0.0, result.calories)
+        assertEquals(0.0, result.protein)
+        assertEquals(0.0, result.carbs)
+        assertEquals(0.0, result.fat)
     }
 
     @Test
-    fun `calculateTotals sums nutrition values from multiple meals`() {
-        val summaryContent = """
-        {
-            "meals": [
-                {
-                    "nutrition": {
-                        "calories": 500,
-                        "protein": 25.5,
-                        "carbs": 60.0,
-                        "fat": 15.0
-                    }
-                },
-                {
-                    "nutrition": {
-                        "calories": 300,
-                        "protein": 20.0,
-                        "carbs": 40.0,
-                        "fat": 10.0
-                    }
-                }
-            ]
-        }
-        """.trimIndent()
-
-        val summary = DailySummary(
-            summaryId = 1,
-            date = LocalDate(2024, 1, 1),
-            summaryContent = summaryContent,
-            highlights = "Test",
-            recommendations = "",
-            generatedAt = kotlinx.datetime.Clock.System.now()
+    fun `calculate sums nutrition values from multiple meals`() {
+        val meals = listOf(
+            MealAnalysisResult(
+                nutrition = NutritionEstimate(
+                    totalCalories = 500.0,
+                    protein = 25.5,
+                    carbohydrates = 60.0,
+                    fat = 15.0
+                )
+            ),
+            MealAnalysisResult(
+                nutrition = NutritionEstimate(
+                    totalCalories = 300.0,
+                    protein = 20.0,
+                    carbohydrates = 40.0,
+                    fat = 10.0
+                )
+            )
         )
 
-        val result = calculator.calculateTotals(summary)
+        val result = calculator.calculate(meals)
 
-        assertEquals(800, result.totalCalories)
-        assertEquals(45.5, result.totalProtein)
-        assertEquals(100.0, result.totalCarbs)
-        assertEquals(25.0, result.totalFat)
+        assertEquals(800.0, result.calories)
+        assertEquals(45.5, result.protein)
+        assertEquals(100.0, result.carbs)
+        assertEquals(25.0, result.fat)
     }
 
     @Test
-    fun `calculateTotals handles missing nutrition values gracefully`() {
-        val summaryContent = """
-        {
-            "meals": [
-                {
-                    "nutrition": {
-                        "calories": 500
-                    }
-                }
-            ]
-        }
-        """.trimIndent()
-
-        val summary = DailySummary(
-            summaryId = 1,
-            date = LocalDate(2024, 1, 1),
-            summaryContent = summaryContent,
-            highlights = "Test",
-            recommendations = "",
-            generatedAt = kotlinx.datetime.Clock.System.now()
+    fun `calculate handles null nutrition gracefully`() {
+        val meals = listOf(
+            MealAnalysisResult(nutrition = null),
+            MealAnalysisResult(
+                nutrition = NutritionEstimate(totalCalories = 500.0)
+            )
         )
 
-        val result = calculator.calculateTotals(summary)
+        val result = calculator.calculate(meals)
 
-        assertEquals(500, result.totalCalories)
-        assertEquals(0.0, result.totalProtein)
-        assertEquals(0.0, result.totalCarbs)
-        assertEquals(0.0, result.totalFat)
+        assertEquals(500.0, result.calories)
+        assertEquals(0.0, result.protein)
+        assertEquals(0.0, result.carbs)
+        assertEquals(0.0, result.fat)
     }
 
     @Test
-    fun `calculateTotals handles invalid JSON gracefully`() {
-        val summary = DailySummary(
-            summaryId = 1,
-            date = LocalDate(2024, 1, 1),
-            summaryContent = "invalid json {",
-            highlights = "Test",
-            recommendations = "",
-            generatedAt = kotlinx.datetime.Clock.System.now()
+    fun `calculate handles null values in nutrition`() {
+        val meals = listOf(
+            MealAnalysisResult(
+                nutrition = NutritionEstimate(
+                    totalCalories = 500.0,
+                    protein = null,
+                    carbohydrates = null,
+                    fat = null
+                )
+            )
         )
 
-        val result = calculator.calculateTotals(summary)
+        val result = calculator.calculate(meals)
 
-        assertEquals(0, result.totalCalories)
-        assertEquals(0.0, result.totalProtein)
-        assertEquals(0.0, result.totalCarbs)
-        assertEquals(0.0, result.totalFat)
+        assertEquals(500.0, result.calories)
+        assertEquals(0.0, result.protein)
+        assertEquals(0.0, result.carbs)
+        assertEquals(0.0, result.fat)
     }
 
     @Test
-    fun `calculateTotals rounds decimal values correctly`() {
-        val summaryContent = """
-        {
-            "meals": [
-                {
-                    "nutrition": {
-                        "calories": 333,
-                        "protein": 10.333,
-                        "carbs": 20.666,
-                        "fat": 5.999
-                    }
-                }
-            ]
-        }
-        """.trimIndent()
-
-        val summary = DailySummary(
-            summaryId = 1,
-            date = LocalDate(2024, 1, 1),
-            summaryContent = summaryContent,
-            highlights = "Test",
-            recommendations = "",
-            generatedAt = kotlinx.datetime.Clock.System.now()
+    fun `calculate includes fiber, sugar, and sodium`() {
+        val meals = listOf(
+            MealAnalysisResult(
+                nutrition = NutritionEstimate(
+                    totalCalories = 333.0,
+                    protein = 10.0,
+                    carbohydrates = 20.0,
+                    fat = 5.0,
+                    fiber = 8.0,
+                    sugar = 10.0,
+                    sodium = 400.0
+                )
+            )
         )
 
-        val result = calculator.calculateTotals(summary)
+        val result = calculator.calculate(meals)
 
-        assertEquals(333, result.totalCalories)
-        assertTrue(result.totalProtein in 10.3..10.4) // Allow for floating point precision
-        assertTrue(result.totalCarbs in 20.6..20.7)
-        assertTrue(result.totalFat in 5.9..6.0)
+        assertEquals(333.0, result.calories)
+        assertEquals(10.0, result.protein)
+        assertEquals(20.0, result.carbs)
+        assertEquals(5.0, result.fat)
+        assertEquals(8.0, result.fiber)
+        assertEquals(10.0, result.sugar)
+        assertEquals(400.0, result.sodium)
     }
 }

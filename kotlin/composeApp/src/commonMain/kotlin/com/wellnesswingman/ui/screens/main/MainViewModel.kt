@@ -26,7 +26,19 @@ class MainViewModel(
     val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
 
     init {
-        loadEntries()
+        observeEntries()
+    }
+
+    private fun observeEntries() {
+        screenModelScope.launch {
+            trackedEntryRepository.observeAllEntries().collect { entries ->
+                _uiState.value = if (entries.isEmpty()) {
+                    MainUiState.Empty
+                } else {
+                    MainUiState.Success(entries)
+                }
+            }
+        }
     }
 
     fun loadEntries() {

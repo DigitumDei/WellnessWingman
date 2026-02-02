@@ -6,7 +6,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.CalendarViewMonth
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -49,7 +49,7 @@ data class DayDetailScreen(val date: LocalDate) : Screen {
                     },
                     actions = {
                         IconButton(onClick = { navigator.push(DailySummaryScreen()) }) {
-                            Icon(Icons.Default.CalendarMonth, contentDescription = "View Summary")
+                            Icon(Icons.Default.CalendarViewMonth, contentDescription = "View Summary")
                         }
                     }
                 )

@@ -8,7 +8,6 @@ import com.wellnesswingman.data.model.TrackedEntry
 import com.wellnesswingman.db.WellnessWingmanDatabase
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Clock
-import kotlinx.datetime.Instant
 import kotlin.test.*
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.hours
@@ -100,7 +99,7 @@ class SqlDelightTrackedEntryRepositoryTest {
     }
 
     @Test
-    fun `getEntriesBetween returns entries in time range`() = runTest {
+    fun `getEntriesForDay returns entries in time range`() = runTest {
         val now = Clock.System.now()
         val dayStart = now.minus(12.hours)
         val dayEnd = now
@@ -122,14 +121,19 @@ class SqlDelightTrackedEntryRepositoryTest {
         repository.insertEntry(entry2)
         repository.insertEntry(entry3)
 
-        val inRange = repository.getEntriesBetween(dayStart, dayEnd)
+        val inRange = repository.getEntriesForDay(
+            dayStart.toEpochMilliseconds(),
+            dayEnd.toEpochMilliseconds()
+        )
 
         assertEquals(2, inRange.size)
-        assertTrue(inRange.all { it.capturedAt >= dayStart && it.capturedAt <= dayEnd })
+        assertTrue(inRange.all {
+            it.capturedAt >= dayStart && it.capturedAt <= dayEnd
+        })
     }
 
     @Test
-    fun `updateEntry modifies existing entry`() = runTest {
+    fun `updateEntryStatus modifies status`() = runTest {
         val entry = TrackedEntry(
             entryType = EntryType.MEAL,
             capturedAt = Clock.System.now(),
@@ -137,17 +141,26 @@ class SqlDelightTrackedEntryRepositoryTest {
         )
 
         val id = repository.insertEntry(entry)
-        val updated = entry.copy(
-            entryId = id,
-            processingStatus = ProcessingStatus.COMPLETED,
-            userNotes = "Updated notes"
-        )
-
-        repository.updateEntry(updated)
+        repository.updateEntryStatus(id, ProcessingStatus.COMPLETED)
         val retrieved = repository.getEntryById(id)
 
         assertNotNull(retrieved)
         assertEquals(ProcessingStatus.COMPLETED, retrieved.processingStatus)
+    }
+
+    @Test
+    fun `updateUserNotes modifies notes`() = runTest {
+        val entry = TrackedEntry(
+            entryType = EntryType.MEAL,
+            capturedAt = Clock.System.now(),
+            userNotes = "Original notes"
+        )
+
+        val id = repository.insertEntry(entry)
+        repository.updateUserNotes(id, "Updated notes")
+        val retrieved = repository.getEntryById(id)
+
+        assertNotNull(retrieved)
         assertEquals("Updated notes", retrieved.userNotes)
     }
 
@@ -163,18 +176,6 @@ class SqlDelightTrackedEntryRepositoryTest {
         val retrieved = repository.getEntryById(id)
 
         assertNull(retrieved)
-    }
-
-    @Test
-    fun `getEntriesByType returns only matching type`() = runTest {
-        repository.insertEntry(TrackedEntry(entryType = EntryType.MEAL, capturedAt = Clock.System.now()))
-        repository.insertEntry(TrackedEntry(entryType = EntryType.EXERCISE, capturedAt = Clock.System.now()))
-        repository.insertEntry(TrackedEntry(entryType = EntryType.MEAL, capturedAt = Clock.System.now()))
-
-        val meals = repository.getEntriesByType(EntryType.MEAL)
-
-        assertEquals(2, meals.size)
-        assertTrue(meals.all { it.entryType == EntryType.MEAL })
     }
 
     @Test
@@ -205,5 +206,28 @@ class SqlDelightTrackedEntryRepositoryTest {
 
         assertEquals(2, pending.size)
         assertTrue(pending.all { it.processingStatus == ProcessingStatus.PENDING })
+    }
+
+    @Test
+    fun `getPendingEntries returns only pending entries`() = runTest {
+        repository.insertEntry(
+            TrackedEntry(
+                entryType = EntryType.MEAL,
+                capturedAt = Clock.System.now(),
+                processingStatus = ProcessingStatus.PENDING
+            )
+        )
+        repository.insertEntry(
+            TrackedEntry(
+                entryType = EntryType.EXERCISE,
+                capturedAt = Clock.System.now(),
+                processingStatus = ProcessingStatus.COMPLETED
+            )
+        )
+
+        val pending = repository.getPendingEntries()
+
+        assertEquals(1, pending.size)
+        assertEquals(ProcessingStatus.PENDING, pending[0].processingStatus)
     }
 }
