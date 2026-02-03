@@ -1,22 +1,23 @@
 package com.wellnesswingman.domain.llm
 
-import com.aallam.openai.api.chat.ChatCompletion
+import com.aallam.openai.api.audio.TranscriptionRequest
 import com.aallam.openai.api.chat.ChatCompletionRequest
 import com.aallam.openai.api.chat.ChatMessage
 import com.aallam.openai.api.chat.ChatResponseFormat
 import com.aallam.openai.api.chat.ChatRole
 import com.aallam.openai.api.chat.ImagePart
 import com.aallam.openai.api.chat.TextPart
-import com.aallam.openai.api.audio.TranscriptionRequest
 import com.aallam.openai.api.file.FileSource
 import com.aallam.openai.api.model.ModelId
-import com.aallam.openai.client.OpenAI
 import com.aallam.openai.client.LoggingConfig
-import io.ktor.utils.io.core.toByteArray
+import com.aallam.openai.client.OpenAI
+import com.aallam.openai.api.http.Timeout
+import io.github.aakira.napier.Napier
 import kotlinx.datetime.Clock
 import okio.Buffer
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * OpenAI implementation of LlmClient using openai-kotlin library.
@@ -28,7 +29,8 @@ class OpenAiLlmClient(
 
     private val client = OpenAI(
         token = apiKey,
-        logging = LoggingConfig()
+        logging = LoggingConfig(),
+        timeout = Timeout(socket = 60.seconds, connect = 60.seconds, request = 60.seconds)
     )
 
     @OptIn(ExperimentalEncodingApi::class)
@@ -42,11 +44,11 @@ class OpenAiLlmClient(
         // Encode image as base64
         val base64Image = Base64.encode(imageBytes)
 
-        io.github.aakira.napier.Napier.d("OpenAI analyzeImage called")
-        io.github.aakira.napier.Napier.d("Model: $model")
-        io.github.aakira.napier.Napier.d("Image bytes size: ${imageBytes.size}")
-        io.github.aakira.napier.Napier.d("Base64 image length: ${base64Image.length}")
-        io.github.aakira.napier.Napier.d("Prompt length: ${prompt.length}")
+        Napier.d("OpenAI analyzeImage called")
+        Napier.d("Model: $model")
+        Napier.d("Image bytes size: ${imageBytes.size}")
+        Napier.d("Base64 image length: ${base64Image.length}")
+        Napier.d("Prompt length: ${prompt.length}")
 
         val request = ChatCompletionRequest(
             model = ModelId(model),
@@ -62,18 +64,19 @@ class OpenAiLlmClient(
             responseFormat = if (jsonSchema != null) ChatResponseFormat.JsonObject else null
         )
 
-        io.github.aakira.napier.Napier.d("Sending request to OpenAI...")
+        Napier.d("Sending request to OpenAI...")
         val completion = client.chatCompletion(request)
         val endTime = Clock.System.now()
 
         val content = completion.choices.firstOrNull()?.message?.content ?: ""
+        val sanitizedContent = sanitize(content)
 
-        io.github.aakira.napier.Napier.d("OpenAI response received")
-        io.github.aakira.napier.Napier.d("Response length: ${content.length}")
-        io.github.aakira.napier.Napier.d("First 200 chars: ${content.take(200)}")
+        Napier.d("OpenAI response received")
+        Napier.d("Response length: ${sanitizedContent.length}")
+        Napier.d("First 200 chars: ${sanitizedContent.take(200)}")
 
         return LlmAnalysisResult(
-            content = content,
+            content = sanitizedContent,
             diagnostics = LlmDiagnostics(
                 promptTokens = completion.usage?.promptTokens ?: 0,
                 completionTokens = completion.usage?.completionTokens ?: 0,
@@ -125,9 +128,10 @@ class OpenAiLlmClient(
         val endTime = Clock.System.now()
 
         val content = completion.choices.firstOrNull()?.message?.content ?: ""
+        val sanitizedContent = sanitize(content)
 
         return LlmAnalysisResult(
-            content = content,
+            content = sanitizedContent,
             diagnostics = LlmDiagnostics(
                 promptTokens = completion.usage?.promptTokens ?: 0,
                 completionTokens = completion.usage?.completionTokens ?: 0,
@@ -136,5 +140,9 @@ class OpenAiLlmClient(
                 latencyMs = (endTime - startTime).inWholeMilliseconds
             )
         )
+    }
+
+    private fun sanitize(content: String): String {
+        return content.trim().removePrefix("```json").removeSuffix("```").trim()
     }
 }

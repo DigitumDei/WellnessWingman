@@ -7,6 +7,7 @@ import com.wellnesswingman.db.WellnessWingmanDatabase
 
 /**
  * Android implementation of database driver factory.
+ * AndroidSqliteDriver automatically handles migrations using the Schema.
  */
 actual class DriverFactory(private val context: Context) {
     actual fun createDriver(): SqlDriver {

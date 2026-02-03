@@ -107,12 +107,9 @@ class EntryDetailViewModel(
             // Try unified format first
             try {
                 val unified = json.decodeFromString<UnifiedAnalysisResult>(analysis.insightsJson)
-                when {
-                    unified.mealAnalysis != null -> ParsedAnalysis.Meal(unified.mealAnalysis)
-                    unified.exerciseAnalysis != null -> ParsedAnalysis.Exercise(unified.exerciseAnalysis)
-                    unified.sleepAnalysis != null -> ParsedAnalysis.Sleep(unified.sleepAnalysis)
-                    else -> null
-                }
+                unified.mealAnalysis?.let { ParsedAnalysis.Meal(it) }
+                    ?: unified.exerciseAnalysis?.let { ParsedAnalysis.Exercise(it) }
+                    ?: unified.sleepAnalysis?.let { ParsedAnalysis.Sleep(it) }
             } catch (e: Exception) {
                 // Fall back to type-specific parsing
                 when (entryType) {

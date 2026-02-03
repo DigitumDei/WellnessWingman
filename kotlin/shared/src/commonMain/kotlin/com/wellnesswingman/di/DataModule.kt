@@ -30,6 +30,10 @@ val dataModule = module {
         SqlDelightDailySummaryRepository(get())
     }
 
+    single<WeeklySummaryRepository> {
+        SqlDelightWeeklySummaryRepository(get())
+    }
+
     single<AppSettingsRepository> {
         SettingsAppSettingsRepository(get())
     }

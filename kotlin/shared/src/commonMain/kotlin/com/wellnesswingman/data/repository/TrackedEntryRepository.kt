@@ -17,6 +17,7 @@ interface TrackedEntryRepository {
     suspend fun getEntryByExternalId(externalId: String): TrackedEntry?
     suspend fun getEntriesForDay(startMillis: Long, endMillis: Long): List<TrackedEntry>
     suspend fun getEntriesForDay(date: LocalDate): List<TrackedEntry>
+    fun observeEntriesForDay(date: LocalDate): Flow<List<TrackedEntry>>
     suspend fun getEntriesForWeek(startMillis: Long, endMillis: Long): List<TrackedEntry>
     suspend fun getEntriesForMonth(startMillis: Long, endMillis: Long): List<TrackedEntry>
     suspend fun getEntriesByStatus(status: ProcessingStatus): List<TrackedEntry>

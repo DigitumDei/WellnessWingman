@@ -131,6 +131,8 @@ sqldelight {
         create("WellnessWingmanDatabase") {
             packageName.set("com.wellnesswingman.db")
             srcDirs.setFrom("src/commonMain/sqldelight")
+            version = 2
+            verifyMigrations.set(true)
         }
     }
 }

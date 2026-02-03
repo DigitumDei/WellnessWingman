@@ -3,6 +3,7 @@ package com.wellnesswingman.di
 import com.wellnesswingman.domain.analysis.AnalysisOrchestrator
 import com.wellnesswingman.domain.analysis.BackgroundAnalysisService
 import com.wellnesswingman.domain.analysis.DailySummaryService
+import com.wellnesswingman.domain.analysis.WeeklySummaryService
 import com.wellnesswingman.domain.analysis.DailyTotalsCalculator
 import com.wellnesswingman.domain.analysis.DefaultBackgroundAnalysisService
 import com.wellnesswingman.domain.analysis.DefaultStaleEntryRecoveryService
@@ -35,6 +36,7 @@ val domainModule = module {
     // Services
     singleOf(::AnalysisOrchestrator)
     singleOf(::DailySummaryService)
+    singleOf(::WeeklySummaryService)
 
     // Background services
     single<BackgroundAnalysisService> {

@@ -1,0 +1,91 @@
+-- WeeklySummary table schema
+
+CREATE TABLE WeeklySummary (
+    summaryId INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    weekStartDate INTEGER NOT NULL,  -- LocalDate as epochDay
+    highlights TEXT NOT NULL DEFAULT '',
+    recommendations TEXT NOT NULL DEFAULT '',
+    mealCount INTEGER NOT NULL DEFAULT 0,
+    exerciseCount INTEGER NOT NULL DEFAULT 0,
+    sleepCount INTEGER NOT NULL DEFAULT 0,
+    otherCount INTEGER NOT NULL DEFAULT 0,
+    totalEntries INTEGER NOT NULL DEFAULT 0,
+    generatedAt INTEGER
+);
+
+-- Index for week queries
+CREATE UNIQUE INDEX idx_weekly_summary_week ON WeeklySummary(weekStartDate);
+
+-- Queries
+
+-- Get all summaries
+getAllSummaries:
+SELECT * FROM WeeklySummary
+ORDER BY weekStartDate DESC;
+
+-- Get summary by ID
+getSummaryById:
+SELECT * FROM WeeklySummary
+WHERE summaryId = ?;
+
+-- Get summary for a specific week
+getSummaryForWeek:
+SELECT * FROM WeeklySummary
+WHERE weekStartDate = ?;
+
+-- Get summaries for date range
+getSummariesForDateRange:
+SELECT * FROM WeeklySummary
+WHERE weekStartDate >= ? AND weekStartDate <= ?
+ORDER BY weekStartDate DESC;
+
+-- Get recent summaries
+getRecentSummaries:
+SELECT * FROM WeeklySummary
+ORDER BY weekStartDate DESC
+LIMIT ?;
+
+-- Insert summary
+insertSummary:
+INSERT INTO WeeklySummary(
+    weekStartDate,
+    highlights,
+    recommendations,
+    mealCount,
+    exerciseCount,
+    sleepCount,
+    otherCount,
+    totalEntries,
+    generatedAt
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+-- Update summary
+updateSummary:
+UPDATE WeeklySummary
+SET highlights = ?, recommendations = ?, mealCount = ?, exerciseCount = ?, sleepCount = ?, otherCount = ?, totalEntries = ?, generatedAt = ?
+WHERE summaryId = ?;
+
+-- Update summary by week
+updateSummaryByWeek:
+UPDATE WeeklySummary
+SET highlights = ?, recommendations = ?, mealCount = ?, exerciseCount = ?, sleepCount = ?, otherCount = ?, totalEntries = ?, generatedAt = ?
+WHERE weekStartDate = ?;
+
+-- Delete summary
+deleteSummary:
+DELETE FROM WeeklySummary
+WHERE summaryId = ?;
+
+-- Delete summary by week
+deleteSummaryByWeek:
+DELETE FROM WeeklySummary
+WHERE weekStartDate = ?;
+
+-- Delete old summaries (older than specified date)
+deleteOldSummaries:
+DELETE FROM WeeklySummary
+WHERE weekStartDate < ?;
+
+-- Get last inserted row ID
+lastInsertRowId:
+SELECT last_insert_rowid();

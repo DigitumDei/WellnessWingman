@@ -16,14 +16,35 @@ import org.koin.dsl.module
  * Koin module for ViewModels/ScreenModels.
  */
 val viewModelModule = module {
-    factoryOf(::MainViewModel)
+    factory {
+        MainViewModel(
+            trackedEntryRepository = get(),
+            entryAnalysisRepository = get(),
+            dailySummaryRepository = get(),
+            dailySummaryService = get(),
+            dailyTotalsCalculator = get()
+        )
+    }
     factoryOf(::SettingsViewModel)
     factoryOf(::DailySummaryViewModel)
     factoryOf(::PhotoReviewViewModel)
     factoryOf(::CalendarViewModel)
-    factoryOf(::WeekViewModel)
+    factory {
+        WeekViewModel(
+            trackedEntryRepository = get(),
+            weeklySummaryService = get()
+        )
+    }
     factoryOf(::YearViewModel)
-    factoryOf(::DayDetailViewModel)
+    factory {
+        DayDetailViewModel(
+            trackedEntryRepository = get(),
+            entryAnalysisRepository = get(),
+            dailySummaryRepository = get(),
+            dailySummaryService = get(),
+            dailyTotalsCalculator = get()
+        )
+    }
     factory { params ->
         EntryDetailViewModel(
             entryId = params.get(),

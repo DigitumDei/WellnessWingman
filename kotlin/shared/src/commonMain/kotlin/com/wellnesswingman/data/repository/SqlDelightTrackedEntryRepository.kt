@@ -66,6 +66,20 @@ class SqlDelightTrackedEntryRepository(
             ).executeAsList().map { it.toTrackedEntry() }
         }
 
+    override fun observeEntriesForDay(date: LocalDate): Flow<List<TrackedEntry>> {
+        val (start, end) = DateTimeConverter.getUtcBoundsForLocalDay(
+            date,
+            TimeZone.currentSystemDefault()
+        )
+        return queries.getEntriesForDay(
+            start.toEpochMilliseconds(),
+            end.toEpochMilliseconds()
+        )
+            .asFlow()
+            .mapToList(Dispatchers.IO)
+            .map { list -> list.map { it.toTrackedEntry() } }
+    }
+
     override suspend fun getEntriesForWeek(
         startMillis: Long,
         endMillis: Long
