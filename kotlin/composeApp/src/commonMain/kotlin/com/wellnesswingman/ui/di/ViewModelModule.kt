@@ -52,7 +52,9 @@ val viewModelModule = module {
             entryAnalysisRepository = get(),
             fileSystem = get(),
             backgroundAnalysisService = get(),
-            statusChangeNotifier = get()
+            statusChangeNotifier = get(),
+            audioRecordingService = get(),
+            llmClientFactory = get()
         )
     }
 }

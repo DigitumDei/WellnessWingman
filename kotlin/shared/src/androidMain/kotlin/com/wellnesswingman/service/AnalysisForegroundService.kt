@@ -7,6 +7,7 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.media.AudioAttributes
 import android.os.Build
 import android.os.IBinder
 import io.github.aakira.napier.Napier
@@ -64,9 +65,13 @@ class AnalysisForegroundService : Service() {
             val channel = NotificationChannel(
                 CHANNEL_ID,
                 CHANNEL_NAME,
-                NotificationManager.IMPORTANCE_LOW // Low = no sound/vibration
+                NotificationManager.IMPORTANCE_DEFAULT
             ).apply {
-                description = "Shows when analyzing meal photos"
+                description = "Shows when analyzing entries"
+                setShowBadge(true)
+                // Default importance for status bar visibility, but silence the sound
+                setSound(null, null as AudioAttributes?)
+                enableVibration(false)
             }
 
             val notificationManager = getSystemService(NotificationManager::class.java)
@@ -106,6 +111,7 @@ class AnalysisForegroundService : Service() {
             .setContentText(taskCountText)
             .setSmallIcon(android.R.drawable.ic_menu_upload) // Using system icon for now
             .setOngoing(true) // Makes it persistent
+            .setNumber(activeTaskCount) // Badge count on app icon
 
         pendingIntent?.let { builder.setContentIntent(it) }
 
@@ -113,7 +119,7 @@ class AnalysisForegroundService : Service() {
     }
 
     companion object {
-        const val CHANNEL_ID = "analysis_channel"
+        const val CHANNEL_ID = "analysis_channel_v2"
         const val CHANNEL_NAME = "Analysis"
         const val NOTIFICATION_ID = 1001
         const val EXTRA_TASK_NAME = "taskName"

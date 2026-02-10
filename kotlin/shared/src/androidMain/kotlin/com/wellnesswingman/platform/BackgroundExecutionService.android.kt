@@ -5,6 +5,9 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import android.widget.Toast
 import com.wellnesswingman.service.AnalysisForegroundService
 import io.github.aakira.napier.Napier
 
@@ -24,12 +27,15 @@ class AndroidBackgroundExecutionService(
             true
         }
 
+        Napier.d("Notification permission check: granted=$hasNotificationPermission, SDK=${Build.VERSION.SDK_INT}")
+
         // Only start foreground service if we have notification permission
         // Otherwise, fall back to best-effort background execution
         if (!hasNotificationPermission) {
             Napier.w("No notification permission; skipping foreground service for task $taskName")
-            // Without notification permission, we can't use a foreground service safely
-            // The task will still run, but may be killed if the app is backgrounded for too long
+            Handler(Looper.getMainLooper()).post {
+                Toast.makeText(context, "Analysis running without foreground service (no notification permission)", Toast.LENGTH_LONG).show()
+            }
             return
         }
 

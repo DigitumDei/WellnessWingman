@@ -3,9 +3,6 @@ package com.wellnesswingman.domain.analysis
 import com.wellnesswingman.data.model.ProcessingStatus
 import com.wellnesswingman.data.repository.TrackedEntryRepository
 import io.github.aakira.napier.Napier
-import kotlinx.datetime.Clock
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.toLocalDateTime
 
 /**
  * Service to recover entries that were left in Processing state due to app shutdown.
@@ -29,24 +26,18 @@ class DefaultStaleEntryRecoveryService(
         try {
             Napier.i("Checking for stale processing entries on app startup...")
 
-            // Get today's date
-            val today = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date
-
-            // Get entries for today to check for stale Processing states
-            val entries = trackedEntryRepository.getEntriesForDay(today)
-
-            val staleEntries = entries.filter { it.processingStatus == ProcessingStatus.PROCESSING }
+            val staleEntries = trackedEntryRepository.getEntriesByStatus(ProcessingStatus.PROCESSING)
 
             if (staleEntries.isEmpty()) {
                 Napier.i("No stale processing entries found.")
                 return
             }
 
-            Napier.w("Found ${staleEntries.size} stale processing entries. Resetting to Pending state.")
+            Napier.w("Found ${staleEntries.size} stale processing entries. Resetting to Failed.")
 
             for (entry in staleEntries) {
-                Napier.i("Resetting entry ${entry.entryId} from Processing to Pending.")
-                trackedEntryRepository.updateEntryStatus(entry.entryId, ProcessingStatus.PENDING)
+                Napier.i("Resetting entry ${entry.entryId} from Processing to Failed.")
+                trackedEntryRepository.updateEntryStatus(entry.entryId, ProcessingStatus.FAILED)
             }
 
             Napier.i("Stale entry recovery completed. ${staleEntries.size} entries reset.")

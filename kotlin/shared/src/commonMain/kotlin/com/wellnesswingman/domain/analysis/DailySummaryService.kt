@@ -322,11 +322,18 @@ Return ONLY the JSON object.
      * Parses highlights and recommendations from LLM response.
      */
     private fun parseHighlightsAndRecommendations(content: String): Pair<List<String>, List<String>> {
+        val cleanedContent = extractJsonObject(content) ?: content
         try {
             // Try to parse as JSON first
-            val summaryJson = json.decodeFromString<DailySummaryPayload>(content)
+            val summaryJson = json.decodeFromString<DailySummaryPayload>(cleanedContent)
             return summaryJson.highlights to summaryJson.recommendations
         } catch (e: Exception) {
+            try {
+                val altJson = json.decodeFromString<DailySummaryPayloadAlt>(cleanedContent)
+                return altJson.insights to altJson.recommendations
+            } catch (e2: Exception) {
+                // Fall back to text parsing
+            }
             // Fall back to text parsing
             val lines = content.lines()
             val highlights = mutableListOf<String>()
@@ -362,4 +369,19 @@ Return ONLY the JSON object.
             return highlights to recommendations
         }
     }
+
+    private fun extractJsonObject(content: String): String? {
+        val start = content.indexOf('{')
+        val end = content.lastIndexOf('}')
+        if (start == -1 || end == -1 || end <= start) return null
+        return content.substring(start, end + 1).trim()
+    }
+
+    @kotlinx.serialization.Serializable
+    private data class DailySummaryPayloadAlt(
+        @kotlinx.serialization.SerialName("insights")
+        val insights: List<String> = emptyList(),
+        @kotlinx.serialization.SerialName("recommendations")
+        val recommendations: List<String> = emptyList()
+    )
 }

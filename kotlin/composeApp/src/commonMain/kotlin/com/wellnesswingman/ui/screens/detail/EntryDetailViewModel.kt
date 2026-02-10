@@ -14,13 +14,18 @@ import com.wellnesswingman.data.repository.EntryAnalysisRepository
 import com.wellnesswingman.data.repository.TrackedEntryRepository
 import com.wellnesswingman.domain.analysis.BackgroundAnalysisService
 import com.wellnesswingman.domain.events.StatusChangeNotifier
+import com.wellnesswingman.domain.llm.LlmClientFactory
+import com.wellnesswingman.platform.AudioRecordingService
 import com.wellnesswingman.platform.FileSystem
 import io.github.aakira.napier.Napier
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.datetime.Clock
 import kotlinx.serialization.json.Json
 
 class EntryDetailViewModel(
@@ -29,13 +34,17 @@ class EntryDetailViewModel(
     private val entryAnalysisRepository: EntryAnalysisRepository,
     private val fileSystem: FileSystem,
     private val backgroundAnalysisService: BackgroundAnalysisService,
-    private val statusChangeNotifier: StatusChangeNotifier
+    private val statusChangeNotifier: StatusChangeNotifier,
+    private val audioRecordingService: AudioRecordingService,
+    private val llmClientFactory: LlmClientFactory
 ) : ScreenModel {
 
     private val json = Json {
         ignoreUnknownKeys = true
         isLenient = true
     }
+
+    private var recordingJob: Job? = null
 
     private val _uiState = MutableStateFlow<EntryDetailUiState>(EntryDetailUiState.Loading)
     val uiState: StateFlow<EntryDetailUiState> = _uiState.asStateFlow()
@@ -52,10 +61,12 @@ class EntryDetailViewModel(
     private fun subscribeToStatusChanges() {
         screenModelScope.launch {
             statusChangeNotifier.statusChanges.collect { event ->
-                if (event.entryId == entryId && event.status == ProcessingStatus.COMPLETED) {
-                    Napier.i("Analysis completed for entry $entryId, reloading")
+                if (event.entryId == entryId) {
+                    Napier.i("Status changed to ${event.status} for entry $entryId, reloading")
                     loadEntry()
-                    exitCorrectionMode()
+                    if (event.status == ProcessingStatus.COMPLETED) {
+                        exitCorrectionMode()
+                    }
                 }
             }
         }
@@ -107,7 +118,13 @@ class EntryDetailViewModel(
             // Try unified format first
             try {
                 val unified = json.decodeFromString<UnifiedAnalysisResult>(analysis.insightsJson)
-                unified.mealAnalysis?.let { ParsedAnalysis.Meal(it) }
+                unified.mealAnalysis?.let {
+                    ParsedAnalysis.Meal(
+                        result = it,
+                        unifiedWarnings = unified.warnings,
+                        unifiedConfidence = unified.confidence
+                    )
+                }
                     ?: unified.exerciseAnalysis?.let { ParsedAnalysis.Exercise(it) }
                     ?: unified.sleepAnalysis?.let { ParsedAnalysis.Sleep(it) }
             } catch (e: Exception) {
@@ -115,7 +132,7 @@ class EntryDetailViewModel(
                 when (entryType) {
                     EntryType.MEAL -> {
                         val mealAnalysis = json.decodeFromString<MealAnalysisResult>(analysis.insightsJson)
-                        ParsedAnalysis.Meal(mealAnalysis)
+                        ParsedAnalysis.Meal(result = mealAnalysis)
                     }
                     EntryType.EXERCISE -> {
                         val exerciseAnalysis = json.decodeFromString<ExerciseAnalysisResult>(analysis.insightsJson)
@@ -213,17 +230,86 @@ class EntryDetailViewModel(
     }
 
     /**
-     * Sets the transcribing state.
+     * Toggles voice recording on/off.
      */
-    fun setTranscribing(isTranscribing: Boolean) {
-        _correctionState.update { it.copy(isTranscribing = isTranscribing) }
+    fun toggleRecording() {
+        screenModelScope.launch {
+            if (_correctionState.value.isRecording) {
+                stopRecording()
+            } else {
+                startRecording()
+            }
+        }
     }
 
     /**
-     * Sets the recording state.
+     * Checks if microphone permission is granted (for UI layer to decide whether to request).
      */
-    fun setRecording(isRecording: Boolean) {
-        _correctionState.update { it.copy(isRecording = isRecording) }
+    suspend fun checkMicPermission(): Boolean {
+        return audioRecordingService.checkPermission()
+    }
+
+    private suspend fun startRecording() {
+        try {
+            if (!audioRecordingService.checkPermission()) {
+                Napier.w("Microphone permission not granted")
+                return
+            }
+
+            val audioDir = "${fileSystem.getAppDataDirectory()}/audio"
+            fileSystem.createDirectory(audioDir)
+            val audioPath = "$audioDir/correction_${Clock.System.now().toEpochMilliseconds()}.m4a"
+
+            if (audioRecordingService.startRecording(audioPath)) {
+                _correctionState.update { it.copy(isRecording = true, recordingDurationSeconds = 0) }
+                startDurationTimer()
+            }
+        } catch (e: Exception) {
+            Napier.e("Failed to start recording", e)
+        }
+    }
+
+    private suspend fun stopRecording() {
+        try {
+            recordingJob?.cancel()
+            _correctionState.update { it.copy(isRecording = false, recordingDurationSeconds = 0) }
+
+            val result = audioRecordingService.stopRecording()
+            val audioPath = result.filePath
+            if (result.isSuccess && audioPath != null) {
+                _correctionState.update { it.copy(isTranscribing = true) }
+                transcribeAudio(audioPath)
+            }
+        } catch (e: Exception) {
+            Napier.e("Failed to stop recording", e)
+        } finally {
+            _correctionState.update { it.copy(isTranscribing = false) }
+        }
+    }
+
+    private fun startDurationTimer() {
+        recordingJob = screenModelScope.launch {
+            var elapsed = 0
+            while (_correctionState.value.isRecording) {
+                delay(1000)
+                elapsed++
+                _correctionState.update { it.copy(recordingDurationSeconds = elapsed) }
+            }
+        }
+    }
+
+    private suspend fun transcribeAudio(audioPath: String) {
+        try {
+            val audioBytes = fileSystem.readBytes(audioPath)
+            val llmClient = llmClientFactory.createForCurrentProvider()
+            val transcription = llmClient.transcribeAudio(audioBytes)
+
+            appendTranscription(transcription)
+
+            fileSystem.delete(audioPath)
+        } catch (e: Exception) {
+            Napier.e("Failed to transcribe audio", e)
+        }
     }
 
     /**
@@ -294,7 +380,11 @@ sealed class EntryDetailUiState {
 }
 
 sealed class ParsedAnalysis {
-    data class Meal(val result: MealAnalysisResult) : ParsedAnalysis()
+    data class Meal(
+        val result: MealAnalysisResult,
+        val unifiedWarnings: List<String> = emptyList(),
+        val unifiedConfidence: Double? = null
+    ) : ParsedAnalysis()
     data class Exercise(val result: ExerciseAnalysisResult) : ParsedAnalysis()
     data class Sleep(val result: SleepAnalysisResult) : ParsedAnalysis()
 }
