@@ -15,4 +15,5 @@ interface EntryAnalysisRepository {
     suspend fun updateAnalysis(id: Long, insightsJson: String, schemaVersion: String)
     suspend fun deleteAnalysis(id: Long)
     suspend fun deleteAnalysesForEntry(entryId: Long)
+    suspend fun upsertAnalysis(analysis: EntryAnalysis)
 }

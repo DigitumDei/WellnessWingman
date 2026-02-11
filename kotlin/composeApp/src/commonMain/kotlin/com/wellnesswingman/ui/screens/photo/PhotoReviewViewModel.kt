@@ -194,6 +194,9 @@ class PhotoReviewViewModel(
                 val reviewState = _uiState.value as? PhotoReviewUiState.Review ?: return@launch
                 _uiState.value = PhotoReviewUiState.Processing
 
+                // Generate preview thumbnail
+                generatePreview(reviewState.photoBytes, reviewState.blobPath)
+
                 // Combine manual notes and transcribed text
                 val combinedNotes = buildString {
                     if (userNotes.isNotBlank()) append(userNotes)
@@ -258,6 +261,9 @@ class PhotoReviewViewModel(
                 val photoPath = "$photosDir/photo_${Clock.System.now().toEpochMilliseconds()}.jpg"
                 fileSystem.writeBytes(photoPath, resizedBytes)
 
+                // Generate preview thumbnail
+                generatePreview(resizedBytes, photoPath)
+
                 // Combine manual notes and transcribed text
                 val combinedNotes = buildString {
                     if (userNotes.isNotBlank()) append(userNotes)
@@ -293,6 +299,33 @@ class PhotoReviewViewModel(
             } catch (e: Exception) {
                 Napier.e("Failed to create entry from photo", e)
                 _uiState.value = PhotoReviewUiState.Error(e.message ?: "Unknown error")
+            }
+        }
+    }
+
+    private suspend fun generatePreview(photoBytes: ByteArray, blobPath: String) {
+        try {
+            val previewPath = getPreviewPath(blobPath)
+            val previewBytes = photoResizer.resize(
+                photoBytes = photoBytes,
+                maxWidth = 400,
+                maxHeight = 400,
+                quality = 70
+            )
+            fileSystem.writeBytes(previewPath, previewBytes)
+            Napier.d("Generated preview at $previewPath (${previewBytes.size} bytes)")
+        } catch (e: Exception) {
+            Napier.w("Failed to generate preview for $blobPath", e)
+        }
+    }
+
+    companion object {
+        fun getPreviewPath(blobPath: String): String {
+            val lastDot = blobPath.lastIndexOf('.')
+            return if (lastDot > 0) {
+                "${blobPath.substring(0, lastDot)}_preview${blobPath.substring(lastDot)}"
+            } else {
+                "${blobPath}_preview"
             }
         }
     }

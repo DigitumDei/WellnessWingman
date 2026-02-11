@@ -71,6 +71,39 @@ actual class FileSystem {
         )
     }
 
+    actual fun getCacheDirectory(): String {
+        return NSTemporaryDirectory()
+    }
+
+    actual fun listFilesRecursively(path: String): List<String> {
+        val fm = NSFileManager.defaultManager
+        val enumerator = fm.enumeratorAtPath(path) ?: return emptyList()
+        val result = mutableListOf<String>()
+        while (true) {
+            val next = enumerator.nextObject() as? String ?: break
+            val fullPath = "$path/$next"
+            var isDir: kotlinx.cinterop.BooleanVar? = null
+            // Check if it's a file (not directory) by checking if we can enumerate further
+            val contents = fm.contentsOfDirectoryAtPath(fullPath, null)
+            if (contents == null) {
+                result.add(fullPath)
+            }
+        }
+        return result
+    }
+
+    actual suspend fun copyFile(sourcePath: String, destPath: String) = withContext(Dispatchers.Default) {
+        val fm = NSFileManager.defaultManager
+        val destDir = destPath.substringBeforeLast('/')
+        fm.createDirectoryAtPath(destDir, true, null, null)
+        // Remove destination if exists
+        if (fm.fileExistsAtPath(destPath)) {
+            fm.removeItemAtPath(destPath, null)
+        }
+        fm.copyItemAtPath(sourcePath, destPath, null)
+        Unit
+    }
+
     private fun ByteArray.toNSData(): NSData {
         return NSData.create(bytes = this.toCValues(), length = this.size.toULong())
     }

@@ -6,7 +6,10 @@ import com.wellnesswingman.data.db.DriverFactory
 import com.wellnesswingman.platform.AudioRecordingService
 import com.wellnesswingman.platform.BackgroundExecutionService
 import com.wellnesswingman.platform.DiagnosticShare
+import com.wellnesswingman.platform.FileSystem
 import com.wellnesswingman.platform.IosBackgroundExecutionService
+import com.wellnesswingman.platform.ShareUtil
+import com.wellnesswingman.platform.ZipUtil
 import org.koin.dsl.module
 import platform.Foundation.NSUserDefaults
 
@@ -24,8 +27,11 @@ val platformModule = module {
     }
 
     // Platform services
+    single { FileSystem() }
     single { AudioRecordingService() }
     single { DiagnosticShare() }
+    single { ZipUtil() }
+    single { ShareUtil() }
 
     // Background execution service (stub on iOS)
     single<BackgroundExecutionService> { IosBackgroundExecutionService() }

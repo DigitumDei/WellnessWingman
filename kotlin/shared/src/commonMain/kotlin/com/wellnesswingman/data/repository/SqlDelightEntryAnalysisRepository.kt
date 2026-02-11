@@ -66,6 +66,19 @@ class SqlDelightEntryAnalysisRepository(
         queries.deleteAnalysesForEntry(entryId)
     }
 
+    override suspend fun upsertAnalysis(analysis: EntryAnalysis) = withContext(Dispatchers.IO) {
+        queries.upsertAnalysis(
+            analysisId = analysis.analysisId,
+            entryId = analysis.entryId,
+            externalId = analysis.externalId,
+            providerId = analysis.providerId,
+            model = analysis.model,
+            capturedAt = analysis.capturedAt.toEpochMilliseconds(),
+            insightsJson = analysis.insightsJson,
+            schemaVersion = analysis.schemaVersion
+        )
+    }
+
     /**
      * Maps SQLDelight EntryAnalysis to domain EntryAnalysis.
      */

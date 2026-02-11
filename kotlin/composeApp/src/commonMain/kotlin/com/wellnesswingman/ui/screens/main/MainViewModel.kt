@@ -14,6 +14,8 @@ import com.wellnesswingman.data.repository.EntryAnalysisRepository
 import com.wellnesswingman.data.repository.TrackedEntryRepository
 import com.wellnesswingman.domain.analysis.DailySummaryService
 import com.wellnesswingman.domain.analysis.DailyTotalsCalculator
+import com.wellnesswingman.platform.FileSystem
+import com.wellnesswingman.ui.screens.photo.PhotoReviewViewModel
 import io.github.aakira.napier.Napier
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -30,7 +32,8 @@ class MainViewModel(
     private val entryAnalysisRepository: EntryAnalysisRepository,
     private val dailySummaryRepository: DailySummaryRepository,
     private val dailySummaryService: DailySummaryService,
-    private val dailyTotalsCalculator: DailyTotalsCalculator
+    private val dailyTotalsCalculator: DailyTotalsCalculator,
+    private val fileSystem: FileSystem
 ) : ScreenModel {
 
     private val _uiState = MutableStateFlow<MainUiState>(MainUiState.Loading)
@@ -69,10 +72,12 @@ class MainViewModel(
                             val hasCompletedMeals = filteredEntries.any {
                                 it.entryType == EntryType.MEAL && it.processingStatus == ProcessingStatus.COMPLETED
                             }
+                            val thumbnails = loadThumbnails(filteredEntries)
                             _uiState.value = MainUiState.Success(
                                 entries = filteredEntries,
                                 nutritionTotals = nutritionTotals,
-                                hasCompletedMeals = hasCompletedMeals
+                                hasCompletedMeals = hasCompletedMeals,
+                                thumbnails = thumbnails
                             )
                             updateSummaryCardState(today, hasCompletedMeals)
                         }
@@ -161,10 +166,12 @@ class MainViewModel(
                     val hasCompletedMeals = filteredEntries.any {
                         it.entryType == EntryType.MEAL && it.processingStatus == ProcessingStatus.COMPLETED
                     }
+                    val thumbnails = loadThumbnails(filteredEntries)
                     _uiState.value = MainUiState.Success(
                         entries = filteredEntries,
                         nutritionTotals = nutritionTotals,
-                        hasCompletedMeals = hasCompletedMeals
+                        hasCompletedMeals = hasCompletedMeals,
+                        thumbnails = thumbnails
                     )
                     updateSummaryCardState(today, hasCompletedMeals)
                 }
@@ -191,10 +198,12 @@ class MainViewModel(
                     val hasCompletedMeals = filteredEntries.any {
                         it.entryType == EntryType.MEAL && it.processingStatus == ProcessingStatus.COMPLETED
                     }
+                    val thumbnails = loadThumbnails(filteredEntries)
                     _uiState.value = MainUiState.Success(
                         entries = filteredEntries,
                         nutritionTotals = nutritionTotals,
-                        hasCompletedMeals = hasCompletedMeals
+                        hasCompletedMeals = hasCompletedMeals,
+                        thumbnails = thumbnails
                     )
                     updateSummaryCardState(today, hasCompletedMeals)
                 }
@@ -235,6 +244,22 @@ class MainViewModel(
         }
     }
 
+    private suspend fun loadThumbnails(entries: List<TrackedEntry>): Map<Long, ByteArray> {
+        val thumbnails = mutableMapOf<Long, ByteArray>()
+        for (entry in entries) {
+            val blobPath = entry.blobPath ?: continue
+            try {
+                val previewPath = PhotoReviewViewModel.getPreviewPath(blobPath)
+                if (fileSystem.exists(previewPath)) {
+                    thumbnails[entry.entryId] = fileSystem.readBytes(previewPath)
+                }
+            } catch (e: Exception) {
+                Napier.w("Failed to load thumbnail for entry ${entry.entryId}", e)
+            }
+        }
+        return thumbnails
+    }
+
     fun deleteEntry(entryId: Long) {
         screenModelScope.launch {
             try {
@@ -253,7 +278,8 @@ sealed class MainUiState {
     data class Success(
         val entries: List<TrackedEntry>,
         val nutritionTotals: NutritionTotals = NutritionTotals(),
-        val hasCompletedMeals: Boolean = false
+        val hasCompletedMeals: Boolean = false,
+        val thumbnails: Map<Long, ByteArray> = emptyMap()
     ) : MainUiState()
     data class Error(val message: String) : MainUiState()
 }

@@ -63,6 +63,7 @@ data class DayDetailScreen(val date: LocalDate) : Screen {
                 is DayDetailUiState.Success -> DayEntryList(
                     date = date,
                     entries = state.entries,
+                    thumbnails = state.thumbnails,
                     nutritionTotals = state.nutritionTotals,
                     hasCompletedMeals = state.hasCompletedMeals,
                     summaryCardState = summaryCardState,
@@ -92,6 +93,7 @@ data class DayDetailScreen(val date: LocalDate) : Screen {
 fun DayEntryList(
     date: LocalDate,
     entries: List<TrackedEntry>,
+    thumbnails: Map<Long, ByteArray>,
     nutritionTotals: NutritionTotals,
     hasCompletedMeals: Boolean,
     summaryCardState: SummaryCardState,
@@ -153,6 +155,7 @@ fun DayEntryList(
         items(entries, key = { it.entryId }) { entry ->
             EntryCard(
                 entry = entry,
+                thumbnailBytes = thumbnails[entry.entryId],
                 onClick = { onEntryClick(entry) }
             )
         }

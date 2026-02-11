@@ -43,4 +43,19 @@ expect class FileSystem {
      * Creates a directory.
      */
     fun createDirectory(path: String): Boolean
+
+    /**
+     * Gets the app's cache directory path.
+     */
+    fun getCacheDirectory(): String
+
+    /**
+     * Lists all files in a directory recursively.
+     */
+    fun listFilesRecursively(path: String): List<String>
+
+    /**
+     * Copies a file from source to destination.
+     */
+    suspend fun copyFile(sourcePath: String, destPath: String)
 }

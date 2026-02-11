@@ -85,6 +85,19 @@ deleteAnalysesForEntry:
 DELETE FROM EntryAnalysis
 WHERE entryId = ?;
 
+-- Upsert analysis (for import)
+upsertAnalysis:
+INSERT OR REPLACE INTO EntryAnalysis(
+    analysisId,
+    entryId,
+    externalId,
+    providerId,
+    model,
+    capturedAt,
+    insightsJson,
+    schemaVersion
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+
 -- Get last inserted row ID
 lastInsertRowId:
 SELECT last_insert_rowid();

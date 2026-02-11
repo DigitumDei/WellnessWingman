@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 using WellnessWingman.Data;
+using WellnessWingman.Models;
 using WellnessWingman.Models.Export;
 
 namespace WellnessWingman.Services.Migration;
@@ -22,12 +23,14 @@ public class DataMigrationService : IDataMigrationService
         var entries = await _dbContext.TrackedEntries.AsNoTracking().ToListAsync();
         var analyses = await _dbContext.EntryAnalyses.AsNoTracking().ToListAsync();
         var summaries = await _dbContext.DailySummaries.AsNoTracking().ToListAsync();
+        var summariesAnalyses = await _dbContext.Set<DailySummaryEntryAnalyses>().AsNoTracking().ToListAsync();
 
         var exportData = new ExportData
         {
             Entries = entries,
             Analyses = analyses,
-            Summaries = summaries
+            Summaries = summaries,
+            SummariesAnalyses = summariesAnalyses
         };
 
         // 2. Serialize Data
@@ -56,17 +59,24 @@ public class DataMigrationService : IDataMigrationService
             }
 
             // Add Images
+            var exportedEntryNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var entry in entries)
             {
-                if (!string.IsNullOrEmpty(entry.BlobPath))
+                foreach (var relativePath in EnumerateImageRelativePaths(entry))
                 {
-                    var fullPath = Path.Combine(FileSystem.AppDataDirectory, entry.BlobPath);
+                    var normalizedRelativePath = relativePath
+                        .Replace('\\', Path.DirectorySeparatorChar)
+                        .Replace('/', Path.DirectorySeparatorChar);
+                    var fullPath = Path.Combine(FileSystem.AppDataDirectory, normalizedRelativePath);
                     if (File.Exists(fullPath))
                     {
                         // Use the relative path as the entry name in the zip to preserve structure
                         // Normalize slashes to forward slashes for zip compatibility
-                        var entryName = entry.BlobPath.Replace('', '/');
-                        zipArchive.CreateEntryFromFile(fullPath, entryName);
+                        var entryName = normalizedRelativePath.Replace('\\', '/');
+                        if (exportedEntryNames.Add(entryName))
+                        {
+                            zipArchive.CreateEntryFromFile(fullPath, entryName);
+                        }
                     }
                 }
             }
@@ -169,12 +179,53 @@ public class DataMigrationService : IDataMigrationService
                 }
             }
 
+            // SummariesAnalyses (Junction Table)
+            foreach (var junction in exportData.SummariesAnalyses)
+            {
+                var existing = await _dbContext.Set<DailySummaryEntryAnalyses>()
+                    .FindAsync(junction.SummaryId, junction.AnalysisId);
+                
+                if (existing == null)
+                {
+                    await _dbContext.Set<DailySummaryEntryAnalyses>().AddAsync(junction);
+                }
+            }
+
             await _dbContext.SaveChangesAsync();
         }
         finally
         {
             if (Directory.Exists(tempDir))
                 Directory.Delete(tempDir, true);
+        }
+    }
+
+    private static IEnumerable<string> EnumerateImageRelativePaths(TrackedEntry entry)
+    {
+        if (!string.IsNullOrWhiteSpace(entry.BlobPath))
+        {
+            yield return entry.BlobPath;
+        }
+
+        switch (entry.Payload)
+        {
+            case MealPayload mealPayload when !string.IsNullOrWhiteSpace(mealPayload.PreviewBlobPath):
+                yield return mealPayload.PreviewBlobPath!;
+                break;
+            case ExercisePayload exercisePayload:
+                if (!string.IsNullOrWhiteSpace(exercisePayload.PreviewBlobPath))
+                {
+                    yield return exercisePayload.PreviewBlobPath!;
+                }
+
+                if (!string.IsNullOrWhiteSpace(exercisePayload.ScreenshotBlobPath))
+                {
+                    yield return exercisePayload.ScreenshotBlobPath!;
+                }
+                break;
+            case PendingEntryPayload pendingPayload when !string.IsNullOrWhiteSpace(pendingPayload.PreviewBlobPath):
+                yield return pendingPayload.PreviewBlobPath!;
+                break;
         }
     }
 }

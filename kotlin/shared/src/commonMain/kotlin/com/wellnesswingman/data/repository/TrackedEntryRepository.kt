@@ -28,4 +28,5 @@ interface TrackedEntryRepository {
     suspend fun updateEntryPayload(id: Long, payload: String, schemaVersion: Int)
     suspend fun updateUserNotes(id: Long, notes: String?)
     suspend fun deleteEntry(id: Long)
+    suspend fun upsertEntry(entry: TrackedEntry)
 }

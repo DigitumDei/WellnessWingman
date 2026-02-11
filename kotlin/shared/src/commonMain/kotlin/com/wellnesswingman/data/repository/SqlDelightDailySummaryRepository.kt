@@ -87,6 +87,17 @@ class SqlDelightDailySummaryRepository(
         queries.deleteOldSummaries(beforeDate.toEpochDays().toLong())
     }
 
+    override suspend fun upsertSummary(summary: DailySummary) = withContext(Dispatchers.IO) {
+        queries.upsertSummary(
+            summaryId = summary.summaryId,
+            externalId = summary.externalId,
+            summaryDate = summary.summaryDate.toEpochDays().toLong(),
+            highlights = summary.highlights,
+            recommendations = summary.recommendations,
+            generatedAt = summary.generatedAt?.toEpochMilliseconds()
+        )
+    }
+
     /**
      * Maps SQLDelight DailySummary to domain DailySummary.
      */

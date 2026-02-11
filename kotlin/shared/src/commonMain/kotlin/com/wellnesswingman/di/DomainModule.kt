@@ -11,6 +11,8 @@ import com.wellnesswingman.domain.analysis.StaleEntryRecoveryService
 import com.wellnesswingman.domain.events.DefaultStatusChangeNotifier
 import com.wellnesswingman.domain.events.StatusChangeNotifier
 import com.wellnesswingman.domain.llm.LlmClientFactory
+import com.wellnesswingman.domain.migration.DataMigrationService
+import com.wellnesswingman.domain.migration.DefaultDataMigrationService
 import com.wellnesswingman.domain.navigation.CalendarNavigationService
 import com.wellnesswingman.domain.navigation.HistoricalNavigationContext
 import org.koin.core.module.dsl.singleOf
@@ -52,6 +54,17 @@ val domainModule = module {
     single<StaleEntryRecoveryService> {
         DefaultStaleEntryRecoveryService(
             trackedEntryRepository = get()
+        )
+    }
+
+    // Data migration
+    single<DataMigrationService> {
+        DefaultDataMigrationService(
+            trackedEntryRepository = get(),
+            entryAnalysisRepository = get(),
+            dailySummaryRepository = get(),
+            fileSystem = get(),
+            zipUtil = get()
         )
     }
 }

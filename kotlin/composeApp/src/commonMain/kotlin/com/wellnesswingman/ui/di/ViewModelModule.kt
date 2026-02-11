@@ -22,7 +22,8 @@ val viewModelModule = module {
             entryAnalysisRepository = get(),
             dailySummaryRepository = get(),
             dailySummaryService = get(),
-            dailyTotalsCalculator = get()
+            dailyTotalsCalculator = get(),
+            fileSystem = get()
         )
     }
     factoryOf(::SettingsViewModel)
@@ -42,7 +43,8 @@ val viewModelModule = module {
             entryAnalysisRepository = get(),
             dailySummaryRepository = get(),
             dailySummaryService = get(),
-            dailyTotalsCalculator = get()
+            dailyTotalsCalculator = get(),
+            fileSystem = get()
         )
     }
     factory { params ->

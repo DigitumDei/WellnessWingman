@@ -14,6 +14,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -36,6 +37,9 @@ import com.wellnesswingman.ui.screens.settings.SettingsScreen
 import com.wellnesswingman.ui.screens.summary.DailySummaryScreen
 import com.wellnesswingman.util.DateTimeUtil
 import kotlinx.datetime.TimeZone
+
+@Composable
+expect fun ThumbnailDisplay(imageBytes: ByteArray?, modifier: Modifier = Modifier)
 
 class MainScreen : Screen {
     @Composable
@@ -80,6 +84,7 @@ class MainScreen : Screen {
                 )
                 is MainUiState.Success -> EntryList(
                     entries = state.entries,
+                    thumbnails = state.thumbnails,
                     nutritionTotals = state.nutritionTotals,
                     hasCompletedMeals = state.hasCompletedMeals,
                     summaryCardState = summaryCardState,
@@ -99,6 +104,7 @@ class MainScreen : Screen {
 @Composable
 fun EntryList(
     entries: List<TrackedEntry>,
+    thumbnails: Map<Long, ByteArray>,
     nutritionTotals: NutritionTotals,
     hasCompletedMeals: Boolean,
     summaryCardState: SummaryCardState,
@@ -140,6 +146,7 @@ fun EntryList(
         items(entries, key = { it.entryId }) { entry ->
             EntryCard(
                 entry = entry,
+                thumbnailBytes = thumbnails[entry.entryId],
                 onClick = { onEntryClick(entry) }
             )
         }
@@ -296,7 +303,8 @@ fun NutritionItem(
 fun EntryCard(
     entry: TrackedEntry,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    thumbnailBytes: ByteArray? = null
 ) {
     Card(
         modifier = modifier
@@ -305,39 +313,55 @@ fun EntryCard(
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
+            modifier = Modifier.fillMaxWidth()
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = entry.entryType.name,
-                    style = MaterialTheme.typography.titleMedium
+            // Thumbnail image header
+            if (thumbnailBytes != null) {
+                ThumbnailDisplay(
+                    imageBytes = thumbnailBytes,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 160.dp)
+                        .clip(MaterialTheme.shapes.medium)
                 )
-
-                StatusChip(status = entry.processingStatus)
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            // Text content
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = entry.entryType.name,
+                        style = MaterialTheme.typography.titleMedium
+                    )
 
-            Text(
-                text = DateTimeUtil.formatDateTime(entry.capturedAt, TimeZone.currentSystemDefault()),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+                    StatusChip(status = entry.processingStatus)
+                }
 
-            if (entry.userNotes != null) {
                 Spacer(modifier = Modifier.height(8.dp))
+
                 Text(
-                    text = entry.userNotes!!,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2
+                    text = DateTimeUtil.formatDateTime(entry.capturedAt, TimeZone.currentSystemDefault()),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+
+                if (entry.userNotes != null) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = entry.userNotes!!,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2
+                    )
+                }
             }
         }
     }

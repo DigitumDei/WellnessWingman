@@ -148,6 +148,22 @@ class SqlDelightTrackedEntryRepository(
         queries.deleteEntry(id)
     }
 
+    override suspend fun upsertEntry(entry: TrackedEntry) = withContext(Dispatchers.IO) {
+        queries.upsertEntry(
+            entryId = entry.entryId,
+            externalId = entry.externalId,
+            entryType = entry.entryType.toStorageString(),
+            capturedAt = entry.capturedAt.toEpochMilliseconds(),
+            capturedAtTimeZoneId = entry.capturedAtTimeZoneId,
+            capturedAtOffsetMinutes = entry.capturedAtOffsetMinutes?.toLong(),
+            blobPath = entry.blobPath,
+            dataPayload = entry.dataPayload,
+            dataSchemaVersion = entry.dataSchemaVersion.toLong(),
+            processingStatus = entry.processingStatus.toStorageString(),
+            userNotes = entry.userNotes
+        )
+    }
+
     /**
      * Maps SQLDelight TrackedEntry to domain TrackedEntry.
      */

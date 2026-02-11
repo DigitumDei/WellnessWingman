@@ -19,4 +19,5 @@ interface DailySummaryRepository {
     suspend fun deleteSummary(id: Long)
     suspend fun deleteSummaryByDate(date: LocalDate)
     suspend fun deleteOldSummaries(beforeDate: LocalDate)
+    suspend fun upsertSummary(summary: DailySummary)
 }

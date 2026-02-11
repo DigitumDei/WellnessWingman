@@ -10,4 +10,5 @@ public class ExportData
     public List<TrackedEntry> Entries { get; set; } = new();
     public List<EntryAnalysis> Analyses { get; set; } = new();
     public List<DailySummary> Summaries { get; set; } = new();
+    public List<DailySummaryEntryAnalyses> SummariesAnalyses { get; set; } = new();
 }

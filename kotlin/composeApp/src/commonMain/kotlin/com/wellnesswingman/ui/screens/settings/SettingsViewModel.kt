@@ -4,7 +4,9 @@ import cafe.adriel.voyager.core.model.ScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import com.wellnesswingman.data.repository.AppSettingsRepository
 import com.wellnesswingman.data.repository.LlmProvider
+import com.wellnesswingman.domain.migration.DataMigrationService
 import com.wellnesswingman.platform.DiagnosticShare
+import com.wellnesswingman.platform.ShareUtil
 import io.github.aakira.napier.Napier
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -13,7 +15,9 @@ import kotlinx.coroutines.launch
 
 class SettingsViewModel(
     private val appSettingsRepository: AppSettingsRepository,
-    private val diagnosticShare: DiagnosticShare
+    private val diagnosticShare: DiagnosticShare,
+    private val dataMigrationService: DataMigrationService,
+    private val shareUtil: ShareUtil
 ) : ScreenModel {
 
     private val _uiState = MutableStateFlow(SettingsUiState())
@@ -103,12 +107,64 @@ class SettingsViewModel(
         _uiState.value = _uiState.value.copy(error = null)
     }
 
+    fun clearExportImportMessage() {
+        _uiState.value = _uiState.value.copy(exportImportMessage = null)
+    }
+
     fun shareDiagnosticLogs() {
         try {
             Napier.i("Sharing diagnostic logs")
             diagnosticShare.shareDiagnosticLogs()
         } catch (e: Exception) {
             Napier.e("Failed to share diagnostic logs", e)
+        }
+    }
+
+    fun exportData() {
+        if (_uiState.value.isExporting) return
+        _uiState.value = _uiState.value.copy(isExporting = true, exportImportMessage = null)
+
+        screenModelScope.launch {
+            try {
+                val zipPath = dataMigrationService.exportData()
+                _uiState.value = _uiState.value.copy(
+                    isExporting = false,
+                    exportImportMessage = "Export completed successfully"
+                )
+                shareUtil.shareFile(zipPath, "application/zip", "WellnessWingman Data Export")
+            } catch (e: Exception) {
+                Napier.e("Export failed", e)
+                _uiState.value = _uiState.value.copy(
+                    isExporting = false,
+                    exportImportMessage = "Export failed: ${e.message}"
+                )
+            }
+        }
+    }
+
+    fun importData(filePath: String) {
+        if (_uiState.value.isImporting) return
+        _uiState.value = _uiState.value.copy(isImporting = true, exportImportMessage = null)
+
+        screenModelScope.launch {
+            try {
+                val result = dataMigrationService.importData(filePath)
+                val message = if (result.isSuccess) {
+                    "Import completed: ${result.entriesImported} entries, ${result.analysesImported} analyses, ${result.summariesImported} summaries"
+                } else {
+                    "Import completed with errors: ${result.errors.first()}"
+                }
+                _uiState.value = _uiState.value.copy(
+                    isImporting = false,
+                    exportImportMessage = message
+                )
+            } catch (e: Exception) {
+                Napier.e("Import failed", e)
+                _uiState.value = _uiState.value.copy(
+                    isImporting = false,
+                    exportImportMessage = "Import failed: ${e.message}"
+                )
+            }
         }
     }
 }
@@ -120,5 +176,8 @@ data class SettingsUiState(
     val geminiApiKey: String = "",
     val geminiModel: String = "gemini-1.5-flash",
     val saveSuccess: Boolean = false,
-    val error: String? = null
+    val error: String? = null,
+    val isExporting: Boolean = false,
+    val isImporting: Boolean = false,
+    val exportImportMessage: String? = null
 )

@@ -45,4 +45,21 @@ actual class FileSystem(private val context: Context) {
     actual fun createDirectory(path: String): Boolean {
         return File(path).mkdirs()
     }
+
+    actual fun getCacheDirectory(): String {
+        return context.cacheDir.absolutePath
+    }
+
+    actual fun listFilesRecursively(path: String): List<String> {
+        val dir = File(path)
+        if (!dir.exists() || !dir.isDirectory) return emptyList()
+        return dir.walkTopDown().filter { it.isFile }.map { it.absolutePath }.toList()
+    }
+
+    actual suspend fun copyFile(sourcePath: String, destPath: String): Unit = withContext(Dispatchers.IO) {
+        val destFile = File(destPath)
+        destFile.parentFile?.mkdirs()
+        File(sourcePath).copyTo(destFile, overwrite = true)
+        Unit
+    }
 }

@@ -83,6 +83,17 @@ deleteOldSummaries:
 DELETE FROM DailySummary
 WHERE summaryDate < ?;
 
+-- Upsert summary (for import)
+upsertSummary:
+INSERT OR REPLACE INTO DailySummary(
+    summaryId,
+    externalId,
+    summaryDate,
+    highlights,
+    recommendations,
+    generatedAt
+) VALUES (?, ?, ?, ?, ?, ?);
+
 -- Get last inserted row ID
 lastInsertRowId:
 SELECT last_insert_rowid();

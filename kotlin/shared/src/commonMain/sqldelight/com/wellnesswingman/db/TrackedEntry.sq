@@ -122,6 +122,22 @@ SELECT entryType, COUNT(*) AS entry_count
 FROM TrackedEntry
 GROUP BY entryType;
 
+-- Upsert entry (for import)
+upsertEntry:
+INSERT OR REPLACE INTO TrackedEntry(
+    entryId,
+    externalId,
+    entryType,
+    capturedAt,
+    capturedAtTimeZoneId,
+    capturedAtOffsetMinutes,
+    blobPath,
+    dataPayload,
+    dataSchemaVersion,
+    processingStatus,
+    userNotes
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
 -- Get last inserted row ID
 lastInsertRowId:
 SELECT last_insert_rowid();

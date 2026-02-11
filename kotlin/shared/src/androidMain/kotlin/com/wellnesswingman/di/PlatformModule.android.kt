@@ -12,6 +12,8 @@ import com.wellnesswingman.platform.DiagnosticLogger
 import com.wellnesswingman.platform.DiagnosticShare
 import com.wellnesswingman.platform.FileSystem
 import com.wellnesswingman.platform.PhotoResizer
+import com.wellnesswingman.platform.ShareUtil
+import com.wellnesswingman.platform.ZipUtil
 import org.koin.dsl.module
 
 /**
@@ -39,6 +41,10 @@ val platformModule = module {
     single { PhotoResizer() }
     single { DiagnosticLogger(get<Context>()) }
     single { DiagnosticShare(get<Context>(), get()) }
+
+    // ZIP and sharing
+    single { ZipUtil() }
+    single { ShareUtil(get<Context>()) }
 
     // Background execution service
     single<BackgroundExecutionService> { AndroidBackgroundExecutionService(get()) }
