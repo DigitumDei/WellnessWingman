@@ -14,6 +14,7 @@ import com.wellnesswingman.data.repository.EntryAnalysisRepository
 import com.wellnesswingman.data.repository.TrackedEntryRepository
 import com.wellnesswingman.domain.analysis.DailySummaryService
 import com.wellnesswingman.domain.analysis.DailyTotalsCalculator
+import com.wellnesswingman.domain.capture.PendingCaptureStore
 import com.wellnesswingman.platform.FileSystem
 import com.wellnesswingman.ui.screens.photo.PhotoReviewViewModel
 import io.github.aakira.napier.Napier
@@ -33,7 +34,8 @@ class MainViewModel(
     private val dailySummaryRepository: DailySummaryRepository,
     private val dailySummaryService: DailySummaryService,
     private val dailyTotalsCalculator: DailyTotalsCalculator,
-    private val fileSystem: FileSystem
+    private val fileSystem: FileSystem,
+    private val pendingCaptureStore: PendingCaptureStore
 ) : ScreenModel {
 
     private val _uiState = MutableStateFlow<MainUiState>(MainUiState.Loading)
@@ -48,6 +50,9 @@ class MainViewModel(
     private val _isGeneratingSummary = MutableStateFlow(false)
     val isGeneratingSummary: StateFlow<Boolean> = _isGeneratingSummary.asStateFlow()
 
+    private val _hasPendingCapture = MutableStateFlow(false)
+    val hasPendingCapture: StateFlow<Boolean> = _hasPendingCapture.asStateFlow()
+
     private val json = Json {
         ignoreUnknownKeys = true
         isLenient = true
@@ -55,6 +60,25 @@ class MainViewModel(
 
     init {
         observeEntries()
+        checkPendingCapture()
+    }
+
+    private fun checkPendingCapture() {
+        screenModelScope.launch {
+            try {
+                val pending = pendingCaptureStore.get()
+                if (pending != null && fileSystem.exists(pending.photoFilePath)) {
+                    _hasPendingCapture.value = true
+                    Napier.i("Found pending capture to recover: ${pending.photoFilePath}")
+                }
+            } catch (e: Exception) {
+                Napier.e("Error checking pending capture", e)
+            }
+        }
+    }
+
+    fun consumePendingCapture() {
+        _hasPendingCapture.value = false
     }
 
     private fun observeEntries() {

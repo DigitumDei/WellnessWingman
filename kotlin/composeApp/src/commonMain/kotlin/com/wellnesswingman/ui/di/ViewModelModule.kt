@@ -23,7 +23,8 @@ val viewModelModule = module {
             dailySummaryRepository = get(),
             dailySummaryService = get(),
             dailyTotalsCalculator = get(),
-            fileSystem = get()
+            fileSystem = get(),
+            pendingCaptureStore = get()
         )
     }
     factoryOf(::SettingsViewModel)

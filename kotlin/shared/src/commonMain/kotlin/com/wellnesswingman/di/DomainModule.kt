@@ -8,6 +8,7 @@ import com.wellnesswingman.domain.analysis.DailyTotalsCalculator
 import com.wellnesswingman.domain.analysis.DefaultBackgroundAnalysisService
 import com.wellnesswingman.domain.analysis.DefaultStaleEntryRecoveryService
 import com.wellnesswingman.domain.analysis.StaleEntryRecoveryService
+import com.wellnesswingman.domain.capture.PendingCaptureStore
 import com.wellnesswingman.domain.events.DefaultStatusChangeNotifier
 import com.wellnesswingman.domain.events.StatusChangeNotifier
 import com.wellnesswingman.domain.llm.LlmClientFactory
@@ -24,6 +25,9 @@ import org.koin.dsl.module
 val domainModule = module {
     // Calculators and utilities
     singleOf(::DailyTotalsCalculator)
+
+    // Capture recovery
+    singleOf(::PendingCaptureStore)
 
     // LLM
     singleOf(::LlmClientFactory)

@@ -1,13 +1,14 @@
 package com.wellnesswingman.domain.llm
 
+import io.github.aakira.napier.Napier
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
+import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import kotlinx.datetime.Clock
-import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlin.io.encoding.Base64
@@ -53,11 +54,11 @@ class GeminiLlmClient(
             contents = listOf(
                 GeminiContent(
                     parts = listOf(
-                        GeminiPart.Text(prompt),
-                        GeminiPart.InlineData(
+                        GeminiPart(text = prompt),
+                        GeminiPart(inlineData = GeminiPart.InlineData(
                             mimeType = "image/jpeg",
                             data = base64Image
-                        )
+                        ))
                     )
                 )
             ),
@@ -66,18 +67,29 @@ class GeminiLlmClient(
             )
         )
 
-        val response: GeminiResponse = httpClient.post(
-            "$BASE_URL/models/$model:generateContent?key=$apiKey"
+        val httpResponse = httpClient.post(
+            "$BASE_URL/models/$model:generateContent"
         ) {
             contentType(ContentType.Application.Json)
+            header("x-goog-api-key", apiKey)
             setBody(request)
-        }.body()
+        }
 
         val endTime = Clock.System.now()
 
-        val content = response.candidates.firstOrNull()
-            ?.content?.parts?.filterIsInstance<GeminiPart.Text>()
-            ?.firstOrNull()?.text ?: ""
+        if (!httpResponse.status.isSuccess()) {
+            val errorBody = httpResponse.bodyAsText()
+            Napier.e("Gemini API error ${httpResponse.status}: $errorBody")
+            throw Exception("Gemini API error ${httpResponse.status}: $errorBody")
+        }
+
+        val response: GeminiResponse = httpResponse.body()
+
+        val content = sanitize(
+            response.candidates.firstOrNull()
+                ?.content?.parts?.firstNotNullOfOrNull { it.text }
+                ?: ""
+        )
 
         return LlmAnalysisResult(
             content = content,
@@ -89,6 +101,10 @@ class GeminiLlmClient(
                 latencyMs = (endTime - startTime).inWholeMilliseconds
             )
         )
+    }
+
+    private fun sanitize(content: String): String {
+        return content.trim().removePrefix("```json").removeSuffix("```").trim()
     }
 
     override suspend fun transcribeAudio(audioBytes: ByteArray, mimeType: String): String {
@@ -106,7 +122,7 @@ class GeminiLlmClient(
         val request = GeminiRequest(
             contents = listOf(
                 GeminiContent(
-                    parts = listOf(GeminiPart.Text(prompt))
+                    parts = listOf(GeminiPart(text = prompt))
                 )
             ),
             generationConfig = GenerationConfig(
@@ -114,18 +130,29 @@ class GeminiLlmClient(
             )
         )
 
-        val response: GeminiResponse = httpClient.post(
-            "$BASE_URL/models/$model:generateContent?key=$apiKey"
+        val httpResponse = httpClient.post(
+            "$BASE_URL/models/$model:generateContent"
         ) {
             contentType(ContentType.Application.Json)
+            header("x-goog-api-key", apiKey)
             setBody(request)
-        }.body()
+        }
 
         val endTime = Clock.System.now()
 
-        val content = response.candidates.firstOrNull()
-            ?.content?.parts?.filterIsInstance<GeminiPart.Text>()
-            ?.firstOrNull()?.text ?: ""
+        if (!httpResponse.status.isSuccess()) {
+            val errorBody = httpResponse.bodyAsText()
+            Napier.e("Gemini API error ${httpResponse.status}: $errorBody")
+            throw Exception("Gemini API error ${httpResponse.status}: $errorBody")
+        }
+
+        val response: GeminiResponse = httpResponse.body()
+
+        val content = sanitize(
+            response.candidates.firstOrNull()
+                ?.content?.parts?.firstNotNullOfOrNull { it.text }
+                ?: ""
+        )
 
         return LlmAnalysisResult(
             content = content,
@@ -155,17 +182,15 @@ data class GeminiContent(
 )
 
 @Serializable
-sealed class GeminiPart {
+data class GeminiPart(
+    val text: String? = null,
+    val inlineData: InlineData? = null
+) {
     @Serializable
-    @SerialName("text")
-    data class Text(val text: String) : GeminiPart()
-
-    @Serializable
-    @SerialName("inlineData")
     data class InlineData(
         val mimeType: String,
         val data: String
-    ) : GeminiPart()
+    )
 }
 
 @Serializable

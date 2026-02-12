@@ -10,6 +10,7 @@ import androidx.compose.material.icons.filled.CalendarViewMonth
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -50,6 +51,15 @@ class MainScreen : Screen {
         val isRefreshing by viewModel.isRefreshing.collectAsState()
         val summaryCardState by viewModel.summaryCardState.collectAsState()
         val isGeneratingSummary by viewModel.isGeneratingSummary.collectAsState()
+        val hasPendingCapture by viewModel.hasPendingCapture.collectAsState()
+
+        // Recovery: navigate to PhotoReviewScreen if a pending capture exists after process death
+        LaunchedEffect(hasPendingCapture) {
+            if (hasPendingCapture) {
+                viewModel.consumePendingCapture()
+                navigator.push(createPhotoReviewScreen())
+            }
+        }
 
         Scaffold(
             topBar = {

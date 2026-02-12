@@ -27,9 +27,13 @@ import cafe.adriel.voyager.koin.getScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import com.wellnesswingman.data.model.EntryType
+import com.wellnesswingman.domain.capture.PendingCapture
+import com.wellnesswingman.domain.capture.PendingCaptureStore
 import com.wellnesswingman.ui.components.ErrorMessage
 import com.wellnesswingman.ui.components.LoadingIndicator
 import com.wellnesswingman.ui.screens.detail.EntryDetailScreen
+import kotlinx.coroutines.launch
+import org.koin.compose.koinInject
 import java.io.File
 
 /**
@@ -39,6 +43,7 @@ actual fun createPhotoReviewScreen(): Screen = PhotoReviewScreen()
 
 /**
  * Android-specific PhotoReviewScreen with actual camera and gallery support.
+ * Includes process death recovery via PendingCaptureStore.
  */
 private class PhotoReviewScreen : Screen {
     @Composable
@@ -47,10 +52,36 @@ private class PhotoReviewScreen : Screen {
         val context = LocalContext.current
         val viewModel = getScreenModel<PhotoReviewViewModel>()
         val uiState by viewModel.uiState.collectAsState()
+        val pendingCaptureStore: PendingCaptureStore = koinInject()
+        val coroutineScope = rememberCoroutineScope()
 
         var capturedImageBytes by remember { mutableStateOf<ByteArray?>(null) }
         var capturedImageUri by remember { mutableStateOf<Uri?>(null) }
         var showPermissionDialog by remember { mutableStateOf(false) }
+
+        // Recovery: check for pending capture on composition (after process death)
+        LaunchedEffect(Unit) {
+            val pending = pendingCaptureStore.get()
+            if (pending != null && capturedImageBytes == null) {
+                val file = File(pending.photoFilePath)
+                if (file.exists()) {
+                    try {
+                        val bytes = file.readBytes()
+                        if (bytes.isNotEmpty()) {
+                            capturedImageBytes = bytes
+                            capturedImageUri = FileProvider.getUriForFile(
+                                context,
+                                "${context.packageName}.provider",
+                                file
+                            )
+                        }
+                    } catch (_: Exception) {
+                        // File corrupted or unreadable, clear the pending capture
+                    }
+                }
+                pendingCaptureStore.clear()
+            }
+        }
 
         // Camera permission launcher
         val cameraPermissionLauncher = rememberLauncherForActivityResult(
@@ -77,6 +108,19 @@ private class PhotoReviewScreen : Screen {
                     // Handle error
                 }
             }
+            // Clear pending capture on camera return (success or cancel)
+            coroutineScope.launch {
+                if (!success) {
+                    // Camera was cancelled — delete the temp file and clear store
+                    capturedImageUri?.let { uri ->
+                        try {
+                            val path = uri.path
+                            if (path != null) File(path).delete()
+                        } catch (_: Exception) {}
+                    }
+                }
+                pendingCaptureStore.clear()
+            }
         }
 
         // Gallery launcher
@@ -99,26 +143,33 @@ private class PhotoReviewScreen : Screen {
         }
 
         // Handle camera button click
-        val onCameraClick = {
+        val onCameraClick: () -> Unit = {
             val hasPermission = ContextCompat.checkSelfPermission(
                 context,
                 Manifest.permission.CAMERA
             ) == PackageManager.PERMISSION_GRANTED
 
             if (hasPermission) {
-                // Create temp file and launch camera
-                val photoFile = File.createTempFile(
-                    "photo_${System.currentTimeMillis()}",
-                    ".jpg",
-                    context.cacheDir
-                )
+                // Create temp file in persistent directory (survives process death)
+                val pendingDir = File(pendingCaptureStore.getPendingPhotosDirectory())
+                val photoFile = File(pendingDir, "photo_${System.currentTimeMillis()}.jpg")
                 val photoUri = FileProvider.getUriForFile(
                     context,
                     "${context.packageName}.provider",
                     photoFile
                 )
                 capturedImageUri = photoUri
-                cameraLauncher.launch(photoUri)
+
+                // Save pending capture before launching camera
+                coroutineScope.launch {
+                    pendingCaptureStore.save(
+                        PendingCapture(
+                            photoFilePath = photoFile.absolutePath,
+                            capturedAtMillis = System.currentTimeMillis()
+                        )
+                    )
+                    cameraLauncher.launch(photoUri)
+                }
             } else {
                 cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
             }
