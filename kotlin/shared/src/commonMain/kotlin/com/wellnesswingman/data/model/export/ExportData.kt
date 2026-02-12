@@ -19,6 +19,62 @@ import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
 import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
 
+// region -- C# DateTime parsing helper --
+
+/**
+ * Parses a DateTime string from C# into a kotlinx.datetime.Instant.
+ *
+ * C# DateTime.ToString() produces formats like:
+ * - "2026-02-11T09:41:21.1571689"  (no timezone, 7 fractional digits)
+ * - "2026-02-11T09:41:21.1571689Z" (with Z)
+ * - "2026-02-11T09:41:21Z"
+ * - "2026-02-11T09:41:21"
+ *
+ * kotlinx.datetime.Instant.parse() requires an offset designator and
+ * supports at most 9 fractional-second digits in standard ISO 8601.
+ * C#'s 7-digit "ticks" fraction is valid ISO but kotlinx chokes on it
+ * when there is no trailing offset. We normalise by:
+ *  1. Truncating fractional seconds to 3 digits (milliseconds) for safety.
+ *  2. Appending "Z" when no offset is present (C# DateTimes from the MAUI
+ *     app are stored as UTC).
+ */
+internal fun parseCSharpInstant(value: String): Instant {
+    // Fast path: already parseable
+    try {
+        return Instant.parse(value)
+    } catch (_: Exception) {
+        // Fall through to normalisation
+    }
+
+    var s = value.trim()
+
+    // Normalise fractional seconds – keep at most 3 digits (ms precision)
+    val dotIndex = s.indexOf('.')
+    if (dotIndex != -1) {
+        // Find the end of the fractional part (digits only)
+        var endOfFrac = dotIndex + 1
+        while (endOfFrac < s.length && s[endOfFrac].isDigit()) {
+            endOfFrac++
+        }
+        val suffix = s.substring(endOfFrac) // e.g. "Z", "+05:30", or ""
+        val fracDigits = s.substring(dotIndex + 1, endOfFrac)
+        val truncated = fracDigits.take(3).padEnd(3, '0')
+        s = s.substring(0, dotIndex) + "." + truncated + suffix
+    }
+
+    // Append Z if no timezone offset is present
+    val hasZ = s.endsWith('Z') || s.endsWith('z')
+    val hasPlusOffset = s.indexOf('+', startIndex = 10) != -1
+    val hasMinusOffset = s.lastIndexOf('-').let { it >= 10 }
+    if (!hasZ && !hasPlusOffset && !hasMinusOffset) {
+        s += "Z"
+    }
+
+    return Instant.parse(s)
+}
+
+// endregion
+
 // region -- Enum-as-integer serializers (MAUI compatibility) --
 
 object EntryTypeIntSerializer : KSerializer<EntryType> {
@@ -155,7 +211,7 @@ fun ExportTrackedEntry.toDomain(): TrackedEntry = TrackedEntry(
     entryId = entryId,
     externalId = externalId,
     entryType = entryType,
-    capturedAt = Instant.parse(capturedAt),
+    capturedAt = parseCSharpInstant(capturedAt),
     capturedAtTimeZoneId = capturedAtTimeZoneId,
     capturedAtOffsetMinutes = capturedAtOffsetMinutes,
     blobPath = blobPath,
@@ -182,7 +238,7 @@ fun ExportEntryAnalysis.toDomain(): EntryAnalysis = EntryAnalysis(
     externalId = externalId,
     providerId = providerId,
     model = model,
-    capturedAt = Instant.parse(capturedAt),
+    capturedAt = parseCSharpInstant(capturedAt),
     insightsJson = insightsJson,
     schemaVersion = schemaVersion
 )
@@ -201,7 +257,7 @@ fun ExportDailySummary.toDomain(): DailySummary {
     val date = try {
         LocalDate.parse(summaryDate.substringBefore('T'))
     } catch (_: Exception) {
-        Instant.parse(summaryDate).toLocalDateTime(TimeZone.UTC).date
+        parseCSharpInstant(summaryDate).toLocalDateTime(TimeZone.UTC).date
     }
     return DailySummary(
         summaryId = summaryId,

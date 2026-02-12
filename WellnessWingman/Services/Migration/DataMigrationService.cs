@@ -207,6 +207,14 @@ public class DataMigrationService : IDataMigrationService
             yield return entry.BlobPath;
         }
 
+        // During export we query entities directly from DbContext; Payload is [NotMapped] and may not be hydrated.
+        // Prefer reading persisted DataPayload JSON so preview assets are discovered reliably.
+        foreach (var path in EnumeratePathsFromDataPayload(entry))
+        {
+            yield return path;
+        }
+
+        // Keep Payload-based fallback for callers that provide hydrated entries.
         switch (entry.Payload)
         {
             case MealPayload mealPayload when !string.IsNullOrWhiteSpace(mealPayload.PreviewBlobPath):
@@ -226,6 +234,67 @@ public class DataMigrationService : IDataMigrationService
             case PendingEntryPayload pendingPayload when !string.IsNullOrWhiteSpace(pendingPayload.PreviewBlobPath):
                 yield return pendingPayload.PreviewBlobPath!;
                 break;
+        }
+    }
+
+    private static IEnumerable<string> EnumeratePathsFromDataPayload(TrackedEntry entry)
+    {
+        if (string.IsNullOrWhiteSpace(entry.DataPayload))
+        {
+            yield break;
+        }
+
+        switch (entry.EntryType)
+        {
+            case EntryType.Meal:
+            {
+                MealPayload? payload = TryDeserialize<MealPayload>(entry.DataPayload);
+                if (!string.IsNullOrWhiteSpace(payload?.PreviewBlobPath))
+                {
+                    yield return payload.PreviewBlobPath!;
+                }
+
+                break;
+            }
+            case EntryType.Exercise:
+            {
+                ExercisePayload? payload = TryDeserialize<ExercisePayload>(entry.DataPayload);
+                if (!string.IsNullOrWhiteSpace(payload?.PreviewBlobPath))
+                {
+                    yield return payload.PreviewBlobPath!;
+                }
+
+                if (!string.IsNullOrWhiteSpace(payload?.ScreenshotBlobPath))
+                {
+                    yield return payload.ScreenshotBlobPath!;
+                }
+
+                break;
+            }
+            case EntryType.Unknown:
+            case EntryType.Sleep:
+            case EntryType.Other:
+            {
+                PendingEntryPayload? payload = TryDeserialize<PendingEntryPayload>(entry.DataPayload);
+                if (!string.IsNullOrWhiteSpace(payload?.PreviewBlobPath))
+                {
+                    yield return payload.PreviewBlobPath!;
+                }
+
+                break;
+            }
+        }
+    }
+
+    private static T? TryDeserialize<T>(string json) where T : class
+    {
+        try
+        {
+            return JsonSerializer.Deserialize<T>(json);
+        }
+        catch (JsonException)
+        {
+            return null;
         }
     }
 }

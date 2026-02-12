@@ -54,11 +54,18 @@ class DefaultDataMigrationService(
 
         Napier.i("Exporting ${entries.size} entries, ${analyses.size} analyses, ${summaries.size} summaries")
 
-        // 2. Build export model
+        // 2. Build export model (relativize absolute paths for MAUI compatibility)
+        val appDataDir = fileSystem.getAppDataDirectory()
         val exportData = ExportData(
             version = 1,
             exportedAt = Clock.System.now().toString(),
-            entries = entries.map { it.toExport() },
+            entries = entries.map { entry ->
+                val exported = entry.toExport()
+                exported.copy(
+                    blobPath = exported.blobPath?.let { relativizePath(it, appDataDir) },
+                    dataPayload = relativizePayloadPaths(exported.dataPayload, appDataDir)
+                )
+            },
             analyses = analyses.map { it.toExport() },
             summaries = summaries.map { it.toExport() },
             summariesAnalyses = emptyList() // Kotlin doesn't have this junction table
@@ -72,24 +79,30 @@ class DefaultDataMigrationService(
         val zipEntries = mutableListOf<ZipEntry>()
         zipEntries.add(ZipEntry("data.json", jsonBytes))
 
-        val appDataDir = fileSystem.getAppDataDirectory()
+        val appDataPrefix = appDataDir.replace('\\', '/').trimEnd('/') + "/"
         val exportedPaths = mutableSetOf<String>()
 
         for (entry in entries) {
-            val imagePaths = enumerateImageRelativePaths(entry)
-            for (relativePath in imagePaths) {
-                val normalizedPath = relativePath.replace('\\', '/')
-                if (normalizedPath in exportedPaths) continue
+            val imagePaths = enumerateImageAbsolutePaths(entry, appDataDir)
+            for (absolutePath in imagePaths) {
+                if (!fileSystem.exists(absolutePath)) continue
 
-                val fullPath = "$appDataDir/${normalizedPath.replace("/", fileSeparator)}"
-                if (fileSystem.exists(fullPath)) {
-                    try {
-                        val bytes = fileSystem.readBytes(fullPath)
-                        zipEntries.add(ZipEntry(normalizedPath, bytes))
-                        exportedPaths.add(normalizedPath)
-                    } catch (e: Exception) {
-                        Napier.w("Failed to read image: $fullPath", e)
-                    }
+                // Convert absolute path to relative for the ZIP entry
+                val normalizedAbsolute = absolutePath.replace('\\', '/')
+                val relativePath = if (normalizedAbsolute.startsWith(appDataPrefix)) {
+                    normalizedAbsolute.removePrefix(appDataPrefix)
+                } else {
+                    normalizedAbsolute.substringAfterLast('/')
+                }
+
+                if (relativePath in exportedPaths) continue
+
+                try {
+                    val bytes = fileSystem.readBytes(absolutePath)
+                    zipEntries.add(ZipEntry(relativePath, bytes))
+                    exportedPaths.add(relativePath)
+                } catch (e: Exception) {
+                    Napier.w("Failed to read image: $absolutePath", e)
                 }
             }
         }
@@ -151,12 +164,17 @@ class DefaultDataMigrationService(
                 }
             }
 
-            // 4. Upsert entries
+            // 4. Upsert entries (resolve relative paths to absolute)
             var entriesImported = 0
             for (exportEntry in exportData.entries) {
                 try {
                     val domainEntry = exportEntry.toDomain()
-                    trackedEntryRepository.upsertEntry(domainEntry)
+                    // Convert MAUI-style relative paths to absolute paths
+                    val resolvedEntry = domainEntry.copy(
+                        blobPath = domainEntry.blobPath?.let { resolveImportPath(it, appDataDir) },
+                        dataPayload = resolvePayloadPaths(domainEntry.dataPayload, appDataDir)
+                    )
+                    trackedEntryRepository.upsertEntry(resolvedEntry)
                     entriesImported++
                 } catch (e: Exception) {
                     Napier.w("Failed to import entry ${exportEntry.entryId}", e)
@@ -209,36 +227,27 @@ class DefaultDataMigrationService(
         }
     }
 
-    private fun enumerateImageRelativePaths(entry: com.wellnesswingman.data.model.TrackedEntry): List<String> {
-        val paths = mutableListOf<String>()
+    /**
+     * Returns absolute file paths for all images referenced by this entry.
+     * Handles both absolute paths (Kotlin-native) and relative paths (MAUI imports).
+     */
+    private fun enumerateImageAbsolutePaths(entry: com.wellnesswingman.data.model.TrackedEntry, appDataDir: String): List<String> {
+        val rawPaths = mutableListOf<String>()
 
         // Add blob path
-        entry.blobPath?.takeIf { it.isNotBlank() }?.let { paths.add(it) }
+        entry.blobPath?.takeIf { it.isNotBlank() }?.let { rawPaths.add(it) }
 
         // Try to extract preview paths from payload JSON
         if (entry.dataPayload.isNotBlank()) {
             try {
                 val payloadJson = Json.parseToJsonElement(entry.dataPayload)
                 if (payloadJson is kotlinx.serialization.json.JsonObject) {
-                    payloadJson["PreviewBlobPath"]?.let { elem ->
-                        if (elem is kotlinx.serialization.json.JsonPrimitive && elem.isString) {
-                            elem.content.takeIf { it.isNotBlank() }?.let { paths.add(it) }
-                        }
-                    }
-                    payloadJson["ScreenshotBlobPath"]?.let { elem ->
-                        if (elem is kotlinx.serialization.json.JsonPrimitive && elem.isString) {
-                            elem.content.takeIf { it.isNotBlank() }?.let { paths.add(it) }
-                        }
-                    }
-                    // Also check camelCase versions
-                    payloadJson["previewBlobPath"]?.let { elem ->
-                        if (elem is kotlinx.serialization.json.JsonPrimitive && elem.isString) {
-                            elem.content.takeIf { it.isNotBlank() }?.let { paths.add(it) }
-                        }
-                    }
-                    payloadJson["screenshotBlobPath"]?.let { elem ->
-                        if (elem is kotlinx.serialization.json.JsonPrimitive && elem.isString) {
-                            elem.content.takeIf { it.isNotBlank() }?.let { paths.add(it) }
+                    val keys = listOf("PreviewBlobPath", "previewBlobPath", "ScreenshotBlobPath", "screenshotBlobPath")
+                    for (key in keys) {
+                        payloadJson[key]?.let { elem ->
+                            if (elem is kotlinx.serialization.json.JsonPrimitive && elem.isString) {
+                                elem.content.takeIf { it.isNotBlank() }?.let { rawPaths.add(it) }
+                            }
                         }
                     }
                 }
@@ -247,7 +256,108 @@ class DefaultDataMigrationService(
             }
         }
 
-        return paths
+        // Resolve any relative paths to absolute
+        return rawPaths.map { resolveImportPath(it, appDataDir) }
+    }
+
+    /**
+     * Resolves a potentially relative path to an absolute path.
+     * MAUI exports store relative paths (e.g. "Entries/Meal/guid.jpg")
+     * while the Kotlin app expects absolute paths.
+     */
+    private fun resolveImportPath(path: String, appDataDir: String): String {
+        if (path.isBlank()) return path
+        // Already absolute (starts with / on Unix or drive letter on Windows)
+        if (path.startsWith("/") || (path.length >= 2 && path[1] == ':')) return path
+        return "$appDataDir/$path"
+    }
+
+    /**
+     * Converts an absolute path to a relative path for export.
+     * Strips the appDataDir prefix so MAUI can read Kotlin exports.
+     */
+    private fun relativizePath(path: String, appDataDir: String): String {
+        if (path.isBlank()) return path
+        val normalizedPath = path.replace('\\', '/')
+        val normalizedPrefix = appDataDir.replace('\\', '/').trimEnd('/') + "/"
+        return if (normalizedPath.startsWith(normalizedPrefix)) {
+            normalizedPath.removePrefix(normalizedPrefix)
+        } else {
+            path
+        }
+    }
+
+    /**
+     * Relativizes blob paths inside a DataPayload JSON string for export.
+     */
+    private fun relativizePayloadPaths(payload: String, appDataDir: String): String {
+        if (payload.isBlank()) return payload
+        try {
+            val element = Json.parseToJsonElement(payload)
+            if (element !is kotlinx.serialization.json.JsonObject) return payload
+
+            val pathKeys = listOf("PreviewBlobPath", "previewBlobPath", "ScreenshotBlobPath", "screenshotBlobPath")
+            var modified = false
+            val mutableMap = element.toMutableMap()
+
+            for (key in pathKeys) {
+                val value = mutableMap[key]
+                if (value is kotlinx.serialization.json.JsonPrimitive && value.isString && value.content.isNotBlank()) {
+                    val relativized = relativizePath(value.content, appDataDir)
+                    if (relativized != value.content) {
+                        mutableMap[key] = kotlinx.serialization.json.JsonPrimitive(relativized)
+                        modified = true
+                    }
+                }
+            }
+
+            return if (modified) {
+                Json.encodeToString(kotlinx.serialization.json.JsonObject.serializer(), kotlinx.serialization.json.JsonObject(mutableMap))
+            } else {
+                payload
+            }
+        } catch (_: Exception) {
+            return payload
+        }
+    }
+
+    /**
+     * Resolves blob paths inside a DataPayload JSON string.
+     * Handles both PascalCase (MAUI) and camelCase (Kotlin) keys.
+     */
+    private fun resolvePayloadPaths(payload: String, appDataDir: String): String {
+        if (payload.isBlank()) return payload
+        try {
+            val element = Json.parseToJsonElement(payload)
+            if (element !is kotlinx.serialization.json.JsonObject) return payload
+
+            val pathKeys = listOf("PreviewBlobPath", "previewBlobPath", "ScreenshotBlobPath", "screenshotBlobPath")
+            var modified = false
+            val mutableMap = element.toMutableMap()
+
+            for (key in pathKeys) {
+                val value = mutableMap[key]
+                if (value is kotlinx.serialization.json.JsonPrimitive && value.isString && value.content.isNotBlank()) {
+                    val resolved = resolveImportPath(value.content, appDataDir)
+                    if (resolved != value.content) {
+                        mutableMap[key] = kotlinx.serialization.json.JsonPrimitive(resolved)
+                        modified = true
+                    }
+                }
+            }
+
+            return if (modified) {
+                Json.encodeToString(kotlinx.serialization.json.JsonObject.serializer(), kotlinx.serialization.json.JsonObject(mutableMap))
+            } else {
+                payload
+            }
+        } catch (_: Exception) {
+            return payload
+        }
+    }
+
+    private fun kotlinx.serialization.json.JsonObject.toMutableMap(): MutableMap<String, kotlinx.serialization.json.JsonElement> {
+        return this.toMap().toMutableMap()
     }
 
     private suspend fun cleanupDirectory(path: String) {

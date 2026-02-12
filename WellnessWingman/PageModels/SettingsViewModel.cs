@@ -1,6 +1,8 @@
 using System;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Threading.Tasks;
+using CommunityToolkit.Maui.Storage;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using WellnessWingman.Data;
@@ -54,7 +56,29 @@ public partial class SettingsViewModel : ObservableObject
         try
         {
             var zipPath = await _migrationService.ExportDataAsync();
-            
+
+            await using var exportStream = File.OpenRead(zipPath);
+            var suggestedFileName = Path.GetFileName(zipPath);
+            var saveResult = await FileSaver.Default.SaveAsync(suggestedFileName, exportStream);
+
+            if (saveResult.IsSuccessful)
+            {
+                await Application.Current!.MainPage!.DisplayAlert(
+                    "Export Complete",
+                    $"Backup saved to:\n{saveResult.FilePath}",
+                    "OK");
+                return;
+            }
+
+            if (saveResult.Exception is null || saveResult.Exception is OperationCanceledException)
+            {
+                return;
+            }
+
+            _logger.LogWarning(
+                saveResult.Exception,
+                "File save picker did not complete successfully. Falling back to share sheet.");
+
             await Share.Default.RequestAsync(new ShareFileRequest
             {
                 Title = "Export WellnessWingman Data",
