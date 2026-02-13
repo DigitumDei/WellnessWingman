@@ -33,7 +33,7 @@ actual class ZipUtil actual constructor() {
             zip.entries().asSequence().forEach { entry ->
                 val destFile = File(destDirectory, entry.name)
                 // Protect against zip slip
-                if (!destFile.canonicalPath.startsWith(destDirectory.canonicalPath)) {
+                if (!destFile.canonicalPath.startsWith(destDirectory.canonicalPath + File.separator)) {
                     throw SecurityException("Zip entry outside target dir: ${entry.name}")
                 }
                 if (entry.isDirectory) {

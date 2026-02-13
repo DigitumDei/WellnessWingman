@@ -43,7 +43,7 @@ public class DataMigrationService : IDataMigrationService
         var json = JsonSerializer.Serialize(exportData, jsonOptions);
 
         // 3. Create Zip
-        var fileName = $"wellnesswingman_export_{DateTime.Now:yyyyMMdd_HHmmss}.zip";
+        var fileName = $"wellnesswingman_export_{DateTime.UtcNow:yyyyMMdd_HHmmss}.zip";
         var zipPath = Path.Combine(FileSystem.CacheDirectory, fileName);
 
         if (File.Exists(zipPath))

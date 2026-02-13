@@ -53,9 +53,10 @@ public partial class SettingsViewModel : ObservableObject
     [RelayCommand]
     private async Task ExportDataAsync()
     {
+        string? zipPath = null;
         try
         {
-            var zipPath = await _migrationService.ExportDataAsync();
+            zipPath = await _migrationService.ExportDataAsync();
 
             await using var exportStream = File.OpenRead(zipPath);
             var suggestedFileName = Path.GetFileName(zipPath);
@@ -88,6 +89,13 @@ public partial class SettingsViewModel : ObservableObject
         catch (Exception ex)
         {
             await Application.Current!.MainPage!.DisplayAlert("Export Failed", ex.Message, "OK");
+        }
+        finally
+        {
+            if (zipPath != null)
+            {
+                try { File.Delete(zipPath); } catch { /* best effort */ }
+            }
         }
     }
 

@@ -151,8 +151,10 @@ class DefaultDataMigrationService(
             // 3. Copy images to app data directory
             val appDataDir = fileSystem.getAppDataDirectory()
             val allFiles = fileSystem.listFilesRecursively(tempDir)
+            val normalizedTempDir = tempDir.replace('\\', '/')
             for (file in allFiles) {
-                val relativePath = file.removePrefix(tempDir).removePrefix("/").removePrefix("\\")
+                val normalizedFile = file.replace('\\', '/')
+                val relativePath = normalizedFile.removePrefix(normalizedTempDir).removePrefix("/")
                 if (relativePath.equals("data.json", ignoreCase = true)) continue
 
                 val destPath = "$appDataDir${fileSeparator}${relativePath.replace("/", fileSeparator)}"
