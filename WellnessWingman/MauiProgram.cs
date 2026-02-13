@@ -119,6 +119,8 @@ public static class MauiProgram
 
         builder.Services.AddSingleton<HistoricalNavigationContext>();
         builder.Services.AddSingleton<IHistoricalNavigationService, HistoricalNavigationService>();
+        
+        builder.Services.AddScoped<Services.Migration.IDataMigrationService, Services.Migration.DataMigrationService>();
 
 
         builder.Services.AddTransient<EntryLogViewModel>();

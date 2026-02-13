@@ -1,5 +1,6 @@
 
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Text.Json.Serialization;
 using WellnessWingman.Utilities;
 
 namespace WellnessWingman.Models;
@@ -24,9 +25,11 @@ public class TrackedEntry
     public string? UserNotes { get; set; }
 
     [NotMapped]
+    [JsonIgnore]
     public IEntryPayload Payload { get; set; } = new PendingEntryPayload();
 
     [NotMapped]
+    [JsonIgnore]
     public DateTime CapturedAtLocal => DateTimeConverter.ToOriginalLocal(
         CapturedAt,
         CapturedAtTimeZoneId,

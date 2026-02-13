@@ -1,0 +1,17 @@
+-- Migration from version 1 to version 2
+-- Adds WeeklySummary table for persisted weekly LLM-generated summaries
+
+CREATE TABLE WeeklySummary (
+    summaryId INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    weekStartDate INTEGER NOT NULL,
+    highlights TEXT NOT NULL DEFAULT '',
+    recommendations TEXT NOT NULL DEFAULT '',
+    mealCount INTEGER NOT NULL DEFAULT 0,
+    exerciseCount INTEGER NOT NULL DEFAULT 0,
+    sleepCount INTEGER NOT NULL DEFAULT 0,
+    otherCount INTEGER NOT NULL DEFAULT 0,
+    totalEntries INTEGER NOT NULL DEFAULT 0,
+    generatedAt INTEGER
+);
+
+CREATE UNIQUE INDEX idx_weekly_summary_week ON WeeklySummary(weekStartDate);

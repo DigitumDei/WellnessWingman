@@ -1,6 +1,8 @@
 using System;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Threading.Tasks;
+using CommunityToolkit.Maui.Storage;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using WellnessWingman.Data;
@@ -14,6 +16,7 @@ public partial class SettingsViewModel : ObservableObject
 {
     private readonly IAppSettingsRepository _appSettingsRepository;
     private readonly ILogFileService _logFileService;
+    private readonly Services.Migration.IDataMigrationService _migrationService;
     private readonly ILogger<SettingsViewModel> _logger;
     private AppSettings _appSettings;
 
@@ -36,13 +39,100 @@ public partial class SettingsViewModel : ObservableObject
     public SettingsViewModel(
         IAppSettingsRepository appSettingsRepository,
         ILogFileService logFileService,
+        Services.Migration.IDataMigrationService migrationService,
         ILogger<SettingsViewModel> logger)
     {
         _appSettingsRepository = appSettingsRepository;
         _logFileService = logFileService;
+        _migrationService = migrationService;
         _logger = logger;
         Providers = new ObservableCollection<LlmProvider>(Enum.GetValues<LlmProvider>());
         _appSettings = new AppSettings();
+    }
+
+    [RelayCommand]
+    private async Task ExportDataAsync()
+    {
+        string? zipPath = null;
+        try
+        {
+            zipPath = await _migrationService.ExportDataAsync();
+
+            await using var exportStream = File.OpenRead(zipPath);
+            var suggestedFileName = Path.GetFileName(zipPath);
+            var saveResult = await FileSaver.Default.SaveAsync(suggestedFileName, exportStream);
+
+            if (saveResult.IsSuccessful)
+            {
+                await Application.Current!.MainPage!.DisplayAlert(
+                    "Export Complete",
+                    $"Backup saved to:\n{saveResult.FilePath}",
+                    "OK");
+                return;
+            }
+
+            if (saveResult.Exception is null || saveResult.Exception is OperationCanceledException)
+            {
+                return;
+            }
+
+            _logger.LogWarning(
+                saveResult.Exception,
+                "File save picker did not complete successfully. Falling back to share sheet.");
+
+            await Share.Default.RequestAsync(new ShareFileRequest
+            {
+                Title = "Export WellnessWingman Data",
+                File = new ShareFile(zipPath)
+            });
+        }
+        catch (Exception ex)
+        {
+            await Application.Current!.MainPage!.DisplayAlert("Export Failed", ex.Message, "OK");
+        }
+        finally
+        {
+            if (zipPath != null)
+            {
+                try { File.Delete(zipPath); } catch { /* best effort */ }
+            }
+        }
+    }
+
+    [RelayCommand]
+    private async Task ImportDataAsync()
+    {
+        try
+        {
+            var result = await FilePicker.Default.PickAsync(new PickOptions
+            {
+                PickerTitle = "Select Backup File",
+                FileTypes = new FilePickerFileType(new Dictionary<DevicePlatform, IEnumerable<string>>
+                {
+                    { DevicePlatform.iOS, new[] { "public.zip-archive" } },
+                    { DevicePlatform.Android, new[] { "application/zip" } },
+                    { DevicePlatform.WinUI, new[] { ".zip" } }
+                })
+            });
+
+            if (result != null)
+            {
+                bool confirm = await Application.Current!.MainPage!.DisplayAlert(
+                    "Confirm Import", 
+                    "This will merge data from the backup into your current data. Existing entries with the same ID will be updated. Continue?", 
+                    "Yes", "No");
+
+                if (confirm)
+                {
+                    await _migrationService.ImportDataAsync(result.FullPath);
+                    await Application.Current!.MainPage!.DisplayAlert("Success", "Data imported successfully.", "OK");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            await Application.Current!.MainPage!.DisplayAlert("Import Failed", ex.Message, "OK");
+        }
     }
 
     [RelayCommand]

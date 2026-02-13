@@ -1,0 +1,99 @@
+-- DailySummary table schema
+
+CREATE TABLE DailySummary (
+    summaryId INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    externalId TEXT,
+    summaryDate INTEGER NOT NULL,
+    highlights TEXT NOT NULL DEFAULT '',
+    recommendations TEXT NOT NULL DEFAULT '',
+    generatedAt INTEGER
+);
+
+-- Index for date queries
+CREATE UNIQUE INDEX idx_daily_summary_date ON DailySummary(summaryDate);
+
+-- Queries
+
+-- Get all summaries
+getAllSummaries:
+SELECT * FROM DailySummary
+ORDER BY summaryDate DESC;
+
+-- Get summary by ID
+getSummaryById:
+SELECT * FROM DailySummary
+WHERE summaryId = ?;
+
+-- Get summary by external ID
+getSummaryByExternalId:
+SELECT * FROM DailySummary
+WHERE externalId = ?;
+
+-- Get summary for a specific date
+getSummaryForDate:
+SELECT * FROM DailySummary
+WHERE summaryDate = ?;
+
+-- Get summaries for date range
+getSummariesForDateRange:
+SELECT * FROM DailySummary
+WHERE summaryDate >= ? AND summaryDate <= ?
+ORDER BY summaryDate DESC;
+
+-- Get recent summaries
+getRecentSummaries:
+SELECT * FROM DailySummary
+ORDER BY summaryDate DESC
+LIMIT ?;
+
+-- Insert summary
+insertSummary:
+INSERT INTO DailySummary(
+    externalId,
+    summaryDate,
+    highlights,
+    recommendations,
+    generatedAt
+) VALUES (?, ?, ?, ?, ?);
+
+-- Update summary
+updateSummary:
+UPDATE DailySummary
+SET highlights = ?, recommendations = ?, generatedAt = ?
+WHERE summaryId = ?;
+
+-- Update summary by date
+updateSummaryByDate:
+UPDATE DailySummary
+SET highlights = ?, recommendations = ?, generatedAt = ?
+WHERE summaryDate = ?;
+
+-- Delete summary
+deleteSummary:
+DELETE FROM DailySummary
+WHERE summaryId = ?;
+
+-- Delete summary by date
+deleteSummaryByDate:
+DELETE FROM DailySummary
+WHERE summaryDate = ?;
+
+-- Delete old summaries (older than specified date)
+deleteOldSummaries:
+DELETE FROM DailySummary
+WHERE summaryDate < ?;
+
+-- Upsert summary (for import)
+upsertSummary:
+INSERT OR REPLACE INTO DailySummary(
+    summaryId,
+    externalId,
+    summaryDate,
+    highlights,
+    recommendations,
+    generatedAt
+) VALUES (?, ?, ?, ?, ?, ?);
+
+-- Get last inserted row ID
+lastInsertRowId:
+SELECT last_insert_rowid();

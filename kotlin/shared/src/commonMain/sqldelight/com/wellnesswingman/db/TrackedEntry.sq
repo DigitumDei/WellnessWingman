@@ -1,0 +1,143 @@
+-- TrackedEntry table schema
+
+CREATE TABLE TrackedEntry (
+    entryId INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    externalId TEXT,
+    entryType TEXT NOT NULL,
+    capturedAt INTEGER NOT NULL,
+    capturedAtTimeZoneId TEXT,
+    capturedAtOffsetMinutes INTEGER,
+    blobPath TEXT,
+    dataPayload TEXT NOT NULL DEFAULT '',
+    dataSchemaVersion INTEGER NOT NULL DEFAULT 1,
+    processingStatus TEXT NOT NULL DEFAULT 'Pending',
+    userNotes TEXT
+);
+
+-- Index for date-based queries
+CREATE INDEX idx_tracked_entry_captured_at ON TrackedEntry(capturedAt);
+CREATE INDEX idx_tracked_entry_entry_type ON TrackedEntry(entryType);
+CREATE INDEX idx_tracked_entry_processing_status ON TrackedEntry(processingStatus);
+
+-- Queries
+
+-- Get all entries
+getAllEntries:
+SELECT * FROM TrackedEntry
+ORDER BY capturedAt DESC;
+
+-- Get entry by ID
+getEntryById:
+SELECT * FROM TrackedEntry
+WHERE entryId = ?;
+
+-- Get entry by external ID
+getEntryByExternalId:
+SELECT * FROM TrackedEntry
+WHERE externalId = ?;
+
+-- Get entries for a specific day (expects epoch milliseconds for start and end of day)
+getEntriesForDay:
+SELECT * FROM TrackedEntry
+WHERE capturedAt >= ? AND capturedAt < ?
+ORDER BY capturedAt DESC;
+
+-- Get entries for a week
+getEntriesForWeek:
+SELECT * FROM TrackedEntry
+WHERE capturedAt >= ? AND capturedAt < ?
+ORDER BY capturedAt DESC;
+
+-- Get entries for a month
+getEntriesForMonth:
+SELECT * FROM TrackedEntry
+WHERE capturedAt >= ? AND capturedAt < ?
+ORDER BY capturedAt DESC;
+
+-- Get entries by type
+getEntriesByType:
+SELECT * FROM TrackedEntry
+WHERE entryType = ?
+ORDER BY capturedAt DESC;
+
+-- Get entries by status
+getEntriesByStatus:
+SELECT * FROM TrackedEntry
+WHERE processingStatus = ?
+ORDER BY capturedAt DESC;
+
+-- Get pending entries
+getPendingEntries:
+SELECT * FROM TrackedEntry
+WHERE processingStatus IN ('Pending', 'Failed')
+ORDER BY capturedAt ASC;
+
+-- Insert entry
+insertEntry:
+INSERT INTO TrackedEntry(
+    externalId,
+    entryType,
+    capturedAt,
+    capturedAtTimeZoneId,
+    capturedAtOffsetMinutes,
+    blobPath,
+    dataPayload,
+    dataSchemaVersion,
+    processingStatus,
+    userNotes
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+-- Update entry status
+updateEntryStatus:
+UPDATE TrackedEntry
+SET processingStatus = ?
+WHERE entryId = ?;
+
+-- Update entry type
+updateEntryType:
+UPDATE TrackedEntry
+SET entryType = ?
+WHERE entryId = ?;
+
+-- Update entry payload
+updateEntryPayload:
+UPDATE TrackedEntry
+SET dataPayload = ?, dataSchemaVersion = ?
+WHERE entryId = ?;
+
+-- Update user notes
+updateUserNotes:
+UPDATE TrackedEntry
+SET userNotes = ?
+WHERE entryId = ?;
+
+-- Delete entry
+deleteEntry:
+DELETE FROM TrackedEntry
+WHERE entryId = ?;
+
+-- Count entries by type
+countEntriesByType:
+SELECT entryType, COUNT(*) AS entry_count
+FROM TrackedEntry
+GROUP BY entryType;
+
+-- Upsert entry (for import)
+upsertEntry:
+INSERT OR REPLACE INTO TrackedEntry(
+    entryId,
+    externalId,
+    entryType,
+    capturedAt,
+    capturedAtTimeZoneId,
+    capturedAtOffsetMinutes,
+    blobPath,
+    dataPayload,
+    dataSchemaVersion,
+    processingStatus,
+    userNotes
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+-- Get last inserted row ID
+lastInsertRowId:
+SELECT last_insert_rowid();
