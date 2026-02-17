@@ -17,8 +17,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
@@ -45,8 +48,8 @@ class PhotoReviewViewModel(
     private val _isTranscribing = MutableStateFlow(false)
     val isTranscribing: StateFlow<Boolean> = _isTranscribing.asStateFlow()
 
-    private val _transcribedText = MutableStateFlow("")
-    val transcribedText: StateFlow<String> = _transcribedText.asStateFlow()
+    private val _newTranscription = MutableSharedFlow<String>(extraBufferCapacity = 1)
+    val newTranscription: SharedFlow<String> = _newTranscription.asSharedFlow()
 
     private val _transcriptionError = MutableStateFlow<String?>(null)
     val transcriptionError: StateFlow<String?> = _transcriptionError.asStateFlow()
@@ -177,13 +180,8 @@ class PhotoReviewViewModel(
             val llmClient = llmClientFactory.createForCurrentProvider()
             val transcription = llmClient.transcribeAudio(audioBytes)
 
-            // Append to existing transcribed text
-            val current = _transcribedText.value
-            _transcribedText.value = if (current.isBlank()) {
-                transcription
-            } else {
-                "$current\n$transcription"
-            }
+            // Emit transcription so UI can append to notes field
+            _newTranscription.tryEmit(transcription)
 
             // Delete audio file after successful transcription
             fileSystem.delete(audioPath)
@@ -207,20 +205,11 @@ class PhotoReviewViewModel(
                 // Generate preview thumbnail
                 generatePreview(reviewState.photoBytes, reviewState.blobPath)
 
-                // Combine manual notes and transcribed text
-                val combinedNotes = buildString {
-                    if (userNotes.isNotBlank()) append(userNotes)
-                    if (_transcribedText.value.isNotBlank()) {
-                        if (isNotBlank()) append("\n\n")
-                        append("Voice notes: ${_transcribedText.value}")
-                    }
-                }
-
-                // Create entry with combined notes
+                // Create entry with user notes (already includes any transcribed text)
                 val entry = TrackedEntry(
                     entryType = entryType,
                     capturedAt = Clock.System.now(),
-                    userNotes = combinedNotes.ifBlank { null },
+                    userNotes = userNotes.ifBlank { null },
                     blobPath = reviewState.blobPath
                 )
                 val entryId = trackedEntryRepository.insertEntry(entry)
@@ -231,7 +220,7 @@ class PhotoReviewViewModel(
                 // Start analysis in background - don't wait for it to complete
                 CoroutineScope(Dispatchers.Default).launch {
                     try {
-                        analysisOrchestrator.processEntry(createdEntry, combinedNotes)
+                        analysisOrchestrator.processEntry(createdEntry, userNotes)
                         Napier.i("Background analysis completed for entry $entryId")
                     } catch (e: Exception) {
                         Napier.e("Background analysis failed for entry $entryId", e)
@@ -274,20 +263,11 @@ class PhotoReviewViewModel(
                 // Generate preview thumbnail
                 generatePreview(resizedBytes, photoPath)
 
-                // Combine manual notes and transcribed text
-                val combinedNotes = buildString {
-                    if (userNotes.isNotBlank()) append(userNotes)
-                    if (_transcribedText.value.isNotBlank()) {
-                        if (isNotBlank()) append("\n\n")
-                        append("Voice notes: ${_transcribedText.value}")
-                    }
-                }
-
-                // Create entry with saved photo path
+                // Create entry with saved photo path (notes already include any transcribed text)
                 val entry = TrackedEntry(
                     entryType = entryType,
                     capturedAt = Clock.System.now(),
-                    userNotes = combinedNotes.ifBlank { null },
+                    userNotes = userNotes.ifBlank { null },
                     blobPath = photoPath
                 )
                 val entryId = trackedEntryRepository.insertEntry(entry)
@@ -298,7 +278,7 @@ class PhotoReviewViewModel(
                 // Start analysis in background - don't wait for it to complete
                 CoroutineScope(Dispatchers.Default).launch {
                     try {
-                        analysisOrchestrator.processEntry(createdEntry, combinedNotes)
+                        analysisOrchestrator.processEntry(createdEntry, userNotes)
                         Napier.i("Background analysis completed for entry $entryId")
                     } catch (e: Exception) {
                         Napier.e("Background analysis failed for entry $entryId", e)

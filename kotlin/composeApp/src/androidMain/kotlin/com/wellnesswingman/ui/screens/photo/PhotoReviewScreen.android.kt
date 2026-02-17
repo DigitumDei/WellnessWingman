@@ -332,8 +332,18 @@ private fun PhotoReview(
     val isRecording by viewModel.isRecording.collectAsState()
     val recordingDuration by viewModel.recordingDuration.collectAsState()
     val isTranscribing by viewModel.isTranscribing.collectAsState()
-    val transcribedText by viewModel.transcribedText.collectAsState()
     val transcriptionError by viewModel.transcriptionError.collectAsState()
+
+    // Append transcriptions directly into the notes field
+    LaunchedEffect(Unit) {
+        viewModel.newTranscription.collect { transcription ->
+            notes = if (notes.isBlank()) {
+                transcription
+            } else {
+                "$notes\n$transcription"
+            }
+        }
+    }
 
     val micPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -407,17 +417,6 @@ private fun PhotoReview(
                 modifier = Modifier.fillMaxWidth(),
                 maxLines = 3
             )
-
-            // Voice note transcription display (if exists)
-            if (transcribedText.isNotBlank()) {
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "Voice notes: $transcribedText",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
 
             Spacer(modifier = Modifier.height(8.dp))
 
