@@ -5,7 +5,7 @@ import cafe.adriel.voyager.core.model.screenModelScope
 import com.wellnesswingman.data.model.EntryType
 import com.wellnesswingman.data.model.TrackedEntry
 import com.wellnesswingman.data.repository.TrackedEntryRepository
-import com.wellnesswingman.domain.analysis.AnalysisOrchestrator
+import com.wellnesswingman.domain.analysis.BackgroundAnalysisService
 import com.wellnesswingman.domain.llm.LlmClientFactory
 import com.wellnesswingman.platform.AudioRecordingService
 import com.wellnesswingman.platform.CameraCaptureService
@@ -13,8 +13,6 @@ import com.wellnesswingman.platform.CaptureResult
 import com.wellnesswingman.platform.FileSystem
 import com.wellnesswingman.platform.PhotoResizer
 import io.github.aakira.napier.Napier
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -30,7 +28,7 @@ class PhotoReviewViewModel(
     private val cameraService: CameraCaptureService,
     private val photoResizer: PhotoResizer,
     private val trackedEntryRepository: TrackedEntryRepository,
-    private val analysisOrchestrator: AnalysisOrchestrator,
+    private val backgroundAnalysisService: BackgroundAnalysisService,
     private val audioRecordingService: AudioRecordingService,
     private val fileSystem: FileSystem,
     private val llmClientFactory: LlmClientFactory
@@ -214,18 +212,8 @@ class PhotoReviewViewModel(
                 )
                 val entryId = trackedEntryRepository.insertEntry(entry)
 
-                // Fetch the created entry with its ID
-                val createdEntry = trackedEntryRepository.getEntryById(entryId) ?: throw Exception("Failed to retrieve created entry")
-
-                // Start analysis in background - don't wait for it to complete
-                CoroutineScope(Dispatchers.Default).launch {
-                    try {
-                        analysisOrchestrator.processEntry(createdEntry, userNotes)
-                        Napier.i("Background analysis completed for entry $entryId")
-                    } catch (e: Exception) {
-                        Napier.e("Background analysis failed for entry $entryId", e)
-                    }
-                }
+                // Queue analysis via BackgroundAnalysisService so status events are emitted
+                backgroundAnalysisService.queueEntry(entryId, userNotes)
 
                 _uiState.value = PhotoReviewUiState.Success(entryId)
             } catch (e: Exception) {
@@ -272,18 +260,8 @@ class PhotoReviewViewModel(
                 )
                 val entryId = trackedEntryRepository.insertEntry(entry)
 
-                // Fetch the created entry with its ID
-                val createdEntry = trackedEntryRepository.getEntryById(entryId) ?: throw Exception("Failed to retrieve created entry")
-
-                // Start analysis in background - don't wait for it to complete
-                CoroutineScope(Dispatchers.Default).launch {
-                    try {
-                        analysisOrchestrator.processEntry(createdEntry, userNotes)
-                        Napier.i("Background analysis completed for entry $entryId")
-                    } catch (e: Exception) {
-                        Napier.e("Background analysis failed for entry $entryId", e)
-                    }
-                }
+                // Queue analysis via BackgroundAnalysisService so status events are emitted
+                backgroundAnalysisService.queueEntry(entryId, userNotes)
 
                 _uiState.value = PhotoReviewUiState.Success(entryId)
             } catch (e: Exception) {

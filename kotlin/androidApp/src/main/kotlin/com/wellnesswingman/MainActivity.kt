@@ -14,8 +14,7 @@ import com.wellnesswingman.domain.capture.PendingCaptureStore
 import com.wellnesswingman.platform.FileSystem
 import com.wellnesswingman.ui.App
 import io.github.aakira.napier.Napier
-import kotlinx.coroutines.MainScope
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 
@@ -23,8 +22,6 @@ class MainActivity : ComponentActivity(), KoinComponent {
 
     private val pendingCaptureStore: PendingCaptureStore by inject()
     private val fileSystem: FileSystem by inject()
-
-    private val activityScope = MainScope()
 
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -46,11 +43,13 @@ class MainActivity : ComponentActivity(), KoinComponent {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        handleShareIntent(intent)
+        if (handleShareIntent(intent)) {
+            recreate()
+        }
     }
 
-    private fun handleShareIntent(intent: Intent?) {
-        if (intent == null) return
+    private fun handleShareIntent(intent: Intent?): Boolean {
+        if (intent == null) return false
 
         when (intent.action) {
             Intent.ACTION_SEND -> {
@@ -62,7 +61,7 @@ class MainActivity : ComponentActivity(), KoinComponent {
                         intent.getParcelableExtra(Intent.EXTRA_STREAM)
                     }
                     if (uri != null) {
-                        saveSharedImageAsPendingCapture(uri)
+                        return saveSharedImageAsPendingCapture(uri)
                     }
                 }
             }
@@ -76,38 +75,45 @@ class MainActivity : ComponentActivity(), KoinComponent {
                     }
                     val firstUri = uris?.firstOrNull()
                     if (firstUri != null) {
-                        saveSharedImageAsPendingCapture(firstUri)
+                        return saveSharedImageAsPendingCapture(firstUri)
                     }
                 }
             }
         }
+        return false
     }
 
-    private fun saveSharedImageAsPendingCapture(uri: Uri) {
-        activityScope.launch {
-            try {
-                val imageBytes = contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                if (imageBytes == null) {
-                    Napier.e("Failed to read shared image bytes from URI: $uri")
-                    return@launch
-                }
-
-                val photosDir = pendingCaptureStore.getPendingPhotosDirectory()
-                val timestamp = System.currentTimeMillis()
-                val filePath = "$photosDir/shared_$timestamp.jpg"
-
-                fileSystem.writeBytes(filePath, imageBytes)
-
-                val pendingCapture = PendingCapture(
-                    photoFilePath = filePath,
-                    capturedAtMillis = timestamp
-                )
-                pendingCaptureStore.save(pendingCapture)
-
-                Napier.d("Saved shared image as pending capture: $filePath")
-            } catch (e: Exception) {
-                Napier.e("Failed to handle shared image", e)
+    /**
+     * Saves the shared image synchronously so the pending capture file exists
+     * before the Compose UI and MainViewModel initialize.
+     */
+    private fun saveSharedImageAsPendingCapture(uri: Uri): Boolean {
+        return try {
+            val imageBytes = contentResolver.openInputStream(uri)?.use { it.readBytes() }
+            if (imageBytes == null) {
+                Napier.e("Failed to read shared image bytes from URI: $uri")
+                return false
             }
+
+            val photosDir = pendingCaptureStore.getPendingPhotosDirectory()
+            val timestamp = System.currentTimeMillis()
+            val filePath = "$photosDir/shared_$timestamp.jpg"
+
+            runBlocking {
+                fileSystem.writeBytes(filePath, imageBytes)
+                pendingCaptureStore.save(
+                    PendingCapture(
+                        photoFilePath = filePath,
+                        capturedAtMillis = timestamp
+                    )
+                )
+            }
+
+            Napier.d("Saved shared image as pending capture: $filePath")
+            true
+        } catch (e: Exception) {
+            Napier.e("Failed to handle shared image", e)
+            false
         }
     }
 
