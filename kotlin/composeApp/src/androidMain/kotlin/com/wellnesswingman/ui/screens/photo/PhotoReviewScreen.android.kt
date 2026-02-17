@@ -333,6 +333,7 @@ private fun PhotoReview(
     val recordingDuration by viewModel.recordingDuration.collectAsState()
     val isTranscribing by viewModel.isTranscribing.collectAsState()
     val transcribedText by viewModel.transcribedText.collectAsState()
+    val transcriptionError by viewModel.transcriptionError.collectAsState()
 
     val micPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -464,6 +465,17 @@ private fun PhotoReview(
                 }
             }
 
+            // Transcription error display
+            if (transcriptionError != null) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = transcriptionError!!,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
             Spacer(modifier = Modifier.height(16.dp))
 
             // Action buttons
@@ -482,7 +494,10 @@ private fun PhotoReview(
                         Text("Cancel")
                     }
                     Spacer(Modifier.width(8.dp))
-                    Button(onClick = { onConfirm(selectedType, notes) }) {
+                    Button(
+                        onClick = { onConfirm(selectedType, notes) },
+                        enabled = !isTranscribing && !isRecording
+                    ) {
                         Icon(Icons.Default.Check, "Confirm")
                         Spacer(Modifier.width(4.dp))
                         Text("Confirm")

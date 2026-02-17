@@ -42,36 +42,34 @@ actual class AudioRecordingService(private val context: Context) {
             outputFile.parentFile?.mkdirs()
 
             // Initialize MediaRecorder
-            recorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val newRecorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 MediaRecorder(context)
             } else {
                 @Suppress("DEPRECATION")
                 MediaRecorder()
-            }.apply {
-                setAudioSource(MediaRecorder.AudioSource.MIC)
-                setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-                setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-                setAudioSamplingRate(16000)
-                setAudioChannels(1)
-                setAudioEncodingBitRate(64000)
-                setOutputFile(outputFilePath)
-
-                try {
-                    prepare()
-                    start()
-                    currentOutputPath = outputFilePath
-                    isCurrentlyRecording = true
-                    Napier.i("Recording started: $outputFilePath")
-                    return@withContext true
-                } catch (e: Exception) {
-                    Napier.e("Failed to start MediaRecorder", e)
-                    release()
-                    recorder = null
-                    return@withContext false
-                }
             }
 
-            false
+            newRecorder.setAudioSource(MediaRecorder.AudioSource.MIC)
+            newRecorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+            newRecorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+            newRecorder.setAudioSamplingRate(16000)
+            newRecorder.setAudioChannels(1)
+            newRecorder.setAudioEncodingBitRate(64000)
+            newRecorder.setOutputFile(outputFilePath)
+
+            try {
+                newRecorder.prepare()
+                newRecorder.start()
+                recorder = newRecorder
+                currentOutputPath = outputFilePath
+                isCurrentlyRecording = true
+                Napier.i("Recording started: $outputFilePath")
+                true
+            } catch (e: Exception) {
+                Napier.e("Failed to start MediaRecorder", e)
+                newRecorder.release()
+                false
+            }
         } catch (e: Exception) {
             Napier.e("Failed to start recording", e)
             false

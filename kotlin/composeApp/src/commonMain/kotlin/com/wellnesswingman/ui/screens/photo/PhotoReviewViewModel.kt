@@ -48,6 +48,9 @@ class PhotoReviewViewModel(
     private val _transcribedText = MutableStateFlow("")
     val transcribedText: StateFlow<String> = _transcribedText.asStateFlow()
 
+    private val _transcriptionError = MutableStateFlow<String?>(null)
+    val transcriptionError: StateFlow<String?> = _transcriptionError.asStateFlow()
+
     private var recordingJob: Job? = null
     private var currentAudioPath: String? = null
 
@@ -129,6 +132,7 @@ class PhotoReviewViewModel(
             if (audioRecordingService.startRecording(audioPath)) {
                 currentAudioPath = audioPath
                 _isRecording.value = true
+                _transcriptionError.value = null
                 startDurationTimer()
             }
         } catch (e: Exception) {
@@ -168,6 +172,7 @@ class PhotoReviewViewModel(
 
     private suspend fun transcribeAudio(audioPath: String) {
         try {
+            _transcriptionError.value = null
             val audioBytes = fileSystem.readBytes(audioPath)
             val llmClient = llmClientFactory.createForCurrentProvider()
             val transcription = llmClient.transcribeAudio(audioBytes)
@@ -184,8 +189,13 @@ class PhotoReviewViewModel(
             fileSystem.delete(audioPath)
         } catch (e: Exception) {
             Napier.e("Failed to transcribe audio", e)
+            _transcriptionError.value = "Transcription failed: ${e.message ?: "Unknown error"}"
             // Keep audio file if transcription fails
         }
+    }
+
+    fun clearTranscriptionError() {
+        _transcriptionError.value = null
     }
 
     fun confirmPhoto(entryType: EntryType, userNotes: String = "") {

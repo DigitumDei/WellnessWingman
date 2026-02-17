@@ -380,6 +380,16 @@ fun CorrectionModeSection(
                 modifier = Modifier.fillMaxWidth()
             )
 
+            // Transcription error display
+            if (correctionState.transcriptionError != null) {
+                Text(
+                    text = correctionState.transcriptionError!!,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
             if (correctionState.isSubmitting) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
