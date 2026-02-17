@@ -14,6 +14,7 @@ import com.wellnesswingman.domain.capture.PendingCaptureStore
 import com.wellnesswingman.platform.FileSystem
 import com.wellnesswingman.ui.App
 import io.github.aakira.napier.Napier
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
@@ -88,18 +89,18 @@ class MainActivity : ComponentActivity(), KoinComponent {
      * before the Compose UI and MainViewModel initialize.
      */
     private fun saveSharedImageAsPendingCapture(uri: Uri): Boolean {
-        return try {
-            val imageBytes = contentResolver.openInputStream(uri)?.use { it.readBytes() }
-            if (imageBytes == null) {
-                Napier.e("Failed to read shared image bytes from URI: $uri")
-                return false
-            }
+        return runBlocking(Dispatchers.IO) {
+            try {
+                val imageBytes = contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                if (imageBytes == null) {
+                    Napier.e("Failed to read shared image bytes from URI: $uri")
+                    return@runBlocking false
+                }
 
-            val photosDir = pendingCaptureStore.getPendingPhotosDirectory()
-            val timestamp = System.currentTimeMillis()
-            val filePath = "$photosDir/shared_$timestamp.jpg"
+                val photosDir = pendingCaptureStore.getPendingPhotosDirectory()
+                val timestamp = System.currentTimeMillis()
+                val filePath = "$photosDir/shared_$timestamp.jpg"
 
-            runBlocking {
                 fileSystem.writeBytes(filePath, imageBytes)
                 pendingCaptureStore.save(
                     PendingCapture(
@@ -107,13 +108,13 @@ class MainActivity : ComponentActivity(), KoinComponent {
                         capturedAtMillis = timestamp
                     )
                 )
-            }
 
-            Napier.d("Saved shared image as pending capture: $filePath")
-            true
-        } catch (e: Exception) {
-            Napier.e("Failed to handle shared image", e)
-            false
+                Napier.d("Saved shared image as pending capture: $filePath")
+                true
+            } catch (e: Exception) {
+                Napier.e("Failed to handle shared image", e)
+                false
+            }
         }
     }
 
