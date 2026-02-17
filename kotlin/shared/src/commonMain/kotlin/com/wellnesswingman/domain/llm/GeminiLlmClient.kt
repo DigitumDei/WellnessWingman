@@ -3,6 +3,7 @@ package com.wellnesswingman.domain.llm
 import io.github.aakira.napier.Napier
 import io.ktor.client.*
 import io.ktor.client.call.*
+import io.ktor.client.plugins.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
@@ -34,6 +35,11 @@ class GeminiLlmClient(
                         ignoreUnknownKeys = true
                         isLenient = true
                     })
+                }
+                install(HttpTimeout) {
+                    requestTimeoutMillis = 120_000
+                    connectTimeoutMillis = 30_000
+                    socketTimeoutMillis = 120_000
                 }
             }
         }
@@ -107,10 +113,50 @@ class GeminiLlmClient(
         return content.trim().removePrefix("```json").removeSuffix("```").trim()
     }
 
+    @OptIn(ExperimentalEncodingApi::class)
     override suspend fun transcribeAudio(audioBytes: ByteArray, mimeType: String): String {
-        // Gemini doesn't have built-in audio transcription like Whisper
-        // This would need to be implemented via Google Cloud Speech-to-Text
-        throw UnsupportedOperationException("Audio transcription not supported by Gemini. Use OpenAI Whisper instead.")
+        val resolvedMimeType = when (mimeType) {
+            "audio/m4a" -> "audio/mp4"
+            "audio/mp3" -> "audio/mpeg"
+            else -> mimeType
+        }
+
+        val base64Audio = Base64.encode(audioBytes)
+
+        val request = GeminiRequest(
+            contents = listOf(
+                GeminiContent(
+                    parts = listOf(
+                        GeminiPart(text = "Transcribe the audio. Respond with plain text only."),
+                        GeminiPart(inlineData = GeminiPart.InlineData(
+                            mimeType = resolvedMimeType,
+                            data = base64Audio
+                        ))
+                    )
+                )
+            )
+        )
+
+        val httpResponse = httpClient.post(
+            "$BASE_URL/models/$model:generateContent"
+        ) {
+            contentType(ContentType.Application.Json)
+            header("x-goog-api-key", apiKey)
+            setBody(request)
+        }
+
+        if (!httpResponse.status.isSuccess()) {
+            val errorBody = httpResponse.bodyAsText()
+            Napier.e("Gemini transcription API error ${httpResponse.status}: $errorBody")
+            throw Exception("Gemini transcription failed: ${httpResponse.status}")
+        }
+
+        val response: GeminiResponse = httpResponse.body()
+
+        return response.candidates.firstOrNull()
+            ?.content?.parts?.firstNotNullOfOrNull { it.text }
+            ?.trim()
+            ?: throw Exception("Gemini returned empty transcription")
     }
 
     override suspend fun generateCompletion(

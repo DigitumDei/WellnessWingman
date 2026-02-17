@@ -5,7 +5,7 @@ import cafe.adriel.voyager.core.model.screenModelScope
 import com.wellnesswingman.data.model.EntryType
 import com.wellnesswingman.data.model.TrackedEntry
 import com.wellnesswingman.data.repository.TrackedEntryRepository
-import com.wellnesswingman.domain.analysis.AnalysisOrchestrator
+import com.wellnesswingman.domain.analysis.BackgroundAnalysisService
 import com.wellnesswingman.domain.llm.LlmClientFactory
 import com.wellnesswingman.platform.AudioRecordingService
 import com.wellnesswingman.platform.CameraCaptureService
@@ -13,12 +13,13 @@ import com.wellnesswingman.platform.CaptureResult
 import com.wellnesswingman.platform.FileSystem
 import com.wellnesswingman.platform.PhotoResizer
 import io.github.aakira.napier.Napier
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
@@ -27,7 +28,7 @@ class PhotoReviewViewModel(
     private val cameraService: CameraCaptureService,
     private val photoResizer: PhotoResizer,
     private val trackedEntryRepository: TrackedEntryRepository,
-    private val analysisOrchestrator: AnalysisOrchestrator,
+    private val backgroundAnalysisService: BackgroundAnalysisService,
     private val audioRecordingService: AudioRecordingService,
     private val fileSystem: FileSystem,
     private val llmClientFactory: LlmClientFactory
@@ -45,8 +46,11 @@ class PhotoReviewViewModel(
     private val _isTranscribing = MutableStateFlow(false)
     val isTranscribing: StateFlow<Boolean> = _isTranscribing.asStateFlow()
 
-    private val _transcribedText = MutableStateFlow("")
-    val transcribedText: StateFlow<String> = _transcribedText.asStateFlow()
+    private val _newTranscription = MutableSharedFlow<String>(extraBufferCapacity = 1)
+    val newTranscription: SharedFlow<String> = _newTranscription.asSharedFlow()
+
+    private val _transcriptionError = MutableStateFlow<String?>(null)
+    val transcriptionError: StateFlow<String?> = _transcriptionError.asStateFlow()
 
     private var recordingJob: Job? = null
     private var currentAudioPath: String? = null
@@ -129,6 +133,7 @@ class PhotoReviewViewModel(
             if (audioRecordingService.startRecording(audioPath)) {
                 currentAudioPath = audioPath
                 _isRecording.value = true
+                _transcriptionError.value = null
                 startDurationTimer()
             }
         } catch (e: Exception) {
@@ -168,27 +173,28 @@ class PhotoReviewViewModel(
 
     private suspend fun transcribeAudio(audioPath: String) {
         try {
+            _transcriptionError.value = null
             val audioBytes = fileSystem.readBytes(audioPath)
             val llmClient = llmClientFactory.createForCurrentProvider()
             val transcription = llmClient.transcribeAudio(audioBytes)
 
-            // Append to existing transcribed text
-            val current = _transcribedText.value
-            _transcribedText.value = if (current.isBlank()) {
-                transcription
-            } else {
-                "$current\n$transcription"
-            }
+            // Emit transcription so UI can append to notes field
+            _newTranscription.tryEmit(transcription)
 
             // Delete audio file after successful transcription
             fileSystem.delete(audioPath)
         } catch (e: Exception) {
             Napier.e("Failed to transcribe audio", e)
+            _transcriptionError.value = "Transcription failed: ${e.message ?: "Unknown error"}"
             // Keep audio file if transcription fails
         }
     }
 
-    fun confirmPhoto(entryType: EntryType, userNotes: String = "") {
+    fun clearTranscriptionError() {
+        _transcriptionError.value = null
+    }
+
+    fun confirmPhoto(userNotes: String = "") {
         screenModelScope.launch {
             try {
                 val reviewState = _uiState.value as? PhotoReviewUiState.Review ?: return@launch
@@ -197,36 +203,17 @@ class PhotoReviewViewModel(
                 // Generate preview thumbnail
                 generatePreview(reviewState.photoBytes, reviewState.blobPath)
 
-                // Combine manual notes and transcribed text
-                val combinedNotes = buildString {
-                    if (userNotes.isNotBlank()) append(userNotes)
-                    if (_transcribedText.value.isNotBlank()) {
-                        if (isNotBlank()) append("\n\n")
-                        append("Voice notes: ${_transcribedText.value}")
-                    }
-                }
-
-                // Create entry with combined notes
+                // Create entry with user notes (already includes any transcribed text)
                 val entry = TrackedEntry(
-                    entryType = entryType,
+                    entryType = EntryType.UNKNOWN,
                     capturedAt = Clock.System.now(),
-                    userNotes = combinedNotes.ifBlank { null },
+                    userNotes = userNotes.ifBlank { null },
                     blobPath = reviewState.blobPath
                 )
                 val entryId = trackedEntryRepository.insertEntry(entry)
 
-                // Fetch the created entry with its ID
-                val createdEntry = trackedEntryRepository.getEntryById(entryId) ?: throw Exception("Failed to retrieve created entry")
-
-                // Start analysis in background - don't wait for it to complete
-                CoroutineScope(Dispatchers.Default).launch {
-                    try {
-                        analysisOrchestrator.processEntry(createdEntry, combinedNotes)
-                        Napier.i("Background analysis completed for entry $entryId")
-                    } catch (e: Exception) {
-                        Napier.e("Background analysis failed for entry $entryId", e)
-                    }
-                }
+                // Queue analysis via BackgroundAnalysisService so status events are emitted
+                backgroundAnalysisService.queueEntry(entryId, userNotes)
 
                 _uiState.value = PhotoReviewUiState.Success(entryId)
             } catch (e: Exception) {
@@ -247,7 +234,7 @@ class PhotoReviewViewModel(
     /**
      * Creates an entry directly from photo bytes (for platform-specific camera implementations).
      */
-    fun createEntryFromPhoto(photoBytes: ByteArray, entryType: EntryType, userNotes: String = "") {
+    fun createEntryFromPhoto(photoBytes: ByteArray, userNotes: String = "") {
         screenModelScope.launch {
             try {
                 _uiState.value = PhotoReviewUiState.Processing
@@ -264,36 +251,17 @@ class PhotoReviewViewModel(
                 // Generate preview thumbnail
                 generatePreview(resizedBytes, photoPath)
 
-                // Combine manual notes and transcribed text
-                val combinedNotes = buildString {
-                    if (userNotes.isNotBlank()) append(userNotes)
-                    if (_transcribedText.value.isNotBlank()) {
-                        if (isNotBlank()) append("\n\n")
-                        append("Voice notes: ${_transcribedText.value}")
-                    }
-                }
-
-                // Create entry with saved photo path
+                // Create entry with saved photo path (notes already include any transcribed text)
                 val entry = TrackedEntry(
-                    entryType = entryType,
+                    entryType = EntryType.UNKNOWN,
                     capturedAt = Clock.System.now(),
-                    userNotes = combinedNotes.ifBlank { null },
+                    userNotes = userNotes.ifBlank { null },
                     blobPath = photoPath
                 )
                 val entryId = trackedEntryRepository.insertEntry(entry)
 
-                // Fetch the created entry with its ID
-                val createdEntry = trackedEntryRepository.getEntryById(entryId) ?: throw Exception("Failed to retrieve created entry")
-
-                // Start analysis in background - don't wait for it to complete
-                CoroutineScope(Dispatchers.Default).launch {
-                    try {
-                        analysisOrchestrator.processEntry(createdEntry, combinedNotes)
-                        Napier.i("Background analysis completed for entry $entryId")
-                    } catch (e: Exception) {
-                        Napier.e("Background analysis failed for entry $entryId", e)
-                    }
-                }
+                // Queue analysis via BackgroundAnalysisService so status events are emitted
+                backgroundAnalysisService.queueEntry(entryId, userNotes)
 
                 _uiState.value = PhotoReviewUiState.Success(entryId)
             } catch (e: Exception) {

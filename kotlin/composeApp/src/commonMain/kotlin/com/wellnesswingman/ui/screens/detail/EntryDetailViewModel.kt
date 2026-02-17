@@ -261,7 +261,7 @@ class EntryDetailViewModel(
             val audioPath = "$audioDir/correction_${Clock.System.now().toEpochMilliseconds()}.m4a"
 
             if (audioRecordingService.startRecording(audioPath)) {
-                _correctionState.update { it.copy(isRecording = true, recordingDurationSeconds = 0) }
+                _correctionState.update { it.copy(isRecording = true, recordingDurationSeconds = 0, transcriptionError = null) }
                 startDurationTimer()
             }
         } catch (e: Exception) {
@@ -309,6 +309,9 @@ class EntryDetailViewModel(
             fileSystem.delete(audioPath)
         } catch (e: Exception) {
             Napier.e("Failed to transcribe audio", e)
+            _correctionState.update {
+                it.copy(transcriptionError = "Transcription failed: ${e.message ?: "Unknown error"}")
+            }
         }
     }
 
@@ -398,7 +401,8 @@ data class CorrectionState(
     val isRecording: Boolean = false,
     val isTranscribing: Boolean = false,
     val isSubmitting: Boolean = false,
-    val recordingDurationSeconds: Int = 0
+    val recordingDurationSeconds: Int = 0,
+    val transcriptionError: String? = null
 ) {
     val canSubmit: Boolean
         get() = isActive && correctionText.isNotBlank() && !isSubmitting && !isRecording && !isTranscribing

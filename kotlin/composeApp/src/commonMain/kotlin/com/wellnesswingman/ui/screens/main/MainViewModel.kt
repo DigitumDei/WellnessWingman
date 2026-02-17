@@ -63,7 +63,7 @@ class MainViewModel(
         checkPendingCapture()
     }
 
-    private fun checkPendingCapture() {
+    fun checkPendingCapture() {
         screenModelScope.launch {
             try {
                 val pending = pendingCaptureStore.get()

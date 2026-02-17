@@ -380,6 +380,16 @@ fun CorrectionModeSection(
                 modifier = Modifier.fillMaxWidth()
             )
 
+            // Transcription error display
+            if (correctionState.transcriptionError != null) {
+                Text(
+                    text = correctionState.transcriptionError!!,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
             if (correctionState.isSubmitting) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -636,6 +646,54 @@ fun ExerciseAnalysisCard(result: com.wellnesswingman.data.model.analysis.Exercis
             }
             metrics.calories?.let {
                 Text("Calories: ${it.toInt()} kcal", style = MaterialTheme.typography.bodyMedium)
+            }
+            metrics.averageHeartRate?.let {
+                Text("Avg Heart Rate: ${it.toInt()} bpm", style = MaterialTheme.typography.bodyMedium)
+            }
+            metrics.steps?.let {
+                Text("Steps: ${it.toInt()}", style = MaterialTheme.typography.bodyMedium)
+            }
+
+            result.insights?.let { insights ->
+                Text(
+                    text = "Insights",
+                    style = MaterialTheme.typography.titleMedium
+                )
+
+                insights.summary?.let {
+                    Text(text = it, style = MaterialTheme.typography.bodyMedium)
+                }
+
+                if (insights.positives.isNotEmpty()) {
+                    Text(text = "Positives:", style = MaterialTheme.typography.bodyMedium)
+                    insights.positives.forEach { positive ->
+                        Text(text = "• $positive", style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+
+                if (insights.improvements.isNotEmpty()) {
+                    Text(text = "Improvements:", style = MaterialTheme.typography.bodyMedium)
+                    insights.improvements.forEach { improvement ->
+                        Text(text = "• $improvement", style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+
+                if (insights.recommendations.isNotEmpty()) {
+                    Text(text = "Recommendations:", style = MaterialTheme.typography.bodyMedium)
+                    insights.recommendations.forEach { recommendation ->
+                        Text(text = "• $recommendation", style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+            }
+
+            if (result.warnings.isNotEmpty()) {
+                Text(
+                    text = "Warnings",
+                    style = MaterialTheme.typography.titleMedium
+                )
+                result.warnings.forEach { warning ->
+                    Text(text = "⚠ $warning", style = MaterialTheme.typography.bodyMedium)
+                }
             }
         }
     }

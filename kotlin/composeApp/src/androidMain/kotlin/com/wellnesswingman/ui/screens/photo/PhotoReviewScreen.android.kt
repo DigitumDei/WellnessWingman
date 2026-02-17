@@ -26,7 +26,6 @@ import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.koin.getScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
-import com.wellnesswingman.data.model.EntryType
 import com.wellnesswingman.domain.capture.PendingCapture
 import com.wellnesswingman.domain.capture.PendingCaptureStore
 import com.wellnesswingman.ui.components.ErrorMessage
@@ -198,10 +197,9 @@ private class PhotoReviewScreen : Screen {
                         PhotoReview(
                             imageBytes = capturedImageBytes!!,
                             viewModel = viewModel,
-                            onConfirm = { entryType, notes ->
+                            onConfirm = { notes ->
                                 viewModel.createEntryFromPhoto(
                                     photoBytes = capturedImageBytes!!,
-                                    entryType = entryType,
                                     userNotes = notes
                                 )
                             },
@@ -320,19 +318,29 @@ private fun CaptureOptions(
 private fun PhotoReview(
     imageBytes: ByteArray,
     viewModel: PhotoReviewViewModel,
-    onConfirm: (EntryType, String) -> Unit,
+    onConfirm: (String) -> Unit,
     onRetake: () -> Unit,
     onCancel: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var selectedType by remember { mutableStateOf(EntryType.MEAL) }
     var notes by remember { mutableStateOf("") }
 
     val context = LocalContext.current
     val isRecording by viewModel.isRecording.collectAsState()
     val recordingDuration by viewModel.recordingDuration.collectAsState()
     val isTranscribing by viewModel.isTranscribing.collectAsState()
-    val transcribedText by viewModel.transcribedText.collectAsState()
+    val transcriptionError by viewModel.transcriptionError.collectAsState()
+
+    // Append transcriptions directly into the notes field
+    LaunchedEffect(Unit) {
+        viewModel.newTranscription.collect { transcription ->
+            notes = if (notes.isBlank()) {
+                transcription
+            } else {
+                "$notes\n$transcription"
+            }
+        }
+    }
 
     val micPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -374,30 +382,6 @@ private fun PhotoReview(
         Column(
             modifier = Modifier.padding(16.dp)
         ) {
-            // Entry type selector
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly
-            ) {
-                FilterChip(
-                    selected = selectedType == EntryType.MEAL,
-                    onClick = { selectedType = EntryType.MEAL },
-                    label = { Text("Meal") }
-                )
-                FilterChip(
-                    selected = selectedType == EntryType.EXERCISE,
-                    onClick = { selectedType = EntryType.EXERCISE },
-                    label = { Text("Exercise") }
-                )
-                FilterChip(
-                    selected = selectedType == EntryType.SLEEP,
-                    onClick = { selectedType = EntryType.SLEEP },
-                    label = { Text("Sleep") }
-                )
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
             // Notes field
             OutlinedTextField(
                 value = notes,
@@ -406,17 +390,6 @@ private fun PhotoReview(
                 modifier = Modifier.fillMaxWidth(),
                 maxLines = 3
             )
-
-            // Voice note transcription display (if exists)
-            if (transcribedText.isNotBlank()) {
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "Voice notes: $transcribedText",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
 
             Spacer(modifier = Modifier.height(8.dp))
 
@@ -464,6 +437,17 @@ private fun PhotoReview(
                 }
             }
 
+            // Transcription error display
+            if (transcriptionError != null) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = transcriptionError!!,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
             Spacer(modifier = Modifier.height(16.dp))
 
             // Action buttons
@@ -482,7 +466,10 @@ private fun PhotoReview(
                         Text("Cancel")
                     }
                     Spacer(Modifier.width(8.dp))
-                    Button(onClick = { onConfirm(selectedType, notes) }) {
+                    Button(
+                        onClick = { onConfirm(notes) },
+                        enabled = !isTranscribing && !isRecording
+                    ) {
                         Icon(Icons.Default.Check, "Confirm")
                         Spacer(Modifier.width(4.dp))
                         Text("Confirm")
