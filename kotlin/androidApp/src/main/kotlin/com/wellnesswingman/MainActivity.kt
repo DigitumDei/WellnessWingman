@@ -5,6 +5,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import android.webkit.MimeTypeMap
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -99,7 +100,9 @@ class MainActivity : ComponentActivity(), KoinComponent {
 
                 val photosDir = pendingCaptureStore.getPendingPhotosDirectory()
                 val timestamp = System.currentTimeMillis()
-                val filePath = "$photosDir/shared_$timestamp.jpg"
+                val mimeType = contentResolver.getType(uri)
+                val extension = MimeTypeMap.getSingleton().getExtensionFromMimeType(mimeType) ?: "jpg"
+                val filePath = "$photosDir/shared_$timestamp.$extension"
 
                 fileSystem.writeBytes(filePath, imageBytes)
                 pendingCaptureStore.save(
