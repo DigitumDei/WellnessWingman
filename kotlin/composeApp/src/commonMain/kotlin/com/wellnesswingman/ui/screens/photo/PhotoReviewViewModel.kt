@@ -196,7 +196,7 @@ class PhotoReviewViewModel(
         _transcriptionError.value = null
     }
 
-    fun confirmPhoto(entryType: EntryType, userNotes: String = "") {
+    fun confirmPhoto(userNotes: String = "") {
         screenModelScope.launch {
             try {
                 val reviewState = _uiState.value as? PhotoReviewUiState.Review ?: return@launch
@@ -207,7 +207,7 @@ class PhotoReviewViewModel(
 
                 // Create entry with user notes (already includes any transcribed text)
                 val entry = TrackedEntry(
-                    entryType = entryType,
+                    entryType = EntryType.UNKNOWN,
                     capturedAt = Clock.System.now(),
                     userNotes = userNotes.ifBlank { null },
                     blobPath = reviewState.blobPath
@@ -246,7 +246,7 @@ class PhotoReviewViewModel(
     /**
      * Creates an entry directly from photo bytes (for platform-specific camera implementations).
      */
-    fun createEntryFromPhoto(photoBytes: ByteArray, entryType: EntryType, userNotes: String = "") {
+    fun createEntryFromPhoto(photoBytes: ByteArray, userNotes: String = "") {
         screenModelScope.launch {
             try {
                 _uiState.value = PhotoReviewUiState.Processing
@@ -265,7 +265,7 @@ class PhotoReviewViewModel(
 
                 // Create entry with saved photo path (notes already include any transcribed text)
                 val entry = TrackedEntry(
-                    entryType = entryType,
+                    entryType = EntryType.UNKNOWN,
                     capturedAt = Clock.System.now(),
                     userNotes = userNotes.ifBlank { null },
                     blobPath = photoPath

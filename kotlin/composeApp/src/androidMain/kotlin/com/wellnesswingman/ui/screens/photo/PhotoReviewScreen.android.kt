@@ -26,7 +26,6 @@ import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.koin.getScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
-import com.wellnesswingman.data.model.EntryType
 import com.wellnesswingman.domain.capture.PendingCapture
 import com.wellnesswingman.domain.capture.PendingCaptureStore
 import com.wellnesswingman.ui.components.ErrorMessage
@@ -198,10 +197,9 @@ private class PhotoReviewScreen : Screen {
                         PhotoReview(
                             imageBytes = capturedImageBytes!!,
                             viewModel = viewModel,
-                            onConfirm = { entryType, notes ->
+                            onConfirm = { notes ->
                                 viewModel.createEntryFromPhoto(
                                     photoBytes = capturedImageBytes!!,
-                                    entryType = entryType,
                                     userNotes = notes
                                 )
                             },
@@ -320,12 +318,11 @@ private fun CaptureOptions(
 private fun PhotoReview(
     imageBytes: ByteArray,
     viewModel: PhotoReviewViewModel,
-    onConfirm: (EntryType, String) -> Unit,
+    onConfirm: (String) -> Unit,
     onRetake: () -> Unit,
     onCancel: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var selectedType by remember { mutableStateOf(EntryType.MEAL) }
     var notes by remember { mutableStateOf("") }
 
     val context = LocalContext.current
@@ -385,30 +382,6 @@ private fun PhotoReview(
         Column(
             modifier = Modifier.padding(16.dp)
         ) {
-            // Entry type selector
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly
-            ) {
-                FilterChip(
-                    selected = selectedType == EntryType.MEAL,
-                    onClick = { selectedType = EntryType.MEAL },
-                    label = { Text("Meal") }
-                )
-                FilterChip(
-                    selected = selectedType == EntryType.EXERCISE,
-                    onClick = { selectedType = EntryType.EXERCISE },
-                    label = { Text("Exercise") }
-                )
-                FilterChip(
-                    selected = selectedType == EntryType.SLEEP,
-                    onClick = { selectedType = EntryType.SLEEP },
-                    label = { Text("Sleep") }
-                )
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
             // Notes field
             OutlinedTextField(
                 value = notes,
@@ -494,7 +467,7 @@ private fun PhotoReview(
                     }
                     Spacer(Modifier.width(8.dp))
                     Button(
-                        onClick = { onConfirm(selectedType, notes) },
+                        onClick = { onConfirm(notes) },
                         enabled = !isTranscribing && !isRecording
                     ) {
                         Icon(Icons.Default.Check, "Confirm")
