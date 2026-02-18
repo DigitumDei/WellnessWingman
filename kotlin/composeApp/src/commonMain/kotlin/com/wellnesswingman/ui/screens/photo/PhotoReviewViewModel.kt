@@ -239,17 +239,14 @@ class PhotoReviewViewModel(
             try {
                 _uiState.value = PhotoReviewUiState.Processing
 
-                // Resize photo
-                val resizedBytes = photoResizer.resize(photoBytes)
-
-                // Save photo to disk
+                // Save original photo to disk (unresized, for LLM analysis)
                 val photosDir = "${fileSystem.getAppDataDirectory()}/photos"
                 fileSystem.createDirectory(photosDir)
                 val photoPath = "$photosDir/photo_${Clock.System.now().toEpochMilliseconds()}.jpg"
-                fileSystem.writeBytes(photoPath, resizedBytes)
+                fileSystem.writeBytes(photoPath, photoBytes)
 
-                // Generate preview thumbnail
-                generatePreview(resizedBytes, photoPath)
+                // Generate preview thumbnail from original bytes
+                generatePreview(photoBytes, photoPath)
 
                 // Create entry with saved photo path (notes already include any transcribed text)
                 val entry = TrackedEntry(
@@ -278,7 +275,8 @@ class PhotoReviewViewModel(
                 photoBytes = photoBytes,
                 maxWidth = 400,
                 maxHeight = 400,
-                quality = 70
+                quality = 70,
+                cropHeight = true
             )
             fileSystem.writeBytes(previewPath, previewBytes)
             Napier.d("Generated preview at $previewPath (${previewBytes.size} bytes)")

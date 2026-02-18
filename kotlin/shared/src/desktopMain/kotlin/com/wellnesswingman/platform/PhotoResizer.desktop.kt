@@ -17,36 +17,51 @@ actual class PhotoResizer {
         photoBytes: ByteArray,
         maxWidth: Int,
         maxHeight: Int,
-        quality: Int
+        quality: Int,
+        cropHeight: Boolean
     ): ByteArray = withContext(Dispatchers.Default) {
-        // Read the original image
         val inputStream = ByteArrayInputStream(photoBytes)
         val originalImage = ImageIO.read(inputStream)
 
-        // Calculate new dimensions
-        val (newWidth, newHeight) = calculateDimensions(
-            originalImage.width,
-            originalImage.height,
-            maxWidth,
-            maxHeight
-        )
-
-        // Resize the image
-        val scaledImage = originalImage.getScaledInstance(
-            newWidth,
-            newHeight,
-            Image.SCALE_SMOOTH
-        )
-
-        // Convert to BufferedImage
-        val bufferedImage = BufferedImage(newWidth, newHeight, BufferedImage.TYPE_INT_RGB)
-        val graphics = bufferedImage.createGraphics()
-        graphics.drawImage(scaledImage, 0, 0, null)
-        graphics.dispose()
-
-        // Write to bytes
         val outputStream = ByteArrayOutputStream()
-        ImageIO.write(bufferedImage, "jpg", outputStream)
+
+        if (cropHeight) {
+            // Scale to maxWidth maintaining aspect ratio, then crop height from top
+            val scaledWidth: Int
+            val scaledHeight: Int
+            if (originalImage.width > maxWidth) {
+                val ratio = maxWidth.toDouble() / originalImage.width
+                scaledWidth = maxWidth
+                scaledHeight = (originalImage.height * ratio).toInt()
+            } else {
+                scaledWidth = originalImage.width
+                scaledHeight = originalImage.height
+            }
+
+            val finalHeight = minOf(scaledHeight, maxHeight)
+            val bufferedImage = BufferedImage(scaledWidth, finalHeight, BufferedImage.TYPE_INT_RGB)
+            val graphics = bufferedImage.createGraphics()
+            // Drawing into a finalHeight-tall canvas clips naturally to the top portion
+            graphics.drawImage(originalImage, 0, 0, scaledWidth, scaledHeight, null)
+            graphics.dispose()
+
+            ImageIO.write(bufferedImage, "jpg", outputStream)
+        } else {
+            val (newWidth, newHeight) = calculateDimensions(
+                originalImage.width,
+                originalImage.height,
+                maxWidth,
+                maxHeight
+            )
+
+            val scaledImage = originalImage.getScaledInstance(newWidth, newHeight, Image.SCALE_SMOOTH)
+            val bufferedImage = BufferedImage(newWidth, newHeight, BufferedImage.TYPE_INT_RGB)
+            val graphics = bufferedImage.createGraphics()
+            graphics.drawImage(scaledImage, 0, 0, null)
+            graphics.dispose()
+
+            ImageIO.write(bufferedImage, "jpg", outputStream)
+        }
 
         outputStream.toByteArray()
     }

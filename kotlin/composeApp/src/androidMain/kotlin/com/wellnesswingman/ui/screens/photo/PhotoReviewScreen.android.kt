@@ -2,6 +2,10 @@ package com.wellnesswingman.ui.screens.photo
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Matrix
+import android.media.ExifInterface
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -350,10 +354,10 @@ private fun PhotoReview(
         }
     }
 
-    // Decode bitmap outside composable context
+    // Decode bitmap outside composable context, respecting EXIF orientation
     val bitmap = remember(imageBytes) {
         try {
-            android.graphics.BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
+            decodeWithExifRotation(imageBytes)
         } catch (e: Exception) {
             null
         }
@@ -483,4 +487,24 @@ private fun PhotoReview(
 private fun formatDuration(millis: Long): String {
     val seconds = millis / 1000
     return String.format("%d:%02d", seconds / 60, seconds % 60)
+}
+
+private fun decodeWithExifRotation(imageBytes: ByteArray): Bitmap? {
+    val bitmap = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size) ?: return null
+    val orientation = ExifInterface(java.io.ByteArrayInputStream(imageBytes))
+        .getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
+    val matrix = Matrix()
+    when (orientation) {
+        ExifInterface.ORIENTATION_ROTATE_90 -> matrix.postRotate(90f)
+        ExifInterface.ORIENTATION_ROTATE_180 -> matrix.postRotate(180f)
+        ExifInterface.ORIENTATION_ROTATE_270 -> matrix.postRotate(270f)
+        ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> matrix.preScale(-1f, 1f)
+        ExifInterface.ORIENTATION_FLIP_VERTICAL -> matrix.preScale(1f, -1f)
+        ExifInterface.ORIENTATION_TRANSPOSE -> { matrix.postRotate(90f); matrix.preScale(-1f, 1f) }
+        ExifInterface.ORIENTATION_TRANSVERSE -> { matrix.postRotate(270f); matrix.preScale(-1f, 1f) }
+        else -> return bitmap
+    }
+    val rotated = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+    bitmap.recycle()
+    return rotated
 }
