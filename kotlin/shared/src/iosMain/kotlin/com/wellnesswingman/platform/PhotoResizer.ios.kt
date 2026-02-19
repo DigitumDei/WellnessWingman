@@ -10,7 +10,8 @@ actual class PhotoResizer {
         photoBytes: ByteArray,
         maxWidth: Int,
         maxHeight: Int,
-        quality: Int
+        quality: Int,
+        cropHeight: Boolean
     ): ByteArray {
         // TODO: Implement using UIImage resizing
         // For now, just return the original bytes

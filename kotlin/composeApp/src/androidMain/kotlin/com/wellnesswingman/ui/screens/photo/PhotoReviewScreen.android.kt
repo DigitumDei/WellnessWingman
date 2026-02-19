@@ -28,6 +28,7 @@ import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import com.wellnesswingman.domain.capture.PendingCapture
 import com.wellnesswingman.domain.capture.PendingCaptureStore
+import com.wellnesswingman.platform.decodeWithExifRotation
 import com.wellnesswingman.ui.components.ErrorMessage
 import com.wellnesswingman.ui.components.LoadingIndicator
 import com.wellnesswingman.ui.screens.detail.EntryDetailScreen
@@ -350,10 +351,10 @@ private fun PhotoReview(
         }
     }
 
-    // Decode bitmap outside composable context
+    // Decode bitmap outside composable context, respecting EXIF orientation
     val bitmap = remember(imageBytes) {
         try {
-            android.graphics.BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
+            decodeWithExifRotation(imageBytes)
         } catch (e: Exception) {
             null
         }
@@ -484,3 +485,4 @@ private fun formatDuration(millis: Long): String {
     val seconds = millis / 1000
     return String.format("%d:%02d", seconds / 60, seconds % 60)
 }
+

@@ -15,6 +15,7 @@ import com.wellnesswingman.domain.capture.PendingCaptureStore
 import com.wellnesswingman.platform.FileSystem
 import com.wellnesswingman.ui.App
 import io.github.aakira.napier.Napier
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import org.koin.core.component.KoinComponent
@@ -88,23 +89,42 @@ class MainActivity : ComponentActivity(), KoinComponent {
     /**
      * Saves the shared image synchronously so the pending capture file exists
      * before the Compose UI and MainViewModel initialize.
+     *
+     * Retries reading the URI up to [MAX_SHARE_READ_RETRIES] times with a short
+     * delay between attempts to handle the race condition where the sharing app
+     * hasn't finished writing the image file when the intent is delivered.
      */
     private fun saveSharedImageAsPendingCapture(uri: Uri): Boolean {
         return runBlocking(Dispatchers.IO) {
-            try {
-                val imageBytes = contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                if (imageBytes == null) {
-                    Napier.e("Failed to read shared image bytes from URI: $uri")
-                    return@runBlocking false
+            var imageBytes: ByteArray? = null
+            for (attempt in 0 until MAX_SHARE_READ_RETRIES) {
+                try {
+                    val bytes = contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                    if (bytes != null && bytes.isNotEmpty()) {
+                        imageBytes = bytes
+                        break
+                    }
+                    Napier.w("Shared image not ready (attempt ${attempt + 1}/$MAX_SHARE_READ_RETRIES)")
+                } catch (e: Exception) {
+                    Napier.w("Error reading shared image (attempt ${attempt + 1}/$MAX_SHARE_READ_RETRIES): ${e.message}")
                 }
+                if (attempt < MAX_SHARE_READ_RETRIES - 1) delay(SHARE_READ_RETRY_DELAY_MS)
+            }
 
+            val bytes = imageBytes
+            if (bytes == null) {
+                Napier.e("Failed to read shared image from URI after $MAX_SHARE_READ_RETRIES attempts: $uri")
+                return@runBlocking false
+            }
+
+            try {
                 val photosDir = pendingCaptureStore.getPendingPhotosDirectory()
                 val timestamp = System.currentTimeMillis()
                 val mimeType = contentResolver.getType(uri)
                 val extension = MimeTypeMap.getSingleton().getExtensionFromMimeType(mimeType) ?: "jpg"
                 val filePath = "$photosDir/shared_$timestamp.$extension"
 
-                fileSystem.writeBytes(filePath, imageBytes)
+                fileSystem.writeBytes(filePath, bytes)
                 pendingCaptureStore.save(
                     PendingCapture(
                         photoFilePath = filePath,
@@ -115,10 +135,15 @@ class MainActivity : ComponentActivity(), KoinComponent {
                 Napier.d("Saved shared image as pending capture: $filePath")
                 true
             } catch (e: Exception) {
-                Napier.e("Failed to handle shared image", e)
+                Napier.e("Failed to save shared image", e)
                 false
             }
         }
+    }
+
+    companion object {
+        private const val MAX_SHARE_READ_RETRIES = 5
+        private const val SHARE_READ_RETRY_DELAY_MS = 200L
     }
 
     private fun requestNotificationPermissionIfNeeded() {

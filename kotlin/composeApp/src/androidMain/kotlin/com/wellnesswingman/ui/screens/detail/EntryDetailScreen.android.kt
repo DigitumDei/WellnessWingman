@@ -29,6 +29,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import com.wellnesswingman.platform.decodeWithExifRotation
 
 @Composable
 actual fun ImageDisplay(imageBytes: ByteArray?) {
@@ -36,7 +37,7 @@ actual fun ImageDisplay(imageBytes: ByteArray?) {
         Card {
             val imageBitmap = remember(imageBytes) {
                 try {
-                    android.graphics.BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)?.asImageBitmap()
+                    decodeWithExifRotation(imageBytes)?.asImageBitmap()
                 } catch (e: Exception) {
                     null
                 }
@@ -123,3 +124,4 @@ actual fun VoiceRecordingButton(
 private fun formatDuration(seconds: Int): String {
     return String.format("%d:%02d", seconds / 60, seconds % 60)
 }
+
