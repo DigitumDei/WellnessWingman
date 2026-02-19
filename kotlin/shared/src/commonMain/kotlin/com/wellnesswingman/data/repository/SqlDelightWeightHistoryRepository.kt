@@ -49,15 +49,26 @@ class SqlDelightWeightHistoryRepository(
     }
 
     override suspend fun upsertWeightRecord(record: WeightRecord) = withContext(Dispatchers.IO) {
-        queries.upsertWeightRecord(
-            weightRecordId = record.weightRecordId,
-            externalId = record.externalId,
-            recordedAt = record.recordedAt.toEpochMilliseconds(),
-            weightValue = record.weightValue,
-            weightUnit = record.weightUnit,
-            source = record.source,
-            relatedEntryId = record.relatedEntryId
-        )
+        if (record.weightRecordId > 0) {
+            queries.updateWeightRecord(
+                externalId = record.externalId,
+                recordedAt = record.recordedAt.toEpochMilliseconds(),
+                weightValue = record.weightValue,
+                weightUnit = record.weightUnit,
+                source = record.source,
+                relatedEntryId = record.relatedEntryId,
+                weightRecordId = record.weightRecordId
+            )
+        } else {
+            queries.insertWeightRecord(
+                externalId = record.externalId,
+                recordedAt = record.recordedAt.toEpochMilliseconds(),
+                weightValue = record.weightValue,
+                weightUnit = record.weightUnit,
+                source = record.source,
+                relatedEntryId = record.relatedEntryId
+            )
+        }
     }
 
     private fun com.wellnesswingman.db.WeightRecord.toWeightRecord(): WeightRecord {

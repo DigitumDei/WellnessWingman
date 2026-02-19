@@ -18,8 +18,10 @@ import com.wellnesswingman.data.repository.TrackedEntryRepository
 import com.wellnesswingman.data.repository.WeightHistoryRepository
 import com.wellnesswingman.domain.llm.LlmClientFactory
 import com.wellnesswingman.util.DateTimeUtil
+import com.wellnesswingman.data.model.WeightRecord
 import io.github.aakira.napier.Napier
 import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.serialization.json.Json
@@ -140,11 +142,10 @@ class DailySummaryService(
             val balance = calculateBalance(nutritionTotals, mealCount, completedEntries)
 
             // Get weight records for the day
-            val (dayStartMillis, dayEndMillis) = startMillis to endMillis
             val weightRecords = try {
                 weightHistoryRepository.getWeightHistory(
-                    kotlinx.datetime.Instant.fromEpochMilliseconds(dayStartMillis),
-                    kotlinx.datetime.Instant.fromEpochMilliseconds(dayEndMillis)
+                    Instant.fromEpochMilliseconds(startMillis),
+                    Instant.fromEpochMilliseconds(endMillis)
                 )
             } catch (e: Exception) {
                 Napier.w("Failed to load weight records for summary: ${e.message}")
@@ -278,7 +279,7 @@ class DailySummaryService(
         exerciseCount: Int,
         sleepCount: Int,
         sleepHours: Double?,
-        weightRecords: List<com.wellnesswingman.data.model.WeightRecord> = emptyList()
+        weightRecords: List<WeightRecord> = emptyList()
     ): String {
         return """
 Generate a daily health summary for $date. Return a JSON object with the following structure:

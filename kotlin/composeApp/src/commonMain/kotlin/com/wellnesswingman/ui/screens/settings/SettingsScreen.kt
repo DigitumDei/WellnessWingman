@@ -153,11 +153,17 @@ class SettingsScreen : Screen {
                 }
 
                 // Date of Birth
+                val dobIsValid = uiState.dateOfBirth.isBlank() || try {
+                    kotlinx.datetime.LocalDate.parse(uiState.dateOfBirth)
+                    true
+                } catch (_: Exception) { false }
                 OutlinedTextField(
                     value = uiState.dateOfBirth,
                     onValueChange = { viewModel.updateDateOfBirth(it) },
                     label = { Text("Date of Birth") },
                     placeholder = { Text("YYYY-MM-DD") },
+                    isError = !dobIsValid,
+                    supportingText = if (!dobIsValid) {{ Text("Use YYYY-MM-DD format") }} else null,
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
                 )

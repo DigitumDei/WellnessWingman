@@ -42,16 +42,15 @@ deleteWeightRecord:
 DELETE FROM WeightRecord
 WHERE weightRecordId = ?;
 
-upsertWeightRecord:
-INSERT OR REPLACE INTO WeightRecord(
-    weightRecordId,
-    externalId,
-    recordedAt,
-    weightValue,
-    weightUnit,
-    source,
-    relatedEntryId
-) VALUES (?, ?, ?, ?, ?, ?, ?);
+updateWeightRecord:
+UPDATE WeightRecord
+SET externalId = ?,
+    recordedAt = ?,
+    weightValue = ?,
+    weightUnit = ?,
+    source = ?,
+    relatedEntryId = ?
+WHERE weightRecordId = ?;
 
 lastInsertRowId:
 SELECT last_insert_rowid();

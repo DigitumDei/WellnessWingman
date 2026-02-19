@@ -2,6 +2,7 @@ package com.wellnesswingman.domain.analysis
 
 import com.wellnesswingman.data.model.ProcessingStatus
 import com.wellnesswingman.data.model.TrackedEntry
+import com.wellnesswingman.data.model.analysis.DetectedWeight
 import com.wellnesswingman.data.repository.EntryAnalysisRepository
 import com.wellnesswingman.data.repository.TrackedEntryRepository
 import com.wellnesswingman.domain.events.StatusChangeNotifier
@@ -165,7 +166,7 @@ class DefaultBackgroundAnalysisService(
     private suspend fun updateStatus(
         entryId: Long,
         status: ProcessingStatus,
-        detectedWeight: com.wellnesswingman.data.model.analysis.DetectedWeight? = null
+        detectedWeight: DetectedWeight? = null
     ) {
         trackedEntryRepository.updateEntryStatus(entryId, status)
         statusChangeNotifier.notifyStatusChange(entryId, status, detectedWeight)

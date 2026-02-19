@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
+import kotlin.math.abs
 
 class SettingsViewModel(
     private val appSettingsRepository: AppSettingsRepository,
@@ -154,7 +155,7 @@ class SettingsViewModel(
                     appSettingsRepository.setWeightUnit(state.weightUnit)
 
                     // Log a manual weight record if the value changed
-                    if (weightValue != previousWeight) {
+                    if (previousWeight == null || abs(weightValue - previousWeight) > 0.01) {
                         try {
                             weightHistoryRepository.addWeightRecord(
                                 WeightRecord(
@@ -171,7 +172,13 @@ class SettingsViewModel(
                 }
 
                 if (state.dateOfBirth.isNotBlank()) {
-                    appSettingsRepository.setDateOfBirth(state.dateOfBirth)
+                    // Validate ISO date format before saving
+                    try {
+                        kotlinx.datetime.LocalDate.parse(state.dateOfBirth)
+                        appSettingsRepository.setDateOfBirth(state.dateOfBirth)
+                    } catch (e: Exception) {
+                        Napier.w("Invalid date of birth format: ${state.dateOfBirth}")
+                    }
                 }
 
                 if (state.activityLevel.isNotBlank()) {

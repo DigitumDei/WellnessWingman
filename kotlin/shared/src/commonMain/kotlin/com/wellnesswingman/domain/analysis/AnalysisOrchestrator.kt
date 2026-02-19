@@ -159,7 +159,7 @@ class AnalysisOrchestrator(
         val parts = mutableListOf<String>()
         if (!sex.isNullOrBlank()) parts.add(sex)
         if (!dob.isNullOrBlank()) parts.add("DOB $dob")
-        if (height != null) parts.add("${height.toInt()}$heightUnit")
+        if (height != null) parts.add("${"%.1f".format(height)}$heightUnit")
         if (weight != null) parts.add("${weight}$weightUnit")
         if (!activityLevel.isNullOrBlank()) parts.add(activityLevel)
 
@@ -201,11 +201,7 @@ REQUIRED JSON RESPONSE FORMAT:
   "schemaVersion": "1.0",
   "entryType": "<Meal|Exercise|Sleep|Other>",
   "confidence": <0.0-1.0>,
-  "detectedWeight": {
-    "value": <number or null>,
-    "unit": "<kg|lbs>",
-    "confidence": <0.0-1.0>
-  },
+  "detectedWeight": null,
   "mealAnalysis": {
     "schemaVersion": "1.0",
     "foodItems": [
@@ -270,7 +266,7 @@ GUIDELINES:
 3. For meals: Identify all visible food items and estimate portions carefully
 4. For exercise: Extract metrics from fitness tracker screenshots or estimate from images
 5. For sleep: Extract data from sleep tracker screenshots or provide estimates
-6. If a weighing scale is visible in the image, populate detectedWeight with the reading and confidence; otherwise set detectedWeight to null
+6. If a weighing scale is visible in the image, set detectedWeight to {"value": <number>, "unit": "<kg|lbs>", "confidence": <0.0-1.0>}; otherwise leave detectedWeight as null
 7. Add warnings array if there are any issues with the analysis
 8. Health score (0-10): 10 = excellent, 7-9 = good, 5-6 = moderate, below 5 = needs improvement
 

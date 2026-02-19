@@ -28,6 +28,35 @@ class WeightHistoryScreen : Screen {
         val navigator = LocalNavigator.currentOrThrow
         val viewModel = getScreenModel<WeightHistoryViewModel>()
         val uiState by viewModel.uiState.collectAsState()
+        var recordToDelete by remember { mutableStateOf<WeightRecord?>(null) }
+
+        // Delete confirmation dialog
+        recordToDelete?.let { record ->
+            AlertDialog(
+                onDismissRequest = { recordToDelete = null },
+                title = { Text("Delete Weight Record") },
+                text = {
+                    Text(
+                        "Delete the %.1f %s record? This cannot be undone.".format(
+                            record.weightValue, record.weightUnit
+                        )
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        viewModel.deleteWeightRecord(record.weightRecordId)
+                        recordToDelete = null
+                    }) {
+                        Text("Delete", color = MaterialTheme.colorScheme.error)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { recordToDelete = null }) {
+                        Text("Cancel")
+                    }
+                }
+            )
+        }
 
         if (uiState.showLogDialog) {
             LogWeightDialog(
@@ -97,7 +126,7 @@ class WeightHistoryScreen : Screen {
                     items(uiState.records, key = { it.weightRecordId }) { record ->
                         WeightRecordItem(
                             record = record,
-                            onDelete = { viewModel.deleteWeightRecord(record.weightRecordId) }
+                            onDelete = { recordToDelete = record }
                         )
                     }
                 }
@@ -136,13 +165,16 @@ private fun WeightRecordItem(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            if (record.source == "LlmDetected") {
-                SuggestionChip(
-                    onClick = {},
-                    label = { Text("Auto", style = MaterialTheme.typography.labelSmall) },
-                    modifier = Modifier.padding(end = 8.dp)
-                )
-            }
+            SuggestionChip(
+                onClick = {},
+                label = {
+                    Text(
+                        if (record.source == "LlmDetected") "Auto" else "Manual",
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                },
+                modifier = Modifier.padding(end = 8.dp)
+            )
             IconButton(onClick = onDelete) {
                 Icon(
                     Icons.Default.Delete,
