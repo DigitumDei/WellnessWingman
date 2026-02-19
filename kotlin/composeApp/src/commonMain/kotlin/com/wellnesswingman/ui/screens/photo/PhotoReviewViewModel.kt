@@ -239,14 +239,23 @@ class PhotoReviewViewModel(
             try {
                 _uiState.value = PhotoReviewUiState.Processing
 
-                // Save original photo to disk (unresized, for LLM analysis)
+                // Normalize to JPEG and bake in EXIF orientation without resizing.
+                // Raw bytes from share/gallery may be PNG or WebP; the LLM clients
+                // declare image/jpeg so we must ensure the file is actually JPEG.
+                // Using max dimensions far beyond any real image avoids downscaling.
+                val jpegBytes = photoResizer.resize(
+                    photoBytes = photoBytes,
+                    maxWidth = 16_384,
+                    maxHeight = 16_384,
+                    quality = 95
+                )
                 val photosDir = "${fileSystem.getAppDataDirectory()}/photos"
                 fileSystem.createDirectory(photosDir)
                 val photoPath = "$photosDir/photo_${Clock.System.now().toEpochMilliseconds()}.jpg"
-                fileSystem.writeBytes(photoPath, photoBytes)
+                fileSystem.writeBytes(photoPath, jpegBytes)
 
-                // Generate preview thumbnail from original bytes
-                generatePreview(photoBytes, photoPath)
+                // Generate preview thumbnail from normalized bytes
+                generatePreview(jpegBytes, photoPath)
 
                 // Create entry with saved photo path (notes already include any transcribed text)
                 val entry = TrackedEntry(
