@@ -2,7 +2,6 @@ package com.wellnesswingman.ui.screens.detail
 
 import android.Manifest
 import android.content.pm.PackageManager
-import com.wellnesswingman.platform.decodeWithExifRotation
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
@@ -30,6 +29,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import com.wellnesswingman.platform.decodeWithExifRotation
 
 @Composable
 actual fun ImageDisplay(imageBytes: ByteArray?) {

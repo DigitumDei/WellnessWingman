@@ -3,7 +3,6 @@ package com.wellnesswingman.ui.screens.photo
 import android.Manifest
 import android.content.pm.PackageManager
 import android.net.Uri
-import com.wellnesswingman.platform.decodeWithExifRotation
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
@@ -29,6 +28,7 @@ import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import com.wellnesswingman.domain.capture.PendingCapture
 import com.wellnesswingman.domain.capture.PendingCaptureStore
+import com.wellnesswingman.platform.decodeWithExifRotation
 import com.wellnesswingman.ui.components.ErrorMessage
 import com.wellnesswingman.ui.components.LoadingIndicator
 import com.wellnesswingman.ui.screens.detail.EntryDetailScreen
