@@ -49,10 +49,26 @@ data class UnifiedAnalysisResult(
     val otherAnalysis: OtherAnalysisResult? = null,
 
     /**
+     * Detected weight from scale photo or similar (null if not weight-related)
+     */
+    @SerialName("detectedWeight")
+    val detectedWeight: DetectedWeight? = null,
+
+    /**
      * Global warnings about the analysis
      */
     @SerialName("warnings")
     val warnings: List<String> = emptyList()
+)
+
+/**
+ * Weight detected from an image (e.g. scale photo).
+ */
+@Serializable
+data class DetectedWeight(
+    @SerialName("value") val value: Double,
+    @SerialName("unit") val unit: String,           // "kg" or "lbs"
+    @SerialName("confidence") val confidence: Double = 0.0
 )
 
 /**

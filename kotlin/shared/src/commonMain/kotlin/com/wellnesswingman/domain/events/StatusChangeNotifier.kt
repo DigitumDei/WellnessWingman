@@ -1,6 +1,7 @@
 package com.wellnesswingman.domain.events
 
 import com.wellnesswingman.data.model.ProcessingStatus
+import com.wellnesswingman.data.model.analysis.DetectedWeight
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -18,7 +19,11 @@ interface StatusChangeNotifier {
     /**
      * Emit a status change event.
      */
-    suspend fun notifyStatusChange(entryId: Long, status: ProcessingStatus)
+    suspend fun notifyStatusChange(
+        entryId: Long,
+        status: ProcessingStatus,
+        detectedWeight: DetectedWeight? = null
+    )
 }
 
 /**
@@ -32,7 +37,11 @@ class DefaultStatusChangeNotifier : StatusChangeNotifier {
 
     override val statusChanges: SharedFlow<EntryStatusChangedEvent> = _statusChanges.asSharedFlow()
 
-    override suspend fun notifyStatusChange(entryId: Long, status: ProcessingStatus) {
-        _statusChanges.emit(EntryStatusChangedEvent(entryId, status))
+    override suspend fun notifyStatusChange(
+        entryId: Long,
+        status: ProcessingStatus,
+        detectedWeight: DetectedWeight?
+    ) {
+        _statusChanges.emit(EntryStatusChangedEvent(entryId, status, detectedWeight))
     }
 }

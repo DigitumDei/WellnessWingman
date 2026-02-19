@@ -104,7 +104,8 @@ class DefaultBackgroundAnalysisService(
                 is AnalysisInvocationResult.Error -> ProcessingStatus.FAILED
             }
 
-            updateStatus(entryId, finalStatus)
+            val detectedWeight = (result as? AnalysisInvocationResult.Success)?.detectedWeight
+            updateStatus(entryId, finalStatus, detectedWeight)
 
         } catch (e: CancellationException) {
             Napier.i("Background analysis was cancelled for entry $entryId")
@@ -161,8 +162,12 @@ class DefaultBackgroundAnalysisService(
         }
     }
 
-    private suspend fun updateStatus(entryId: Long, status: ProcessingStatus) {
+    private suspend fun updateStatus(
+        entryId: Long,
+        status: ProcessingStatus,
+        detectedWeight: com.wellnesswingman.data.model.analysis.DetectedWeight? = null
+    ) {
         trackedEntryRepository.updateEntryStatus(entryId, status)
-        statusChangeNotifier.notifyStatusChange(entryId, status)
+        statusChangeNotifier.notifyStatusChange(entryId, status, detectedWeight)
     }
 }

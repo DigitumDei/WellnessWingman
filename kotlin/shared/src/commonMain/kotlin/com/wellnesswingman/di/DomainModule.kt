@@ -40,8 +40,25 @@ val domainModule = module {
     single { CalendarNavigationService(get()) }
 
     // Services
-    singleOf(::AnalysisOrchestrator)
-    singleOf(::DailySummaryService)
+    single {
+        AnalysisOrchestrator(
+            trackedEntryRepository = get(),
+            entryAnalysisRepository = get(),
+            llmClientFactory = get(),
+            fileSystem = get(),
+            appSettingsRepository = get()
+        )
+    }
+    single {
+        DailySummaryService(
+            trackedEntryRepository = get(),
+            entryAnalysisRepository = get(),
+            dailySummaryRepository = get(),
+            llmClientFactory = get(),
+            dailyTotalsCalculator = get(),
+            weightHistoryRepository = get()
+        )
+    }
     singleOf(::WeeklySummaryService)
 
     // Background services

@@ -1,0 +1,57 @@
+-- WeightRecord table schema
+
+CREATE TABLE WeightRecord (
+    weightRecordId INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    externalId TEXT,
+    recordedAt INTEGER NOT NULL,
+    weightValue REAL NOT NULL,
+    weightUnit TEXT NOT NULL,
+    source TEXT NOT NULL,
+    relatedEntryId INTEGER  -- references TrackedEntry(entryId)
+);
+
+CREATE INDEX idx_weight_record_recorded_at ON WeightRecord(recordedAt);
+
+-- Queries
+
+insertWeightRecord:
+INSERT INTO WeightRecord(
+    externalId,
+    recordedAt,
+    weightValue,
+    weightUnit,
+    source,
+    relatedEntryId
+) VALUES (?, ?, ?, ?, ?, ?);
+
+getLatestWeightRecord:
+SELECT * FROM WeightRecord
+ORDER BY recordedAt DESC
+LIMIT 1;
+
+getWeightRecordsForRange:
+SELECT * FROM WeightRecord
+WHERE recordedAt >= ? AND recordedAt <= ?
+ORDER BY recordedAt ASC;
+
+getAllWeightRecords:
+SELECT * FROM WeightRecord
+ORDER BY recordedAt DESC;
+
+deleteWeightRecord:
+DELETE FROM WeightRecord
+WHERE weightRecordId = ?;
+
+upsertWeightRecord:
+INSERT OR REPLACE INTO WeightRecord(
+    weightRecordId,
+    externalId,
+    recordedAt,
+    weightValue,
+    weightUnit,
+    source,
+    relatedEntryId
+) VALUES (?, ?, ?, ?, ?, ?, ?);
+
+lastInsertRowId:
+SELECT last_insert_rowid();

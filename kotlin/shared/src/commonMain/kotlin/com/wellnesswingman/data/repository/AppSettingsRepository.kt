@@ -20,4 +20,22 @@ interface AppSettingsRepository {
     fun getModel(provider: LlmProvider): String?
     fun setModel(provider: LlmProvider, model: String)
     fun clear()
+
+    // User Profile
+    fun getHeight(): Double?
+    fun setHeight(height: Double)
+    fun getHeightUnit(): String
+    fun setHeightUnit(unit: String)   // "cm" or "in"
+    fun getSex(): String?
+    fun setSex(sex: String)
+    fun getCurrentWeight(): Double?
+    fun setCurrentWeight(weight: Double)
+    fun getWeightUnit(): String
+    fun setWeightUnit(unit: String)   // "kg" or "lbs"
+    fun getDateOfBirth(): String?     // ISO date string "YYYY-MM-DD"
+    fun setDateOfBirth(dob: String)
+    fun getActivityLevel(): String?
+    fun setActivityLevel(level: String)
+    fun clearCurrentWeight()
+    fun clearProfileData()
 }

@@ -2,8 +2,10 @@ package com.wellnesswingman.ui.screens.settings
 
 import cafe.adriel.voyager.core.model.ScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
+import com.wellnesswingman.data.model.WeightRecord
 import com.wellnesswingman.data.repository.AppSettingsRepository
 import com.wellnesswingman.data.repository.LlmProvider
+import com.wellnesswingman.data.repository.WeightHistoryRepository
 import com.wellnesswingman.domain.migration.DataMigrationService
 import com.wellnesswingman.platform.DiagnosticShare
 import com.wellnesswingman.platform.ShareUtil
@@ -12,12 +14,14 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.datetime.Clock
 
 class SettingsViewModel(
     private val appSettingsRepository: AppSettingsRepository,
     private val diagnosticShare: DiagnosticShare,
     private val dataMigrationService: DataMigrationService,
-    private val shareUtil: ShareUtil
+    private val shareUtil: ShareUtil,
+    private val weightHistoryRepository: WeightHistoryRepository
 ) : ScreenModel {
 
     private val _uiState = MutableStateFlow(SettingsUiState())
@@ -36,12 +40,27 @@ class SettingsViewModel(
                 val openAiModel = appSettingsRepository.getModel(LlmProvider.OPENAI) ?: "gpt-4o-mini"
                 val geminiModel = appSettingsRepository.getModel(LlmProvider.GEMINI) ?: "gemini-1.5-flash"
 
+                val height = appSettingsRepository.getHeight()?.toString() ?: ""
+                val heightUnit = appSettingsRepository.getHeightUnit()
+                val sex = appSettingsRepository.getSex() ?: ""
+                val currentWeight = appSettingsRepository.getCurrentWeight()?.toString() ?: ""
+                val weightUnit = appSettingsRepository.getWeightUnit()
+                val dateOfBirth = appSettingsRepository.getDateOfBirth() ?: ""
+                val activityLevel = appSettingsRepository.getActivityLevel() ?: ""
+
                 _uiState.value = SettingsUiState(
                     selectedProvider = selectedProvider,
                     openAiApiKey = openAiKey,
                     openAiModel = openAiModel,
                     geminiApiKey = geminiKey,
-                    geminiModel = geminiModel
+                    geminiModel = geminiModel,
+                    height = height,
+                    heightUnit = heightUnit,
+                    sex = sex,
+                    currentWeight = currentWeight,
+                    weightUnit = weightUnit,
+                    dateOfBirth = dateOfBirth,
+                    activityLevel = activityLevel
                 )
             } catch (e: Exception) {
                 Napier.e("Failed to load settings", e)
@@ -69,6 +88,34 @@ class SettingsViewModel(
         _uiState.value = _uiState.value.copy(selectedProvider = provider)
     }
 
+    fun updateHeight(height: String) {
+        _uiState.value = _uiState.value.copy(height = height)
+    }
+
+    fun updateHeightUnit(unit: String) {
+        _uiState.value = _uiState.value.copy(heightUnit = unit)
+    }
+
+    fun updateSex(sex: String) {
+        _uiState.value = _uiState.value.copy(sex = sex)
+    }
+
+    fun updateCurrentWeight(weight: String) {
+        _uiState.value = _uiState.value.copy(currentWeight = weight)
+    }
+
+    fun updateWeightUnit(unit: String) {
+        _uiState.value = _uiState.value.copy(weightUnit = unit)
+    }
+
+    fun updateDateOfBirth(dob: String) {
+        _uiState.value = _uiState.value.copy(dateOfBirth = dob)
+    }
+
+    fun updateActivityLevel(level: String) {
+        _uiState.value = _uiState.value.copy(activityLevel = level)
+    }
+
     fun saveSettings() {
         screenModelScope.launch {
             try {
@@ -88,6 +135,48 @@ class SettingsViewModel(
 
                 // Save selected provider
                 appSettingsRepository.setSelectedProvider(state.selectedProvider)
+
+                // Save profile fields
+                val previousWeight = appSettingsRepository.getCurrentWeight()
+                val heightValue = state.height.toDoubleOrNull()
+                if (heightValue != null && heightValue > 0) {
+                    appSettingsRepository.setHeight(heightValue)
+                }
+                appSettingsRepository.setHeightUnit(state.heightUnit)
+
+                if (state.sex.isNotBlank()) {
+                    appSettingsRepository.setSex(state.sex)
+                }
+
+                val weightValue = state.currentWeight.toDoubleOrNull()
+                if (weightValue != null && weightValue > 0) {
+                    appSettingsRepository.setCurrentWeight(weightValue)
+                    appSettingsRepository.setWeightUnit(state.weightUnit)
+
+                    // Log a manual weight record if the value changed
+                    if (weightValue != previousWeight) {
+                        try {
+                            weightHistoryRepository.addWeightRecord(
+                                WeightRecord(
+                                    recordedAt = Clock.System.now(),
+                                    weightValue = weightValue,
+                                    weightUnit = state.weightUnit,
+                                    source = "Manual"
+                                )
+                            )
+                        } catch (e: Exception) {
+                            Napier.w("Failed to log manual weight record: ${e.message}")
+                        }
+                    }
+                }
+
+                if (state.dateOfBirth.isNotBlank()) {
+                    appSettingsRepository.setDateOfBirth(state.dateOfBirth)
+                }
+
+                if (state.activityLevel.isNotBlank()) {
+                    appSettingsRepository.setActivityLevel(state.activityLevel)
+                }
 
                 _uiState.value = state.copy(saveSuccess = true)
 
@@ -179,5 +268,13 @@ data class SettingsUiState(
     val error: String? = null,
     val isExporting: Boolean = false,
     val isImporting: Boolean = false,
-    val exportImportMessage: String? = null
+    val exportImportMessage: String? = null,
+    // User Profile
+    val height: String = "",
+    val heightUnit: String = "cm",
+    val sex: String = "",
+    val currentWeight: String = "",
+    val weightUnit: String = "kg",
+    val dateOfBirth: String = "",
+    val activityLevel: String = ""
 )

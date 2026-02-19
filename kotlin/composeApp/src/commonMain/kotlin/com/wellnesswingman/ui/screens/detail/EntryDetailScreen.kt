@@ -50,13 +50,31 @@ data class EntryDetailScreen(val entryId: Long) : Screen {
         val viewModel = getScreenModel<EntryDetailViewModel> { parametersOf(entryId) }
         val uiState by viewModel.uiState.collectAsState()
         val correctionState by viewModel.correctionState.collectAsState()
+        val pendingDetectedWeight by viewModel.pendingDetectedWeight.collectAsState()
 
         var showDeleteDialog by remember { mutableStateOf(false) }
+        val snackbarHostState = remember { SnackbarHostState() }
 
         // Handle deletion
         LaunchedEffect(uiState) {
             if (uiState is EntryDetailUiState.Deleted) {
                 navigator.pop()
+            }
+        }
+
+        // Show snackbar for detected weight confirmation
+        LaunchedEffect(pendingDetectedWeight) {
+            pendingDetectedWeight?.let { weight ->
+                val result = snackbarHostState.showSnackbar(
+                    message = "Scale weight detected: %.1f %s — Save to history?".format(weight.value, weight.unit),
+                    actionLabel = "Save",
+                    duration = SnackbarDuration.Long
+                )
+                if (result == SnackbarResult.ActionPerformed) {
+                    viewModel.confirmDetectedWeight()
+                } else {
+                    viewModel.dismissDetectedWeight()
+                }
             }
         }
 
@@ -75,7 +93,8 @@ data class EntryDetailScreen(val entryId: Long) : Screen {
                         }
                     }
                 )
-            }
+            },
+            snackbarHost = { SnackbarHost(snackbarHostState) }
         ) { paddingValues ->
             when (val state = uiState) {
                 is EntryDetailUiState.Loading -> LoadingIndicator(Modifier.padding(paddingValues))
