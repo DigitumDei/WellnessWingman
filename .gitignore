@@ -371,3 +371,6 @@ healthhelper_design.db3
 
 .gemini/
 gha-creds-*.json
+memory/
+package.json
+package-lock.json
