@@ -3,6 +3,7 @@ package com.wellnesswingman.ui.screens.settings
 import cafe.adriel.voyager.core.model.ScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import com.wellnesswingman.data.model.WeightRecord
+import com.wellnesswingman.data.model.WeightSource
 import com.wellnesswingman.data.repository.AppSettingsRepository
 import com.wellnesswingman.data.repository.LlmProvider
 import com.wellnesswingman.data.repository.WeightHistoryRepository
@@ -90,7 +91,9 @@ class SettingsViewModel(
     }
 
     fun updateHeight(height: String) {
-        _uiState.value = _uiState.value.copy(height = height)
+        if (height.isEmpty() || isValidDecimalInput(height)) {
+            _uiState.value = _uiState.value.copy(height = height)
+        }
     }
 
     fun updateHeightUnit(unit: String) {
@@ -102,7 +105,9 @@ class SettingsViewModel(
     }
 
     fun updateCurrentWeight(weight: String) {
-        _uiState.value = _uiState.value.copy(currentWeight = weight)
+        if (weight.isEmpty() || isValidDecimalInput(weight)) {
+            _uiState.value = _uiState.value.copy(currentWeight = weight)
+        }
     }
 
     fun updateWeightUnit(unit: String) {
@@ -162,7 +167,7 @@ class SettingsViewModel(
                                     recordedAt = Clock.System.now(),
                                     weightValue = weightValue,
                                     weightUnit = state.weightUnit,
-                                    source = "Manual"
+                                    source = WeightSource.MANUAL.value
                                 )
                             )
                         } catch (e: Exception) {
@@ -262,6 +267,12 @@ class SettingsViewModel(
                 )
             }
         }
+    }
+
+    companion object {
+        private val VALID_DECIMAL_REGEX = Regex("""^\d*\.?\d*$""")
+
+        fun isValidDecimalInput(input: String): Boolean = VALID_DECIMAL_REGEX.matches(input)
     }
 }
 

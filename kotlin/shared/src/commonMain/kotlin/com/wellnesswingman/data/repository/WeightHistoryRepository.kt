@@ -12,5 +12,6 @@ interface WeightHistoryRepository {
     suspend fun getLatestWeightRecord(): WeightRecord?
     suspend fun getAllWeightRecords(): List<WeightRecord>
     suspend fun deleteWeightRecord(recordId: Long)
+    suspend fun nullifyRelatedEntryId(entryId: Long)
     suspend fun upsertWeightRecord(record: WeightRecord)
 }

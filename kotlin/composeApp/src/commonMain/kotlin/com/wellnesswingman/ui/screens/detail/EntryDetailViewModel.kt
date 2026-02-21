@@ -6,7 +6,6 @@ import com.wellnesswingman.data.model.EntryAnalysis
 import com.wellnesswingman.data.model.EntryType
 import com.wellnesswingman.data.model.ProcessingStatus
 import com.wellnesswingman.data.model.TrackedEntry
-import com.wellnesswingman.data.model.WeightRecord
 import com.wellnesswingman.data.model.analysis.DetectedWeight
 import com.wellnesswingman.data.model.analysis.ExerciseAnalysisResult
 import com.wellnesswingman.data.model.analysis.MealAnalysisResult
@@ -14,7 +13,6 @@ import com.wellnesswingman.data.model.analysis.SleepAnalysisResult
 import com.wellnesswingman.data.model.analysis.UnifiedAnalysisResult
 import com.wellnesswingman.data.repository.EntryAnalysisRepository
 import com.wellnesswingman.data.repository.TrackedEntryRepository
-import com.wellnesswingman.data.repository.WeightHistoryRepository
 import com.wellnesswingman.domain.analysis.BackgroundAnalysisService
 import com.wellnesswingman.domain.events.StatusChangeNotifier
 import com.wellnesswingman.domain.llm.LlmClientFactory
@@ -39,8 +37,7 @@ class EntryDetailViewModel(
     private val backgroundAnalysisService: BackgroundAnalysisService,
     private val statusChangeNotifier: StatusChangeNotifier,
     private val audioRecordingService: AudioRecordingService,
-    private val llmClientFactory: LlmClientFactory,
-    private val weightHistoryRepository: WeightHistoryRepository
+    private val llmClientFactory: LlmClientFactory
 ) : ScreenModel {
 
     private val json = Json {
@@ -160,27 +157,6 @@ class EntryDetailViewModel(
             Napier.e("Failed to parse analysis for entry $entryId: ${e.message}", e)
             Napier.e("Raw JSON (first 500 chars): ${analysis.insightsJson.take(500)}")
             null
-        }
-    }
-
-    fun confirmDetectedWeight() {
-        screenModelScope.launch {
-            val weight = _pendingDetectedWeight.value ?: return@launch
-            _pendingDetectedWeight.value = null
-            try {
-                weightHistoryRepository.addWeightRecord(
-                    WeightRecord(
-                        recordedAt = kotlinx.datetime.Clock.System.now(),
-                        weightValue = weight.value,
-                        weightUnit = weight.unit,
-                        source = "LlmDetected",
-                        relatedEntryId = entryId
-                    )
-                )
-                Napier.i("Saved LLM-detected weight: ${weight.value} ${weight.unit}")
-            } catch (e: Exception) {
-                Napier.e("Failed to save detected weight", e)
-            }
         }
     }
 

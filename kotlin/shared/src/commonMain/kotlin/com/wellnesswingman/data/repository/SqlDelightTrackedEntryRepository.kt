@@ -145,6 +145,7 @@ class SqlDelightTrackedEntryRepository(
     }
 
     override suspend fun deleteEntry(id: Long) = withContext(Dispatchers.IO) {
+        database.weightRecordQueries.nullifyRelatedEntryId(id)
         queries.deleteEntry(id)
     }
 

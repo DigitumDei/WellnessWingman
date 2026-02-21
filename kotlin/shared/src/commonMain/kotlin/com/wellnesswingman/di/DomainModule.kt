@@ -68,7 +68,9 @@ val domainModule = module {
             entryAnalysisRepository = get(),
             analysisOrchestrator = get(),
             backgroundExecutionService = get(),
-            statusChangeNotifier = get()
+            statusChangeNotifier = get(),
+            weightHistoryRepository = get(),
+            appSettingsRepository = get()
         )
     }
 

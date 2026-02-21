@@ -27,6 +27,7 @@ import com.wellnesswingman.ui.components.ErrorMessage
 import com.wellnesswingman.ui.components.LoadingIndicator
 import com.wellnesswingman.util.DateTimeUtil
 import kotlinx.datetime.TimeZone
+import com.wellnesswingman.util.formatDecimal
 import kotlin.math.abs
 import org.koin.core.parameter.parametersOf
 
@@ -62,19 +63,14 @@ data class EntryDetailScreen(val entryId: Long) : Screen {
             }
         }
 
-        // Show snackbar for detected weight confirmation
+        // Show informational snackbar for detected weight (already auto-saved)
         LaunchedEffect(pendingDetectedWeight) {
             pendingDetectedWeight?.let { weight ->
-                val result = snackbarHostState.showSnackbar(
-                    message = "Scale weight detected: %.1f %s — Save to history?".format(weight.value, weight.unit),
-                    actionLabel = "Save",
-                    duration = SnackbarDuration.Long
+                snackbarHostState.showSnackbar(
+                    message = "Scale weight detected and saved: ${weight.value.formatDecimal(1)} ${weight.unit}",
+                    duration = SnackbarDuration.Short
                 )
-                if (result == SnackbarResult.ActionPerformed) {
-                    viewModel.confirmDetectedWeight()
-                } else {
-                    viewModel.dismissDetectedWeight()
-                }
+                viewModel.dismissDetectedWeight()
             }
         }
 
@@ -619,7 +615,7 @@ private fun formatNumber(value: Double): String {
     val rounded = if (abs(value - value.toInt()) < 0.01) {
         value.toInt().toString()
     } else {
-        String.format("%.2f", value)
+        value.formatDecimal(2)
     }
     return rounded
 }
@@ -629,7 +625,7 @@ private fun formatPercent(value: Double): String {
     return if (abs(percent - percent.toInt()) < 0.1) {
         "${percent.toInt()}%"
     } else {
-        "${String.format("%.1f", percent)}%"
+        "${percent.formatDecimal(1)}%"
     }
 }
 
@@ -733,7 +729,7 @@ fun SleepAnalysisCard(result: com.wellnesswingman.data.model.analysis.SleepAnaly
             )
 
             result.durationHours?.let {
-                Text("Duration: ${String.format("%.1f", it)} hours", style = MaterialTheme.typography.bodyLarge)
+                Text("Duration: ${it.formatDecimal(1)} hours", style = MaterialTheme.typography.bodyLarge)
             }
 
             result.sleepScore?.let {

@@ -14,7 +14,12 @@ actual class DriverFactory(private val context: Context) {
         return AndroidSqliteDriver(
             schema = WellnessWingmanDatabase.Schema,
             context = context,
-            name = "wellnesswingman.db"
+            name = "wellnesswingman.db",
+            callback = object : AndroidSqliteDriver.Callback(WellnessWingmanDatabase.Schema) {
+                override fun onOpen(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                    db.execSQL("PRAGMA foreign_keys = ON")
+                }
+            }
         )
     }
 }

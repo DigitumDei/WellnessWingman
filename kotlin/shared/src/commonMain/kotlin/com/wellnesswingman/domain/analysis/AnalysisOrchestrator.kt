@@ -11,6 +11,7 @@ import com.wellnesswingman.data.repository.EntryAnalysisRepository
 import com.wellnesswingman.data.repository.TrackedEntryRepository
 import com.wellnesswingman.domain.llm.LlmClientFactory
 import com.wellnesswingman.platform.FileSystem
+import com.wellnesswingman.util.formatDecimal
 import io.github.aakira.napier.Napier
 import kotlinx.datetime.Clock
 import kotlinx.serialization.json.Json
@@ -159,7 +160,7 @@ class AnalysisOrchestrator(
         val parts = mutableListOf<String>()
         if (!sex.isNullOrBlank()) parts.add(sex)
         if (!dob.isNullOrBlank()) parts.add("DOB $dob")
-        if (height != null) parts.add("${"%.1f".format(height)}$heightUnit")
+        if (height != null) parts.add("${height.formatDecimal(1)}$heightUnit")
         if (weight != null) parts.add("${weight}$weightUnit")
         if (!activityLevel.isNullOrBlank()) parts.add(activityLevel)
 

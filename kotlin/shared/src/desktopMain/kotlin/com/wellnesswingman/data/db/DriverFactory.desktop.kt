@@ -41,6 +41,8 @@ actual class DriverFactory {
             }
         }
 
+        driver.execute(null, "PRAGMA foreign_keys = ON", 0)
+
         return driver
     }
 

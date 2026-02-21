@@ -59,8 +59,7 @@ val viewModelModule = module {
             backgroundAnalysisService = get(),
             statusChangeNotifier = get(),
             audioRecordingService = get(),
-            llmClientFactory = get(),
-            weightHistoryRepository = get()
+            llmClientFactory = get()
         )
     }
 }

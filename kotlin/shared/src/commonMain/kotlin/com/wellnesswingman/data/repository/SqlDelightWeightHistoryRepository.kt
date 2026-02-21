@@ -48,6 +48,10 @@ class SqlDelightWeightHistoryRepository(
         queries.deleteWeightRecord(recordId)
     }
 
+    override suspend fun nullifyRelatedEntryId(entryId: Long) = withContext(Dispatchers.IO) {
+        queries.nullifyRelatedEntryId(entryId)
+    }
+
     override suspend fun upsertWeightRecord(record: WeightRecord) = withContext(Dispatchers.IO) {
         if (record.weightRecordId > 0) {
             queries.updateWeightRecord(

@@ -3,16 +3,20 @@ package com.wellnesswingman.ui.screens.weighthistory
 import cafe.adriel.voyager.core.model.ScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import com.wellnesswingman.data.model.WeightRecord
+import com.wellnesswingman.data.model.WeightSource
+import com.wellnesswingman.data.repository.AppSettingsRepository
 import com.wellnesswingman.data.repository.WeightHistoryRepository
 import io.github.aakira.napier.Napier
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 
 class WeightHistoryViewModel(
-    private val weightHistoryRepository: WeightHistoryRepository
+    private val weightHistoryRepository: WeightHistoryRepository,
+    private val appSettingsRepository: AppSettingsRepository
 ) : ScreenModel {
 
     private val _uiState = MutableStateFlow(WeightHistoryUiState())
@@ -24,13 +28,13 @@ class WeightHistoryViewModel(
 
     fun loadHistory() {
         screenModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true)
+            _uiState.update { it.copy(isLoading = true) }
             try {
                 val records = weightHistoryRepository.getAllWeightRecords()
-                _uiState.value = _uiState.value.copy(records = records, isLoading = false)
+                _uiState.update { it.copy(records = records, isLoading = false) }
             } catch (e: Exception) {
                 Napier.e("Failed to load weight history", e)
-                _uiState.value = _uiState.value.copy(isLoading = false)
+                _uiState.update { it.copy(isLoading = false) }
             }
         }
     }
@@ -43,9 +47,11 @@ class WeightHistoryViewModel(
                         recordedAt = Clock.System.now(),
                         weightValue = value,
                         weightUnit = unit,
-                        source = "Manual"
+                        source = WeightSource.MANUAL.value
                     )
                 )
+                appSettingsRepository.setCurrentWeight(value)
+                appSettingsRepository.setWeightUnit(unit)
                 dismissLogDialog()
                 loadHistory()
             } catch (e: Exception) {
@@ -66,22 +72,19 @@ class WeightHistoryViewModel(
     }
 
     fun showLogDialog() {
-        _uiState.value = _uiState.value.copy(showLogDialog = true)
+        _uiState.update { it.copy(showLogDialog = true) }
     }
 
     fun dismissLogDialog() {
-        _uiState.value = _uiState.value.copy(
-            showLogDialog = false,
-            logWeightValue = "",
-        )
+        _uiState.update { it.copy(showLogDialog = false, logWeightValue = "") }
     }
 
     fun updateLogWeightValue(value: String) {
-        _uiState.value = _uiState.value.copy(logWeightValue = value)
+        _uiState.update { it.copy(logWeightValue = value) }
     }
 
     fun updateLogWeightUnit(unit: String) {
-        _uiState.value = _uiState.value.copy(logWeightUnit = unit)
+        _uiState.update { it.copy(logWeightUnit = unit) }
     }
 }
 

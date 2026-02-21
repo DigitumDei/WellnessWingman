@@ -19,6 +19,9 @@ import cafe.adriel.voyager.koin.getScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import com.wellnesswingman.data.model.WeightRecord
+import com.wellnesswingman.data.model.WeightSource
+import com.wellnesswingman.util.formatDecimal
+import com.wellnesswingman.util.padZero
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 
@@ -37,9 +40,7 @@ class WeightHistoryScreen : Screen {
                 title = { Text("Delete Weight Record") },
                 text = {
                     Text(
-                        "Delete the %.1f %s record? This cannot be undone.".format(
-                            record.weightValue, record.weightUnit
-                        )
+                        "Delete the ${record.weightValue.formatDecimal(1)} ${record.weightUnit} record? This cannot be undone."
                     )
                 },
                 confirmButton = {
@@ -141,13 +142,7 @@ private fun WeightRecordItem(
     onDelete: () -> Unit
 ) {
     val localDateTime = record.recordedAt.toLocalDateTime(TimeZone.currentSystemDefault())
-    val dateStr = "%04d-%02d-%02d %02d:%02d".format(
-        localDateTime.year,
-        localDateTime.monthNumber,
-        localDateTime.dayOfMonth,
-        localDateTime.hour,
-        localDateTime.minute
-    )
+    val dateStr = "${localDateTime.year.padZero(4)}-${localDateTime.monthNumber.padZero(2)}-${localDateTime.dayOfMonth.padZero(2)} ${localDateTime.hour.padZero(2)}:${localDateTime.minute.padZero(2)}"
 
     Card(modifier = Modifier.fillMaxWidth()) {
         Row(
@@ -156,7 +151,7 @@ private fun WeightRecordItem(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "%.1f %s".format(record.weightValue, record.weightUnit),
+                    text = "${record.weightValue.formatDecimal(1)} ${record.weightUnit}",
                     style = MaterialTheme.typography.titleMedium
                 )
                 Text(
@@ -169,7 +164,7 @@ private fun WeightRecordItem(
                 onClick = {},
                 label = {
                     Text(
-                        if (record.source == "LlmDetected") "Auto" else "Manual",
+                        WeightSource.fromString(record.source).displayLabel,
                         style = MaterialTheme.typography.labelSmall
                     )
                 },

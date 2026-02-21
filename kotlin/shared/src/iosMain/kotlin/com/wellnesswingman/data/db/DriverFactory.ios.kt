@@ -9,9 +9,11 @@ import com.wellnesswingman.db.WellnessWingmanDatabase
  */
 actual class DriverFactory {
     actual fun createDriver(): SqlDriver {
-        return NativeSqliteDriver(
+        val driver = NativeSqliteDriver(
             schema = WellnessWingmanDatabase.Schema,
             name = "wellnesswingman.db"
         )
+        driver.execute(null, "PRAGMA foreign_keys = ON", 0)
+        return driver
     }
 }
