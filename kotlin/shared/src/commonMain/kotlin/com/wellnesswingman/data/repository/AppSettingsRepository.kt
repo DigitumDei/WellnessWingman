@@ -36,6 +36,7 @@ interface AppSettingsRepository {
     fun setDateOfBirth(dob: String)
     fun getActivityLevel(): String?
     fun setActivityLevel(level: String)
+    fun clearHeight()
     fun clearCurrentWeight()
     fun clearProfileData()
 }

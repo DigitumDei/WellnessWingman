@@ -155,7 +155,7 @@ class AnalysisOrchestrator(
         if (!sex.isNullOrBlank()) parts.add(sex)
         if (!dob.isNullOrBlank()) parts.add("DOB $dob")
         if (height != null) parts.add("${height.formatDecimal(1)}$heightUnit")
-        if (weight != null) parts.add("${weight}$weightUnit")
+        if (weight != null) parts.add("${weight.formatDecimal(1)}$weightUnit")
         if (!activityLevel.isNullOrBlank()) parts.add(activityLevel)
 
         if (parts.isEmpty()) return null

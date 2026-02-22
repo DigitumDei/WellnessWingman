@@ -147,6 +147,8 @@ class SettingsViewModel(
                 val heightValue = state.height.toDoubleOrNull()
                 if (heightValue != null && heightValue > 0) {
                     appSettingsRepository.setHeight(heightValue)
+                } else if (state.height.isEmpty()) {
+                    appSettingsRepository.clearHeight()
                 }
                 appSettingsRepository.setHeightUnit(state.heightUnit)
 
@@ -174,6 +176,8 @@ class SettingsViewModel(
                             Napier.w("Failed to log manual weight record: ${e.message}")
                         }
                     }
+                } else if (state.currentWeight.isEmpty()) {
+                    appSettingsRepository.clearCurrentWeight()
                 }
 
                 if (state.dateOfBirth.isNotBlank()) {
@@ -183,11 +187,17 @@ class SettingsViewModel(
                         appSettingsRepository.setDateOfBirth(state.dateOfBirth)
                     } catch (e: Exception) {
                         Napier.w("Invalid date of birth format: ${state.dateOfBirth}")
+                        _uiState.value = state.copy(error = "Invalid date of birth format. Use YYYY-MM-DD.")
+                        return@launch
                     }
+                } else {
+                    appSettingsRepository.setDateOfBirth("")
                 }
 
                 if (state.activityLevel.isNotBlank()) {
                     appSettingsRepository.setActivityLevel(state.activityLevel)
+                } else {
+                    appSettingsRepository.setActivityLevel("")
                 }
 
                 _uiState.value = state.copy(saveSuccess = true)

@@ -137,6 +137,10 @@ class SettingsAppSettingsRepository(
         settings[KEY_PROFILE_ACTIVITY_LEVEL] = level
     }
 
+    override fun clearHeight() {
+        settings.remove(KEY_PROFILE_HEIGHT)
+    }
+
     override fun clearCurrentWeight() {
         settings.remove(KEY_PROFILE_CURRENT_WEIGHT)
     }
