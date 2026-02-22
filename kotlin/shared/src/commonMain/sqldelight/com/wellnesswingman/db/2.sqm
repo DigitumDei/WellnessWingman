@@ -1,6 +1,12 @@
 -- Migration from version 2 to version 3
 -- Adds WeightRecord table for historical weight tracking
 
+-- TrackedEntry already exists; redeclared here so SQLDelight's code generator
+-- can resolve the foreign key reference below (IF NOT EXISTS is a no-op at runtime).
+CREATE TABLE IF NOT EXISTS TrackedEntry (
+    entryId INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT
+);
+
 CREATE TABLE WeightRecord (
     weightRecordId INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
     externalId TEXT,
@@ -8,7 +14,7 @@ CREATE TABLE WeightRecord (
     weightValue REAL NOT NULL,
     weightUnit TEXT NOT NULL,
     source TEXT NOT NULL,
-    relatedEntryId INTEGER
+    relatedEntryId INTEGER REFERENCES TrackedEntry(entryId) ON DELETE SET NULL
 );
 
 CREATE INDEX idx_weight_record_recorded_at ON WeightRecord(recordedAt);
