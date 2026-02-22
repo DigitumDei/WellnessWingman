@@ -10,8 +10,8 @@ import com.wellnesswingman.data.repository.EntryAnalysisRepository
 import com.wellnesswingman.data.repository.TrackedEntryRepository
 import com.wellnesswingman.data.repository.WeightHistoryRepository
 import com.wellnesswingman.domain.events.StatusChangeNotifier
-import kotlinx.datetime.Clock
 import com.wellnesswingman.platform.BackgroundExecutionService
+import kotlinx.datetime.Instant
 import io.github.aakira.napier.Napier
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -114,7 +114,11 @@ class DefaultBackgroundAnalysisService(
 
             val detectedWeight = (result as? AnalysisInvocationResult.Success)?.detectedWeight
             if (detectedWeight != null) {
-                saveDetectedWeight(entryId, detectedWeight)
+                saveDetectedWeight(
+                    entryId = entryId,
+                    weight = detectedWeight,
+                    recordedAt = entry.capturedAt
+                )
             }
             updateStatus(entryId, finalStatus, detectedWeight)
 
@@ -173,11 +177,15 @@ class DefaultBackgroundAnalysisService(
         }
     }
 
-    private suspend fun saveDetectedWeight(entryId: Long, weight: DetectedWeight) {
+    private suspend fun saveDetectedWeight(
+        entryId: Long,
+        weight: DetectedWeight,
+        recordedAt: Instant
+    ) {
         try {
             weightHistoryRepository.addWeightRecord(
                 WeightRecord(
-                    recordedAt = Clock.System.now(),
+                    recordedAt = recordedAt,
                     weightValue = weight.value,
                     weightUnit = weight.unit,
                     source = WeightSource.LLM_DETECTED.value,
