@@ -76,18 +76,12 @@ class AnalysisOrchestrator(
 
             // Analyze the entry
             val result = if (entry.blobPath != null) {
-                try {
-                    if (fileSystem.exists(entry.blobPath)) {
-                        val imageBytes = fileSystem.readBytes(entry.blobPath)
-                        llmClient.analyzeImage(imageBytes, prompt, null)
-                    } else {
-                        Napier.w("Image file not found: ${entry.blobPath}")
-                        llmClient.generateCompletion(prompt, null)
-                    }
-                } catch (e: Exception) {
-                    Napier.e("Failed to load image bytes", e)
-                    llmClient.generateCompletion(prompt, null)
+                if (!fileSystem.exists(entry.blobPath)) {
+                    error("Image file not found at ${entry.blobPath} for entry ${entry.entryId}. " +
+                        "The file may not have been written yet.")
                 }
+                val imageBytes = fileSystem.readBytes(entry.blobPath)
+                llmClient.analyzeImage(imageBytes, prompt, null)
             } else {
                 llmClient.generateCompletion(prompt, null)
             }
