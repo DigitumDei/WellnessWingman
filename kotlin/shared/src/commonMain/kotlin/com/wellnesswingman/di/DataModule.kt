@@ -38,6 +38,10 @@ val dataModule = module {
         SettingsAppSettingsRepository(get())
     }
 
+    single<WeightHistoryRepository> {
+        SqlDelightWeightHistoryRepository(get())
+    }
+
     // Settings - platform-specific implementation will be provided
     // via platformModule in each platform's source set
 }

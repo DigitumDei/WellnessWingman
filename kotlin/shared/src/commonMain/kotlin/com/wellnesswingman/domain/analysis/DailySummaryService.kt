@@ -15,10 +15,13 @@ import com.wellnesswingman.data.model.analysis.UnifiedAnalysisResult
 import com.wellnesswingman.data.repository.DailySummaryRepository
 import com.wellnesswingman.data.repository.EntryAnalysisRepository
 import com.wellnesswingman.data.repository.TrackedEntryRepository
+import com.wellnesswingman.data.repository.WeightHistoryRepository
 import com.wellnesswingman.domain.llm.LlmClientFactory
 import com.wellnesswingman.util.DateTimeUtil
+import com.wellnesswingman.data.model.WeightRecord
 import io.github.aakira.napier.Napier
 import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.serialization.json.Json
@@ -31,7 +34,8 @@ class DailySummaryService(
     private val entryAnalysisRepository: EntryAnalysisRepository,
     private val dailySummaryRepository: DailySummaryRepository,
     private val llmClientFactory: LlmClientFactory,
-    private val dailyTotalsCalculator: DailyTotalsCalculator
+    private val dailyTotalsCalculator: DailyTotalsCalculator,
+    private val weightHistoryRepository: WeightHistoryRepository
 ) {
 
     private val json = Json {
@@ -137,6 +141,17 @@ class DailySummaryService(
             // Calculate balance metrics
             val balance = calculateBalance(nutritionTotals, mealCount, completedEntries)
 
+            // Get weight records for the day
+            val weightRecords = try {
+                weightHistoryRepository.getWeightHistory(
+                    Instant.fromEpochMilliseconds(startMillis),
+                    Instant.fromEpochMilliseconds(endMillis)
+                )
+            } catch (e: Exception) {
+                Napier.w("Failed to load weight records for summary: ${e.message}")
+                emptyList()
+            }
+
             // Build prompt for LLM
             val prompt = buildSummaryPrompt(
                 date = date,
@@ -146,7 +161,8 @@ class DailySummaryService(
                 mealCount = mealCount,
                 exerciseCount = exerciseCount,
                 sleepCount = sleepCount,
-                sleepHours = totalSleepHours
+                sleepHours = totalSleepHours,
+                weightRecords = weightRecords
             )
 
             // Generate summary using LLM
@@ -262,7 +278,8 @@ class DailySummaryService(
         mealCount: Int,
         exerciseCount: Int,
         sleepCount: Int,
-        sleepHours: Double?
+        sleepHours: Double?,
+        weightRecords: List<WeightRecord> = emptyList()
     ): String {
         return """
 Generate a daily health summary for $date. Return a JSON object with the following structure:
@@ -299,7 +316,13 @@ Activity Overview:
 - Total entries logged: ${entries.size}
 - Meals logged: $mealCount
 - Exercise sessions: $exerciseCount
-- Sleep entries: $sleepCount${sleepHours?.let { "\n- Total sleep: ${it.toInt()} hours" } ?: ""}
+- Sleep entries: $sleepCount${sleepHours?.let { "\n- Total sleep: ${it.toInt()} hours" } ?: ""}${
+    if (weightRecords.isNotEmpty()) {
+        "\n\nWeight Recorded:\n" + weightRecords.joinToString("\n") { record ->
+            "- ${record.weightValue} ${record.weightUnit} (${record.source})"
+        }
+    } else ""
+}
 
 Nutrition Summary:
 - Total calories: ${nutritionTotals.calories.toInt()} kcal

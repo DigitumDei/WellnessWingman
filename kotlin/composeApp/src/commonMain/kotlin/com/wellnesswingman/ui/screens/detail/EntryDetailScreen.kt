@@ -27,6 +27,7 @@ import com.wellnesswingman.ui.components.ErrorMessage
 import com.wellnesswingman.ui.components.LoadingIndicator
 import com.wellnesswingman.util.DateTimeUtil
 import kotlinx.datetime.TimeZone
+import com.wellnesswingman.util.formatDecimal
 import kotlin.math.abs
 import org.koin.core.parameter.parametersOf
 
@@ -50,13 +51,26 @@ data class EntryDetailScreen(val entryId: Long) : Screen {
         val viewModel = getScreenModel<EntryDetailViewModel> { parametersOf(entryId) }
         val uiState by viewModel.uiState.collectAsState()
         val correctionState by viewModel.correctionState.collectAsState()
+        val pendingDetectedWeight by viewModel.pendingDetectedWeight.collectAsState()
 
         var showDeleteDialog by remember { mutableStateOf(false) }
+        val snackbarHostState = remember { SnackbarHostState() }
 
         // Handle deletion
         LaunchedEffect(uiState) {
             if (uiState is EntryDetailUiState.Deleted) {
                 navigator.pop()
+            }
+        }
+
+        // Show informational snackbar for detected weight (already auto-saved)
+        LaunchedEffect(pendingDetectedWeight) {
+            pendingDetectedWeight?.let { weight ->
+                snackbarHostState.showSnackbar(
+                    message = "Scale weight detected and saved: ${weight.value.formatDecimal(1)} ${weight.unit}",
+                    duration = SnackbarDuration.Short
+                )
+                viewModel.dismissDetectedWeight()
             }
         }
 
@@ -75,7 +89,8 @@ data class EntryDetailScreen(val entryId: Long) : Screen {
                         }
                     }
                 )
-            }
+            },
+            snackbarHost = { SnackbarHost(snackbarHostState) }
         ) { paddingValues ->
             when (val state = uiState) {
                 is EntryDetailUiState.Loading -> LoadingIndicator(Modifier.padding(paddingValues))
@@ -600,7 +615,7 @@ private fun formatNumber(value: Double): String {
     val rounded = if (abs(value - value.toInt()) < 0.01) {
         value.toInt().toString()
     } else {
-        String.format("%.2f", value)
+        value.formatDecimal(2)
     }
     return rounded
 }
@@ -610,7 +625,7 @@ private fun formatPercent(value: Double): String {
     return if (abs(percent - percent.toInt()) < 0.1) {
         "${percent.toInt()}%"
     } else {
-        "${String.format("%.1f", percent)}%"
+        "${percent.formatDecimal(1)}%"
     }
 }
 
@@ -714,7 +729,7 @@ fun SleepAnalysisCard(result: com.wellnesswingman.data.model.analysis.SleepAnaly
             )
 
             result.durationHours?.let {
-                Text("Duration: ${String.format("%.1f", it)} hours", style = MaterialTheme.typography.bodyLarge)
+                Text("Duration: ${it.formatDecimal(1)} hours", style = MaterialTheme.typography.bodyLarge)
             }
 
             result.sleepScore?.let {

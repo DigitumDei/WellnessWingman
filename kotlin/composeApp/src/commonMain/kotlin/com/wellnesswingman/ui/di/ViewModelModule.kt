@@ -9,6 +9,7 @@ import com.wellnesswingman.ui.screens.main.MainViewModel
 import com.wellnesswingman.ui.screens.photo.PhotoReviewViewModel
 import com.wellnesswingman.ui.screens.settings.SettingsViewModel
 import com.wellnesswingman.ui.screens.summary.DailySummaryViewModel
+import com.wellnesswingman.ui.screens.weighthistory.WeightHistoryViewModel
 import org.koin.core.module.dsl.factoryOf
 import org.koin.dsl.module
 
@@ -28,6 +29,7 @@ val viewModelModule = module {
         )
     }
     factoryOf(::SettingsViewModel)
+    factoryOf(::WeightHistoryViewModel)
     factoryOf(::DailySummaryViewModel)
     factoryOf(::PhotoReviewViewModel)
     factoryOf(::CalendarViewModel)

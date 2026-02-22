@@ -108,7 +108,7 @@ actual class PhotoResizer {
  * Decodes image bytes into a [Bitmap] with EXIF orientation already applied.
  * Shared by UI components that load images directly from byte arrays.
  */
-internal fun decodeWithExifRotation(imageBytes: ByteArray): Bitmap? {
+fun decodeWithExifRotation(imageBytes: ByteArray): Bitmap? {
     val bitmap = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size) ?: return null
     return applyExifRotation(bitmap, imageBytes)
 }

@@ -6,6 +6,7 @@ import com.wellnesswingman.data.model.EntryAnalysis
 import com.wellnesswingman.data.model.EntryType
 import com.wellnesswingman.data.model.ProcessingStatus
 import com.wellnesswingman.data.model.TrackedEntry
+import com.wellnesswingman.data.model.analysis.DetectedWeight
 import com.wellnesswingman.data.model.analysis.ExerciseAnalysisResult
 import com.wellnesswingman.data.model.analysis.MealAnalysisResult
 import com.wellnesswingman.data.model.analysis.SleepAnalysisResult
@@ -58,6 +59,10 @@ class EntryDetailViewModel(
         subscribeToStatusChanges()
     }
 
+    // Pending weight detection from LLM analysis
+    private val _pendingDetectedWeight = MutableStateFlow<DetectedWeight?>(null)
+    val pendingDetectedWeight: StateFlow<DetectedWeight?> = _pendingDetectedWeight.asStateFlow()
+
     private fun subscribeToStatusChanges() {
         screenModelScope.launch {
             statusChangeNotifier.statusChanges.collect { event ->
@@ -66,6 +71,9 @@ class EntryDetailViewModel(
                     loadEntry()
                     if (event.status == ProcessingStatus.COMPLETED) {
                         exitCorrectionMode()
+                        event.detectedWeight?.let { weight ->
+                            _pendingDetectedWeight.value = weight
+                        }
                     }
                 }
             }
@@ -150,6 +158,10 @@ class EntryDetailViewModel(
             Napier.e("Raw JSON (first 500 chars): ${analysis.insightsJson.take(500)}")
             null
         }
+    }
+
+    fun dismissDetectedWeight() {
+        _pendingDetectedWeight.value = null
     }
 
     fun deleteEntry() {

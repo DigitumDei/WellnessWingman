@@ -2,10 +2,16 @@ package com.wellnesswingman.domain.analysis
 
 import com.wellnesswingman.data.model.ProcessingStatus
 import com.wellnesswingman.data.model.TrackedEntry
+import com.wellnesswingman.data.model.WeightRecord
+import com.wellnesswingman.data.model.WeightSource
+import com.wellnesswingman.data.model.analysis.DetectedWeight
+import com.wellnesswingman.data.repository.AppSettingsRepository
 import com.wellnesswingman.data.repository.EntryAnalysisRepository
 import com.wellnesswingman.data.repository.TrackedEntryRepository
+import com.wellnesswingman.data.repository.WeightHistoryRepository
 import com.wellnesswingman.domain.events.StatusChangeNotifier
 import com.wellnesswingman.platform.BackgroundExecutionService
+import kotlinx.datetime.Instant
 import io.github.aakira.napier.Napier
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -43,7 +49,9 @@ class DefaultBackgroundAnalysisService(
     private val entryAnalysisRepository: EntryAnalysisRepository,
     private val analysisOrchestrator: AnalysisOrchestrator,
     private val backgroundExecutionService: BackgroundExecutionService,
-    private val statusChangeNotifier: StatusChangeNotifier
+    private val statusChangeNotifier: StatusChangeNotifier,
+    private val weightHistoryRepository: WeightHistoryRepository,
+    private val appSettingsRepository: AppSettingsRepository
 ) : BackgroundAnalysisService {
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -104,7 +112,16 @@ class DefaultBackgroundAnalysisService(
                 is AnalysisInvocationResult.Error -> ProcessingStatus.FAILED
             }
 
-            updateStatus(entryId, finalStatus)
+            val detectedWeight = (result as? AnalysisInvocationResult.Success)?.detectedWeight
+            val savedWeight = if (detectedWeight != null) {
+                val saved = saveDetectedWeight(
+                    entryId = entryId,
+                    weight = detectedWeight,
+                    recordedAt = entry.capturedAt
+                )
+                if (saved) detectedWeight else null
+            } else null
+            updateStatus(entryId, finalStatus, savedWeight)
 
         } catch (e: CancellationException) {
             Napier.i("Background analysis was cancelled for entry $entryId")
@@ -161,8 +178,37 @@ class DefaultBackgroundAnalysisService(
         }
     }
 
-    private suspend fun updateStatus(entryId: Long, status: ProcessingStatus) {
+    private suspend fun saveDetectedWeight(
+        entryId: Long,
+        weight: DetectedWeight,
+        recordedAt: Instant
+    ): Boolean {
+        return try {
+            weightHistoryRepository.addWeightRecord(
+                WeightRecord(
+                    recordedAt = recordedAt,
+                    weightValue = weight.value,
+                    weightUnit = weight.unit,
+                    source = WeightSource.LLM_DETECTED.value,
+                    relatedEntryId = entryId
+                )
+            )
+            appSettingsRepository.setCurrentWeight(weight.value)
+            appSettingsRepository.setWeightUnit(weight.unit)
+            Napier.i("Auto-saved detected weight: ${weight.value} ${weight.unit} for entry $entryId")
+            true
+        } catch (e: Exception) {
+            Napier.e("Failed to auto-save detected weight for entry $entryId", e)
+            false
+        }
+    }
+
+    private suspend fun updateStatus(
+        entryId: Long,
+        status: ProcessingStatus,
+        detectedWeight: DetectedWeight? = null
+    ) {
         trackedEntryRepository.updateEntryStatus(entryId, status)
-        statusChangeNotifier.notifyStatusChange(entryId, status)
+        statusChangeNotifier.notifyStatusChange(entryId, status, detectedWeight)
     }
 }

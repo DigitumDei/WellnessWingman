@@ -4,11 +4,14 @@ import com.wellnesswingman.data.model.EntryAnalysis
 import com.wellnesswingman.data.model.EntryType
 import com.wellnesswingman.data.model.ProcessingStatus
 import com.wellnesswingman.data.model.TrackedEntry
+import com.wellnesswingman.data.model.analysis.DetectedWeight
 import com.wellnesswingman.data.model.analysis.UnifiedAnalysisResult
+import com.wellnesswingman.data.repository.AppSettingsRepository
 import com.wellnesswingman.data.repository.EntryAnalysisRepository
 import com.wellnesswingman.data.repository.TrackedEntryRepository
 import com.wellnesswingman.domain.llm.LlmClientFactory
 import com.wellnesswingman.platform.FileSystem
+import com.wellnesswingman.util.formatDecimal
 import io.github.aakira.napier.Napier
 import kotlinx.datetime.Clock
 import kotlinx.serialization.json.Json
@@ -17,7 +20,10 @@ import kotlinx.serialization.json.Json
  * Result of an analysis invocation.
  */
 sealed class AnalysisInvocationResult {
-    data class Success(val analysis: EntryAnalysis) : AnalysisInvocationResult()
+    data class Success(
+        val analysis: EntryAnalysis,
+        val detectedWeight: DetectedWeight? = null
+    ) : AnalysisInvocationResult()
     data class Error(val message: String) : AnalysisInvocationResult()
     data class Skipped(val reason: String) : AnalysisInvocationResult()
 
@@ -34,7 +40,8 @@ class AnalysisOrchestrator(
     private val trackedEntryRepository: TrackedEntryRepository,
     private val entryAnalysisRepository: EntryAnalysisRepository,
     private val llmClientFactory: LlmClientFactory,
-    private val fileSystem: FileSystem
+    private val fileSystem: FileSystem,
+    private val appSettingsRepository: AppSettingsRepository
 ) {
     private val json = Json {
         ignoreUnknownKeys = true
@@ -69,18 +76,12 @@ class AnalysisOrchestrator(
 
             // Analyze the entry
             val result = if (entry.blobPath != null) {
-                try {
-                    if (fileSystem.exists(entry.blobPath)) {
-                        val imageBytes = fileSystem.readBytes(entry.blobPath)
-                        llmClient.analyzeImage(imageBytes, prompt, null)
-                    } else {
-                        Napier.w("Image file not found: ${entry.blobPath}")
-                        llmClient.generateCompletion(prompt, null)
-                    }
-                } catch (e: Exception) {
-                    Napier.e("Failed to load image bytes", e)
-                    llmClient.generateCompletion(prompt, null)
+                if (!fileSystem.exists(entry.blobPath)) {
+                    error("Image file not found at ${entry.blobPath} for entry ${entry.entryId}. " +
+                        "The file may not have been written yet.")
                 }
+                val imageBytes = fileSystem.readBytes(entry.blobPath)
+                llmClient.analyzeImage(imageBytes, prompt, null)
             } else {
                 llmClient.generateCompletion(prompt, null)
             }
@@ -89,7 +90,8 @@ class AnalysisOrchestrator(
             val validationResult = validator.validateUnifiedAnalysis(result.content)
             validator.logValidation(entry.entryId, validationResult)
 
-            // Try to detect and update entry type from analysis
+            // Parse unified result for type detection and weight detection
+            var detectedWeight: DetectedWeight? = null
             try {
                 val unifiedResult = json.decodeFromString<UnifiedAnalysisResult>(result.content)
                 val detectedType = normalizeEntryType(unifiedResult.entryType)
@@ -97,8 +99,14 @@ class AnalysisOrchestrator(
                     Napier.i("Updating entry ${entry.entryId} type from UNKNOWN to $detectedType")
                     trackedEntryRepository.updateEntryType(entry.entryId, detectedType)
                 }
+                // Capture detected weight if confidence is sufficient
+                val weight = unifiedResult.detectedWeight
+                if (weight != null && weight.confidence >= 0.7) {
+                    detectedWeight = weight
+                    Napier.i("Weight detected for entry ${entry.entryId}: ${weight.value} ${weight.unit} (confidence ${weight.confidence})")
+                }
             } catch (e: Exception) {
-                Napier.w("Failed to parse unified analysis for type detection: ${e.message}")
+                Napier.w("Failed to parse unified analysis for type/weight detection: ${e.message}")
             }
 
             // Create and save the analysis
@@ -119,13 +127,39 @@ class AnalysisOrchestrator(
 
             Napier.i("Successfully analyzed entry ${entry.entryId}")
 
-            return AnalysisInvocationResult.Success(analysis.copy(analysisId = analysisId))
+            return AnalysisInvocationResult.Success(
+                analysis = analysis.copy(analysisId = analysisId),
+                detectedWeight = detectedWeight
+            )
 
         } catch (e: Exception) {
             Napier.e("Analysis failed for entry ${entry.entryId}", e)
             trackedEntryRepository.updateEntryStatus(entry.entryId, ProcessingStatus.FAILED)
             return AnalysisInvocationResult.error(e.message ?: "Unknown error")
         }
+    }
+
+    /**
+     * Builds a string describing the user's profile for injection into prompts.
+     */
+    private fun buildProfileContext(): String? {
+        val height = appSettingsRepository.getHeight()
+        val heightUnit = appSettingsRepository.getHeightUnit()
+        val sex = appSettingsRepository.getSex()
+        val weight = appSettingsRepository.getCurrentWeight()
+        val weightUnit = appSettingsRepository.getWeightUnit()
+        val dob = appSettingsRepository.getDateOfBirth()
+        val activityLevel = appSettingsRepository.getActivityLevel()
+
+        val parts = mutableListOf<String>()
+        if (!sex.isNullOrBlank()) parts.add(sex)
+        if (!dob.isNullOrBlank()) parts.add("DOB $dob")
+        if (height != null) parts.add("${height.formatDecimal(1)}$heightUnit")
+        if (weight != null) parts.add("${weight.formatDecimal(1)}$weightUnit")
+        if (!activityLevel.isNullOrBlank()) parts.add(activityLevel)
+
+        if (parts.isEmpty()) return null
+        return "User profile: ${parts.joinToString(", ")}"
     }
 
     /**
@@ -141,6 +175,8 @@ class AnalysisOrchestrator(
             }
         }
 
+        val profileContext = buildProfileContext()?.let { "$it\n\n" } ?: ""
+
         return """
 You are a health and wellness analysis assistant with vision capabilities. Analyze the provided content (image and/or text) and determine the type of health-related entry, then provide detailed analysis.
 
@@ -153,13 +189,14 @@ First, determine what type of entry this is:
 
 IMPORTANT: You MUST return a valid JSON object with the following structure. Only populate the analysis field that matches the detected entry type.
 
-$userContext
+$profileContext$userContext
 
 REQUIRED JSON RESPONSE FORMAT:
 {
   "schemaVersion": "1.0",
   "entryType": "<Meal|Exercise|Sleep|Other>",
   "confidence": <0.0-1.0>,
+  "detectedWeight": null,
   "mealAnalysis": {
     "schemaVersion": "1.0",
     "foodItems": [
@@ -224,8 +261,9 @@ GUIDELINES:
 3. For meals: Identify all visible food items and estimate portions carefully
 4. For exercise: Extract metrics from fitness tracker screenshots or estimate from images
 5. For sleep: Extract data from sleep tracker screenshots or provide estimates
-6. Add warnings array if there are any issues with the analysis
-7. Health score (0-10): 10 = excellent, 7-9 = good, 5-6 = moderate, below 5 = needs improvement
+6. If a weighing scale is visible in the image, set detectedWeight to {"value": <number>, "unit": "<kg|lbs>", "confidence": <0.0-1.0>}; otherwise leave detectedWeight as null
+7. Add warnings array if there are any issues with the analysis
+8. Health score (0-10): 10 = excellent, 7-9 = good, 5-6 = moderate, below 5 = needs improvement
 
 ONLY return the JSON object, no other text.
         """.trimIndent()

@@ -2,14 +2,17 @@ package com.wellnesswingman.ui.screens.settings
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.core.screen.Screen
@@ -17,6 +20,7 @@ import cafe.adriel.voyager.koin.getScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import com.wellnesswingman.data.repository.LlmProvider
+import com.wellnesswingman.ui.screens.weighthistory.WeightHistoryScreen
 
 class SettingsScreen : Screen {
     @Composable
@@ -90,6 +94,98 @@ class SettingsScreen : Screen {
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(24.dp)
             ) {
+                // User Profile Section
+                Text(
+                    text = "User Profile",
+                    style = MaterialTheme.typography.titleLarge
+                )
+
+                Text(
+                    text = "Your profile helps personalize health recommendations.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                // Height
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = uiState.height,
+                        onValueChange = { viewModel.updateHeight(it) },
+                        label = { Text("Height") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        modifier = Modifier.weight(1f),
+                        singleLine = true
+                    )
+                    UnitToggleButton(
+                        options = listOf("cm", "in"),
+                        selected = uiState.heightUnit,
+                        onSelect = { viewModel.updateHeightUnit(it) }
+                    )
+                }
+
+                // Sex
+                SexDropdown(
+                    value = uiState.sex,
+                    onValueChange = { viewModel.updateSex(it) }
+                )
+
+                // Weight
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = uiState.currentWeight,
+                        onValueChange = { viewModel.updateCurrentWeight(it) },
+                        label = { Text("Current Weight") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        modifier = Modifier.weight(1f),
+                        singleLine = true
+                    )
+                    UnitToggleButton(
+                        options = listOf("kg", "lbs"),
+                        selected = uiState.weightUnit,
+                        onSelect = { viewModel.updateWeightUnit(it) }
+                    )
+                }
+
+                // Date of Birth
+                val dobIsValid = uiState.dateOfBirth.isBlank() || try {
+                    kotlinx.datetime.LocalDate.parse(uiState.dateOfBirth)
+                    true
+                } catch (_: Exception) { false }
+                OutlinedTextField(
+                    value = uiState.dateOfBirth,
+                    onValueChange = { viewModel.updateDateOfBirth(it) },
+                    label = { Text("Date of Birth") },
+                    placeholder = { Text("YYYY-MM-DD") },
+                    isError = !dobIsValid,
+                    supportingText = if (!dobIsValid) {{ Text("Use YYYY-MM-DD format") }} else null,
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+
+                // Activity Level
+                ActivityLevelDropdown(
+                    value = uiState.activityLevel,
+                    onValueChange = { viewModel.updateActivityLevel(it) }
+                )
+
+                // View Weight History button
+                OutlinedButton(
+                    onClick = { navigator.push(WeightHistoryScreen()) },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("View Weight History")
+                    Spacer(Modifier.weight(1f))
+                    Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null)
+                }
+
+                HorizontalDivider()
+
                 // LLM Provider Selection
                 Text(
                     text = "LLM Provider",
@@ -231,6 +327,104 @@ class SettingsScreen : Screen {
                 ) {
                     Text("Save Settings")
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun UnitToggleButton(
+    options: List<String>,
+    selected: String,
+    onSelect: (String) -> Unit
+) {
+    Row {
+        options.forEach { option ->
+            FilterChip(
+                selected = selected == option,
+                onClick = { onSelect(option) },
+                label = { Text(option) },
+                modifier = Modifier.padding(horizontal = 2.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun SexDropdown(
+    value: String,
+    onValueChange: (String) -> Unit
+) {
+    val options = listOf("Male", "Female", "Other", "Prefer not to say")
+    var expanded by remember { mutableStateOf(false) }
+
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = it }
+    ) {
+        OutlinedTextField(
+            value = value,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text("Sex") },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            modifier = Modifier.fillMaxWidth().menuAnchor()
+        )
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            options.forEach { option ->
+                DropdownMenuItem(
+                    text = { Text(option) },
+                    onClick = {
+                        onValueChange(option)
+                        expanded = false
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ActivityLevelDropdown(
+    value: String,
+    onValueChange: (String) -> Unit
+) {
+    val options = listOf(
+        "Sedentary",
+        "Lightly Active",
+        "Moderately Active",
+        "Very Active",
+        "Extremely Active"
+    )
+    var expanded by remember { mutableStateOf(false) }
+
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = it }
+    ) {
+        OutlinedTextField(
+            value = value,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text("Activity Level") },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            modifier = Modifier.fillMaxWidth().menuAnchor()
+        )
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            options.forEach { option ->
+                DropdownMenuItem(
+                    text = { Text(option) },
+                    onClick = {
+                        onValueChange(option)
+                        expanded = false
+                    }
+                )
             }
         }
     }
