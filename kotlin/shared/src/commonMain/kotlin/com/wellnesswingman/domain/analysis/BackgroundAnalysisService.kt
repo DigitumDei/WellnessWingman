@@ -113,14 +113,15 @@ class DefaultBackgroundAnalysisService(
             }
 
             val detectedWeight = (result as? AnalysisInvocationResult.Success)?.detectedWeight
-            if (detectedWeight != null) {
-                saveDetectedWeight(
+            val savedWeight = if (detectedWeight != null) {
+                val saved = saveDetectedWeight(
                     entryId = entryId,
                     weight = detectedWeight,
                     recordedAt = entry.capturedAt
                 )
-            }
-            updateStatus(entryId, finalStatus, detectedWeight)
+                if (saved) detectedWeight else null
+            } else null
+            updateStatus(entryId, finalStatus, savedWeight)
 
         } catch (e: CancellationException) {
             Napier.i("Background analysis was cancelled for entry $entryId")
@@ -181,8 +182,8 @@ class DefaultBackgroundAnalysisService(
         entryId: Long,
         weight: DetectedWeight,
         recordedAt: Instant
-    ) {
-        try {
+    ): Boolean {
+        return try {
             weightHistoryRepository.addWeightRecord(
                 WeightRecord(
                     recordedAt = recordedAt,
@@ -195,8 +196,10 @@ class DefaultBackgroundAnalysisService(
             appSettingsRepository.setCurrentWeight(weight.value)
             appSettingsRepository.setWeightUnit(weight.unit)
             Napier.i("Auto-saved detected weight: ${weight.value} ${weight.unit} for entry $entryId")
+            true
         } catch (e: Exception) {
             Napier.e("Failed to auto-save detected weight for entry $entryId", e)
+            false
         }
     }
 

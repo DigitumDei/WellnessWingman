@@ -31,7 +31,7 @@ LIMIT 1;
 
 getWeightRecordsForRange:
 SELECT * FROM WeightRecord
-WHERE recordedAt >= ? AND recordedAt <= ?
+WHERE recordedAt >= ? AND recordedAt < ?
 ORDER BY recordedAt ASC;
 
 getAllWeightRecords:
