@@ -80,6 +80,7 @@ kotlin {
             dependencies {
                 implementation(libs.sqldelight.driver.android)
                 implementation(libs.ktor.client.cio)
+                implementation(libs.androidx.core.ktx)
                 implementation(libs.androidx.work.runtime)
             }
         }
