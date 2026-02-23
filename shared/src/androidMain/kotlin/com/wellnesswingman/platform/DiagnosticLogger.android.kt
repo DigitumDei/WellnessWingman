@@ -2,6 +2,7 @@ package com.wellnesswingman.platform
 
 import android.content.Context
 import android.os.Build
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -63,10 +64,22 @@ class DiagnosticLogger(private val context: Context) {
         appendLine("Free Memory: ${freeMemory}MB")
         appendLine()
 
-        // Application Logs
-        appendLine("--- Application Logs ---")
+        // Application Logs — current session (in-memory)
+        appendLine("--- Application Logs (Current Session) ---")
         appendLine()
         append(LogBuffer.getInstance().getLogsAsText())
+
+        // Previous sessions — read from disk
+        val logsDir = File(context.filesDir, "logs")
+        for (i in 1..2) {
+            val sessionFile = File(logsDir, "session_$i.log")
+            if (sessionFile.exists() && sessionFile.length() > 0) {
+                appendLine()
+                appendLine("--- Application Logs (Session -$i) ---")
+                appendLine()
+                append(sessionFile.readText())
+            }
+        }
     }
 
     fun shareDiagnostics(): String {
