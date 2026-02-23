@@ -1,6 +1,6 @@
 [versions]
 kotlin = "2.2.10"
-agp = "9.0.0"
+agp = "9.0.1"
 compose = "1.7.0"
 compose-compiler = "1.5.15"
 koin = "3.5.3"

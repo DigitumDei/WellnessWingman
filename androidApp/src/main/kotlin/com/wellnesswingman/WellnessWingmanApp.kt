@@ -21,7 +21,9 @@ class WellnessWingmanApp : Application() {
 
         // Initialize Napier logging with log buffer
         // LogBuffer handles both storing logs and outputting to Logcat
-        Napier.base(LogBuffer.getInstance())
+        val logBuffer = LogBuffer.getInstance()
+        logBuffer.initPersistentLogging(filesDir)
+        Napier.base(logBuffer)
 
         // Initialize Koin dependency injection
         val koinApp = startKoin {
