@@ -36,6 +36,17 @@ jobs:
       - name: Run tests
         run: ./gradlew :shared:desktopTest
 
+      - name: Generate coverage report
+        run: ./gradlew :shared:koverXmlReportDesktop
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: shared/build/reports/kover/reportDesktop.xml
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
       - name: Build APK
         run: ./gradlew assembleDebug
 
