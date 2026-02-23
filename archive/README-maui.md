@@ -16,6 +16,8 @@ WellnessWingman is a .NET MAUI companion app that lets you capture day-to-day he
 
 ## Getting Started
 
+> **Note:** Run these commands from the `archive/` directory.
+
 1. Install the .NET 10 preview workload for MAUI (see `.config/dotnet-tools.json` once available).
 2. Restore dependencies:
    ```bash

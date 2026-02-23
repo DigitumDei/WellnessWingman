@@ -62,8 +62,6 @@ gha-creds-*.json
 memory/
 
 # Local tooling
-package.json
-package-lock.json
 
 # Tooling
 healthhelper_design.db3

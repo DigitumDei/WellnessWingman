@@ -30,7 +30,7 @@ kotlin/
 
 ## Tech Stack
 
-- **Language:** Kotlin 2.1.0
+- **Language:** Kotlin 2.2.10
 - **UI Framework:** Compose Multiplatform 1.7.0
 - **Database:** SQLDelight 2.0.2
 - **Dependency Injection:** Koin 3.5.3
@@ -104,19 +104,19 @@ See [RUNNING_THE_APP.md](RUNNING_THE_APP.md) for comprehensive guide on:
 
 ```bash
 # Build Android debug APK
-.\gradlew.bat :androidApp:assembleDebug
+./gradlew :androidApp:assembleDebug
 
 # Run all unit tests (39 tests)
-.\gradlew.bat :shared:test
+./gradlew :shared:test
 
 # Generate code coverage report (HTML)
-.\gradlew.bat :shared:test :shared:koverHtmlReport
+./gradlew :shared:test :shared:koverHtmlReport
 
 # View coverage report
 # Opens: shared/build/reports/kover/html/index.html
 
 # Verify coverage meets threshold
-.\gradlew.bat :shared:koverVerify
+./gradlew :shared:koverVerify
 ```
 
 ## Database
@@ -153,7 +153,7 @@ The project follows clean architecture principles:
 
 - **Data Layer:** Repositories, database access, network clients
 - **Domain Layer:** Business logic, use cases, LLM orchestration
-- **UI Layer:** Compose Multiplatform screens and components (to be implemented)
+- **UI Layer:** Compose Multiplatform screens and components
 
 ## Migration from .NET MAUI
 
@@ -174,4 +174,4 @@ with UI and platform-specific implementations still in progress.
 
 ## License
 
-[Add license information]
+MIT License — see [LICENSE.txt](LICENSE.txt) for details.
