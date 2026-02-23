@@ -33,16 +33,13 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x gradlew
 
-      - name: Run tests
-        run: ./gradlew :shared:desktopTest
-
-      - name: Generate coverage report
-        run: ./gradlew :shared:koverXmlReportDesktop
+      - name: Run tests and generate coverage report
+        run: ./gradlew :shared:desktopTest :shared:koverXmlReport
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
         with:
-          files: shared/build/reports/kover/reportDesktop.xml
+          files: shared/build/reports/kover/report.xml
           fail_ci_if_error: false
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
