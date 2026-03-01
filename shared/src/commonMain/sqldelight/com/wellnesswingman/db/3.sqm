@@ -1,0 +1,4 @@
+-- Migration from version 3 to version 4
+-- Adds userComments column to DailySummary for user-authored day notes
+
+ALTER TABLE DailySummary ADD COLUMN userComments TEXT;

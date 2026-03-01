@@ -18,7 +18,8 @@ data class DailySummary(
     /**
      * Timestamp when the summary was generated. Used for outdated detection.
      */
-    val generatedAt: Instant? = null
+    val generatedAt: Instant? = null,
+    val userComments: String? = null
 )
 
 /**

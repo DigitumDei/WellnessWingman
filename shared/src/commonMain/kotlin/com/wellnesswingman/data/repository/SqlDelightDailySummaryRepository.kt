@@ -57,7 +57,8 @@ class SqlDelightDailySummaryRepository(
             summaryDate = summary.summaryDate.toEpochDays().toLong(),
             highlights = summary.highlights,
             recommendations = summary.recommendations,
-            generatedAt = summary.generatedAt?.toEpochMilliseconds()
+            generatedAt = summary.generatedAt?.toEpochMilliseconds(),
+            userComments = summary.userComments
         )
         queries.lastInsertRowId().executeAsOne()
     }
@@ -74,6 +75,11 @@ class SqlDelightDailySummaryRepository(
     ) = withContext(Dispatchers.IO) {
         queries.updateSummaryByDate(highlights, recommendations, null, date.toEpochDays().toLong())
     }
+
+    override suspend fun updateUserComments(date: LocalDate, comments: String?) =
+        withContext(Dispatchers.IO) {
+            queries.updateUserComments(comments, date.toEpochDays().toLong())
+        }
 
     override suspend fun deleteSummary(id: Long) = withContext(Dispatchers.IO) {
         queries.deleteSummary(id)
@@ -94,7 +100,8 @@ class SqlDelightDailySummaryRepository(
             summaryDate = summary.summaryDate.toEpochDays().toLong(),
             highlights = summary.highlights,
             recommendations = summary.recommendations,
-            generatedAt = summary.generatedAt?.toEpochMilliseconds()
+            generatedAt = summary.generatedAt?.toEpochMilliseconds(),
+            userComments = summary.userComments
         )
     }
 
@@ -108,7 +115,8 @@ class SqlDelightDailySummaryRepository(
             summaryDate = LocalDate.fromEpochDays(summaryDate.toInt()),
             highlights = highlights,
             recommendations = recommendations,
-            generatedAt = generatedAt?.let { Instant.fromEpochMilliseconds(it) }
+            generatedAt = generatedAt?.let { Instant.fromEpochMilliseconds(it) },
+            userComments = userComments
         )
     }
 }
