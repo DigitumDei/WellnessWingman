@@ -37,7 +37,9 @@ import com.wellnesswingman.ui.screens.photo.createPhotoReviewScreen
 import com.wellnesswingman.ui.screens.settings.SettingsScreen
 import com.wellnesswingman.ui.screens.summary.DailySummaryScreen
 import com.wellnesswingman.util.DateTimeUtil
+import kotlinx.datetime.Clock
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 
 @Composable
 expect fun ThumbnailDisplay(imageBytes: ByteArray?, modifier: Modifier = Modifier)
@@ -101,7 +103,7 @@ class MainScreen : Screen {
                     isGeneratingSummary = isGeneratingSummary,
                     onEntryClick = { entry -> navigator.push(EntryDetailScreen(entry.entryId)) },
                     onGenerateSummary = { viewModel.generateDailySummary() },
-                    onViewSummary = { navigator.push(DailySummaryScreen()) },
+                    onViewSummary = { navigator.push(DailySummaryScreen(Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date)) },
                     onRefresh = { viewModel.refresh() },
                     isRefreshing = isRefreshing,
                     modifier = Modifier.padding(paddingValues)
