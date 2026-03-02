@@ -8,6 +8,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -33,7 +34,9 @@ data class DailySummaryScreen(val date: LocalDate) : Screen {
         val isGenerating by viewModel.isGenerating.collectAsState()
         val commentsState by viewModel.commentsState.collectAsState()
 
-        viewModel.loadSummary(date)
+        LaunchedEffect(date) {
+            viewModel.loadSummary(date)
+        }
 
         Scaffold(
             topBar = {

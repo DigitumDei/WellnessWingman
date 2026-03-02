@@ -97,23 +97,9 @@ class DailySummaryViewModel(
                 _uiState.value = DailySummaryUiState.Generating(currentDate)
 
                 when (val result = dailySummaryService.generateSummary(currentDate)) {
-                    is DailySummaryResult.Success -> {
-                        if (existingComments != null) {
-                            dailySummaryRepository.updateUserComments(currentDate, existingComments)
-                            _uiState.value = DailySummaryUiState.Success(
-                                result.summary.copy(userComments = existingComments),
-                                currentDate
-                            )
-                        } else {
-                            _uiState.value = DailySummaryUiState.Success(result.summary, currentDate)
-                        }
-                    }
-                    is DailySummaryResult.NoEntries -> {
-                        _uiState.value = DailySummaryUiState.NoEntries(currentDate)
-                    }
-                    is DailySummaryResult.Error -> {
-                        _uiState.value = DailySummaryUiState.Error(result.message)
-                    }
+                    is DailySummaryResult.Success -> handleSummarySuccess(result, existingComments)
+                    is DailySummaryResult.NoEntries -> _uiState.value = DailySummaryUiState.NoEntries(currentDate)
+                    is DailySummaryResult.Error -> _uiState.value = DailySummaryUiState.Error(result.message)
                 }
             } catch (e: Exception) {
                 Napier.e("Failed to generate summary", e)
@@ -132,23 +118,9 @@ class DailySummaryViewModel(
                 _uiState.value = DailySummaryUiState.Generating(currentDate)
 
                 when (val result = dailySummaryService.regenerateSummary(currentDate)) {
-                    is DailySummaryResult.Success -> {
-                        if (existingComments != null) {
-                            dailySummaryRepository.updateUserComments(currentDate, existingComments)
-                            _uiState.value = DailySummaryUiState.Success(
-                                result.summary.copy(userComments = existingComments),
-                                currentDate
-                            )
-                        } else {
-                            _uiState.value = DailySummaryUiState.Success(result.summary, currentDate)
-                        }
-                    }
-                    is DailySummaryResult.NoEntries -> {
-                        _uiState.value = DailySummaryUiState.NoEntries(currentDate)
-                    }
-                    is DailySummaryResult.Error -> {
-                        _uiState.value = DailySummaryUiState.Error(result.message)
-                    }
+                    is DailySummaryResult.Success -> handleSummarySuccess(result, existingComments)
+                    is DailySummaryResult.NoEntries -> _uiState.value = DailySummaryUiState.NoEntries(currentDate)
+                    is DailySummaryResult.Error -> _uiState.value = DailySummaryUiState.Error(result.message)
                 }
             } catch (e: Exception) {
                 Napier.e("Failed to regenerate summary", e)
@@ -156,6 +128,18 @@ class DailySummaryViewModel(
             } finally {
                 _isGenerating.value = false
             }
+        }
+    }
+
+    private suspend fun handleSummarySuccess(result: DailySummaryResult.Success, existingComments: String?) {
+        if (existingComments != null) {
+            dailySummaryRepository.updateUserComments(currentDate, existingComments)
+            _uiState.value = DailySummaryUiState.Success(
+                result.summary.copy(userComments = existingComments),
+                currentDate
+            )
+        } else {
+            _uiState.value = DailySummaryUiState.Success(result.summary, currentDate)
         }
     }
 
@@ -269,7 +253,7 @@ class DailySummaryViewModel(
         } catch (e: Exception) {
             Napier.e("Failed to transcribe audio", e)
             _commentsState.update {
-                it.copy(transcriptionError = "Transcription failed: ${e.message ?: "Unknown error"}")
+                it.copy(isTranscribing = false, transcriptionError = "Transcription failed: ${e.message ?: "Unknown error"}")
             }
         }
     }
