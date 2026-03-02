@@ -1,4 +1,15 @@
 -- Migration from version 3 to version 4
 -- Adds userComments column to DailySummary for user-authored day notes
 
+-- DailySummary was created in the initial schema (v1); redeclared here so SQLDelight's
+-- code generator can resolve the table reference below (IF NOT EXISTS is a no-op at runtime).
+CREATE TABLE IF NOT EXISTS DailySummary (
+    summaryId INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    externalId TEXT,
+    summaryDate INTEGER NOT NULL,
+    highlights TEXT NOT NULL DEFAULT '',
+    recommendations TEXT NOT NULL DEFAULT '',
+    generatedAt INTEGER
+);
+
 ALTER TABLE DailySummary ADD COLUMN userComments TEXT;
