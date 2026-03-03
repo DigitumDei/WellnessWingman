@@ -96,7 +96,7 @@ class DailySummaryViewModel(
 
                 _uiState.value = DailySummaryUiState.Generating(currentDate)
 
-                when (val result = dailySummaryService.generateSummary(currentDate)) {
+                when (val result = dailySummaryService.generateSummary(currentDate, userComments = existingComments)) {
                     is DailySummaryResult.Success -> handleSummarySuccess(result, existingComments)
                     is DailySummaryResult.NoEntries -> _uiState.value = DailySummaryUiState.NoEntries(currentDate)
                     is DailySummaryResult.Error -> _uiState.value = DailySummaryUiState.Error(result.message)
@@ -117,7 +117,7 @@ class DailySummaryViewModel(
                 val existingComments = _commentsState.value.text.takeIf { it.isNotBlank() }
                 _uiState.value = DailySummaryUiState.Generating(currentDate)
 
-                when (val result = dailySummaryService.regenerateSummary(currentDate)) {
+                when (val result = dailySummaryService.regenerateSummary(currentDate, userComments = existingComments)) {
                     is DailySummaryResult.Success -> handleSummarySuccess(result, existingComments)
                     is DailySummaryResult.NoEntries -> _uiState.value = DailySummaryUiState.NoEntries(currentDate)
                     is DailySummaryResult.Error -> _uiState.value = DailySummaryUiState.Error(result.message)

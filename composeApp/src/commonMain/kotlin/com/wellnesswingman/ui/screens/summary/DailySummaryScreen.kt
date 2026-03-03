@@ -11,6 +11,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -81,7 +84,6 @@ data class DailySummaryScreen(val date: LocalDate) : Screen {
                     isGenerating = isGenerating,
                     commentsState = commentsState,
                     onCommentsChange = viewModel::updateCommentsText,
-                    onSaveComments = viewModel::saveComments,
                     onToggleRecording = viewModel::toggleRecording,
                     modifier = Modifier.padding(paddingValues)
                 )
@@ -179,19 +181,29 @@ fun NoSummaryState(
     isGenerating: Boolean,
     commentsState: CommentsState,
     onCommentsChange: (String) -> Unit,
-    onSaveComments: () -> Unit,
     onToggleRecording: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+    var showDialog by remember { mutableStateOf(false) }
+
+    if (showDialog) {
+        GenerateWithNotesDialog(
+            commentsState = commentsState,
+            onCommentsChange = onCommentsChange,
+            onToggleRecording = onToggleRecording,
+            onGenerate = {
+                showDialog = false
+                onGenerate()
+            },
+            onDismiss = { showDialog = false }
+        )
+    }
+
+    Box(
+        modifier = modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
     ) {
         Column(
-            modifier = Modifier.fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
@@ -200,20 +212,81 @@ fun NoSummaryState(
                 style = MaterialTheme.typography.titleMedium
             )
             Button(
-                onClick = onGenerate,
+                onClick = { showDialog = true },
                 enabled = !isGenerating
             ) {
                 Text("Generate Summary")
             }
         }
-
-        UserCommentsSection(
-            commentsState = commentsState,
-            onCommentsChange = onCommentsChange,
-            onSaveComments = onSaveComments,
-            onToggleRecording = onToggleRecording
-        )
     }
+}
+
+@Composable
+fun GenerateWithNotesDialog(
+    commentsState: CommentsState,
+    onCommentsChange: (String) -> Unit,
+    onToggleRecording: () -> Unit,
+    onGenerate: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val busy = commentsState.isRecording || commentsState.isTranscribing
+
+    AlertDialog(
+        onDismissRequest = { if (!busy) onDismiss() },
+        title = { Text("Generate Summary") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = "Optionally add a note about your day before generating.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                OutlinedTextField(
+                    value = commentsState.text,
+                    onValueChange = onCommentsChange,
+                    label = { Text("Notes (optional)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 3,
+                    maxLines = 6,
+                    enabled = !busy
+                )
+
+                if (commentsState.transcriptionError != null) {
+                    Text(
+                        text = commentsState.transcriptionError,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+
+                VoiceRecordingButton(
+                    onToggleRecording = onToggleRecording,
+                    isRecording = commentsState.isRecording,
+                    isTranscribing = commentsState.isTranscribing,
+                    recordingDurationSeconds = commentsState.recordingDurationSeconds,
+                    enabled = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onGenerate,
+                enabled = !busy
+            ) {
+                Text("Generate")
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
+                enabled = !busy
+            ) {
+                Text("Cancel")
+            }
+        }
+    )
 }
 
 @Composable
