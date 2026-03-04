@@ -197,15 +197,19 @@ class WeekViewModel(
                 val existing = weeklySummaryRepository.getSummaryForWeek(weekStart)
                 if (existing != null) {
                     weeklySummaryRepository.updateUserComments(weekStart, text.takeIf { it.isNotBlank() })
-                    commentsManager.markSaved()
+                } else if (text.isNotBlank()) {
+                    weeklySummaryRepository.insertSummary(
+                        WeeklySummary(weekStartDate = weekStart, userComments = text)
+                    )
+                }
+                commentsManager.markSaved()
 
-                    // Update in-memory state if present
-                    val state = _weeklySummaryState.value
-                    if (state is WeeklySummaryState.HasSummary) {
-                        _weeklySummaryState.value = state.copy(
-                            summary = state.summary.copy(userComments = text.takeIf { it.isNotBlank() })
-                        )
-                    }
+                // Update in-memory state if present
+                val state = _weeklySummaryState.value
+                if (state is WeeklySummaryState.HasSummary) {
+                    _weeklySummaryState.value = state.copy(
+                        summary = state.summary.copy(userComments = text.takeIf { it.isNotBlank() })
+                    )
                 }
             } catch (e: Exception) {
                 Napier.e("Failed to save weekly comments", e)

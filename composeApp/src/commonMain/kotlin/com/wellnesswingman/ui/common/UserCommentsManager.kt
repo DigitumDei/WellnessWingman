@@ -119,8 +119,6 @@ class UserCommentsManager(
             }
         } catch (e: Exception) {
             Napier.e("Failed to stop recording", e)
-        } finally {
-            _commentsState.update { it.copy(isTranscribing = false) }
         }
     }
 
