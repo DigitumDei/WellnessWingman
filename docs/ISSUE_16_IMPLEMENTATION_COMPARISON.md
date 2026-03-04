@@ -71,22 +71,23 @@ Issue #16: Historical View Navigation with Arrow Controls and Hierarchical Drill
 - Month View shows dots per day (less detailed, no explicit counts)
 - Year View shows only a single aggregate count per month cell
 
-### 6. Historical Summary Storage — Not Implemented
+### 6. Historical Summary Storage — Partial
 
 **Issue #16 links to issue #26 (Summary Generation and Storage):**
 - Summaries should be generated and persisted for each period
 
 **Current implementation:**
-- Summaries are generated on-demand and not stored/cached
+- **Weekly** summaries are persisted and cached: `WeeklySummaryService.generateSummary` checks `WeeklySummaryRepository.getSummaryForWeek()` first and returns the cached result; new summaries are stored via `insertSummary()`. `WeekViewModel.checkForExistingSummary` reads from the repository on every week load.
+- **Monthly and yearly** summaries are not generated or stored — no equivalent service or repository exists for those periods.
 
 ---
 
 ## Summary
 
-The navigation skeleton (calendar icon → Week → Month → Year → Day Detail) is in place with ViewModels and repositories wired up. The main gaps are:
+Only the first leg of the navigation skeleton is wired: `MainScreen → WeekViewScreen → DayDetailScreen`. `MonthViewScreen` and `YearViewScreen` are defined with ViewModels and repositories but are **unreachable** — no entry point in the current navigation graph pushes them. The main gaps are:
 
-1. **Month View** needs to be redesigned from a day-grid to a week-card layout
-2. **Cross-scale navigation arrows** (moving up/down the hierarchy from within a view) are missing
-3. **Year → Month navigation** is broken
-4. **AI summaries** for Month and Year views are not implemented
-5. **Summary persistence** (issue #26) is not implemented
+1. **MonthViewScreen and YearViewScreen** need to be integrated into the navigation graph (currently orphaned)
+2. **Month View** needs to be redesigned from a day-grid to a week-card layout
+3. **Cross-scale navigation arrows** (moving up/down the hierarchy from within a view) are missing
+4. **AI summaries** for Month and Year views are not implemented (weekly summaries are already persisted correctly)
+5. **Monthly and yearly summary persistence** (issue #26) is not implemented
