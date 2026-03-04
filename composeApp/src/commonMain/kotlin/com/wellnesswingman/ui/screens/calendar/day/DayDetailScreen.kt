@@ -2,6 +2,7 @@ package com.wellnesswingman.ui.screens.calendar.day
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -77,10 +78,29 @@ data class DayDetailScreen(val date: LocalDate) : Screen {
                     onNextDay = { navigator.replace(DayDetailScreen(date.plus(1, DateTimeUnit.DAY))) },
                     modifier = Modifier.padding(paddingValues)
                 )
-                is DayDetailUiState.Empty -> EmptyState(
-                    message = "No entries for ${DateTimeUtil.formatDate(date)}",
-                    modifier = Modifier.padding(paddingValues)
-                )
+                is DayDetailUiState.Empty -> Column(
+                    modifier = Modifier.padding(paddingValues).fillMaxSize(),
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(onClick = { navigator.replace(DayDetailScreen(date.plus(-1, DateTimeUnit.DAY))) }) {
+                            Icon(Icons.Default.ChevronLeft, contentDescription = "Previous Day")
+                        }
+                        Text(
+                            text = DateTimeUtil.formatDateFull(date),
+                            style = MaterialTheme.typography.headlineSmall
+                        )
+                        IconButton(onClick = { navigator.replace(DayDetailScreen(date.plus(1, DateTimeUnit.DAY))) }) {
+                            Icon(Icons.Default.ChevronRight, contentDescription = "Next Day")
+                        }
+                    }
+                    EmptyState(
+                        message = "No entries for ${DateTimeUtil.formatDate(date)}"
+                    )
+                }
                 is DayDetailUiState.Error -> ErrorMessage(
                     message = state.message,
                     onRetry = { viewModel.loadDay(date) },
