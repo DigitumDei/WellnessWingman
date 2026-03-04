@@ -15,6 +15,7 @@ interface WeeklySummaryRepository {
     suspend fun insertSummary(summary: WeeklySummary): Long
     suspend fun updateSummary(summary: WeeklySummary)
     suspend fun updateSummaryByWeek(weekStart: LocalDate, summary: WeeklySummary)
+    suspend fun updateUserComments(weekStart: LocalDate, comments: String?)
     suspend fun deleteSummary(id: Long)
     suspend fun deleteSummaryByWeek(weekStart: LocalDate)
     suspend fun deleteOldSummaries(beforeDate: LocalDate)

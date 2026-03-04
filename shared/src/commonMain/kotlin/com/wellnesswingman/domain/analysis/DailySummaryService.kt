@@ -9,7 +9,9 @@ import com.wellnesswingman.data.model.NutritionalBalance
 import com.wellnesswingman.data.model.NutritionTotals
 import com.wellnesswingman.data.model.ProcessingStatus
 import com.wellnesswingman.data.model.TrackedEntry
+import com.wellnesswingman.data.model.analysis.ExerciseAnalysisResult
 import com.wellnesswingman.data.model.analysis.MealAnalysisResult
+import com.wellnesswingman.data.model.analysis.OtherAnalysisResult
 import com.wellnesswingman.data.model.analysis.SleepAnalysisResult
 import com.wellnesswingman.data.model.analysis.UnifiedAnalysisResult
 import com.wellnesswingman.data.repository.DailySummaryRepository
@@ -75,9 +77,10 @@ class DailySummaryService(
                 return DailySummaryResult.NoEntries
             }
 
-            // Get analyses for the entries and build entry references
+            // Get analyses for the entries and build entry references + detail lines
             val mealAnalyses = mutableListOf<MealAnalysisResult>()
             val entryReferences = mutableListOf<DailySummaryEntryReference>()
+            val entryDetailLines = mutableListOf<String>()
             var totalSleepHours: Double? = null
 
             for (entry in completedEntries) {
@@ -91,20 +94,30 @@ class DailySummaryService(
 
                         when (entry.entryType) {
                             EntryType.MEAL -> {
-                                unifiedResult.mealAnalysis?.let { mealAnalyses.add(it) }
-                                entrySummary = unifiedResult.mealAnalysis?.healthInsights?.summary
+                                unifiedResult.mealAnalysis?.let { meal ->
+                                    mealAnalyses.add(meal)
+                                    entrySummary = meal.healthInsights?.summary
+                                    entryDetailLines.add(buildMealDetailLine(entry, meal))
+                                }
                             }
                             EntryType.SLEEP -> {
                                 unifiedResult.sleepAnalysis?.let { sleep ->
                                     totalSleepHours = (totalSleepHours ?: 0.0) + (sleep.durationHours ?: 0.0)
                                     entrySummary = sleep.qualitySummary
+                                    entryDetailLines.add(buildSleepDetailLine(entry, sleep))
                                 }
                             }
                             EntryType.EXERCISE -> {
-                                entrySummary = unifiedResult.exerciseAnalysis?.insights?.summary
+                                unifiedResult.exerciseAnalysis?.let { exercise ->
+                                    entrySummary = exercise.insights?.summary
+                                    entryDetailLines.add(buildExerciseDetailLine(entry, exercise))
+                                }
                             }
                             else -> {
-                                entrySummary = unifiedResult.otherAnalysis?.summary
+                                unifiedResult.otherAnalysis?.let { other ->
+                                    entrySummary = other.summary
+                                    entryDetailLines.add(buildOtherDetailLine(entry, other))
+                                }
                             }
                         }
                     } catch (e: Exception) {
@@ -114,6 +127,7 @@ class DailySummaryService(
                                 val mealResult = json.decodeFromString<MealAnalysisResult>(analysis.insightsJson)
                                 mealAnalyses.add(mealResult)
                                 entrySummary = mealResult.healthInsights?.summary
+                                entryDetailLines.add(buildMealDetailLine(entry, mealResult))
                             }
                         } catch (e2: Exception) {
                             Napier.w("Failed to parse analysis for entry ${entry.entryId}: ${e.message}")
@@ -164,7 +178,8 @@ class DailySummaryService(
                 sleepCount = sleepCount,
                 sleepHours = totalSleepHours,
                 weightRecords = weightRecords,
-                userComments = userComments
+                userComments = userComments,
+                entryDetailLines = entryDetailLines
             )
 
             // Generate summary using LLM
@@ -174,12 +189,34 @@ class DailySummaryService(
             // Parse the result
             val (highlights, recommendations) = parseHighlightsAndRecommendations(result.content)
 
+            // Build payload
+            val payload = DailySummaryPayload(
+                date = date.toString(),
+                summary = highlights.firstOrNull() ?: "Summary generated",
+                highlights = highlights,
+                recommendations = recommendations,
+                nutritionTotals = nutritionTotals,
+                balance = balance,
+                entriesIncluded = entryReferences,
+                mealCount = mealCount,
+                exerciseCount = exerciseCount,
+                sleepHours = totalSleepHours
+            )
+
+            val payloadJson = try {
+                json.encodeToString(DailySummaryPayload.serializer(), payload)
+            } catch (e: Exception) {
+                Napier.w("Failed to serialize daily payload: ${e.message}")
+                null
+            }
+
             // Save the summary with generation timestamp
             val summary = DailySummary(
                 summaryDate = date,
                 highlights = highlights.joinToString("\n"),
                 recommendations = recommendations.joinToString("\n"),
-                generatedAt = Clock.System.now()
+                generatedAt = Clock.System.now(),
+                payloadJson = payloadJson
             )
 
             val summaryId = dailySummaryRepository.insertSummary(summary)
@@ -188,18 +225,7 @@ class DailySummaryService(
 
             return DailySummaryResult.Success(
                 summary = summary.copy(summaryId = summaryId),
-                payload = DailySummaryPayload(
-                    date = date.toString(),
-                    summary = highlights.firstOrNull() ?: "Summary generated",
-                    highlights = highlights,
-                    recommendations = recommendations,
-                    nutritionTotals = nutritionTotals,
-                    balance = balance,
-                    entriesIncluded = entryReferences,
-                    mealCount = mealCount,
-                    exerciseCount = exerciseCount,
-                    sleepHours = totalSleepHours
-                )
+                payload = payload
             )
 
         } catch (e: Exception) {
@@ -269,6 +295,60 @@ class DailySummaryService(
         )
     }
 
+    private fun buildMealDetailLine(entry: TrackedEntry, meal: MealAnalysisResult): String {
+        val sb = StringBuilder("  - Meal")
+        if (meal.foodItems.isNotEmpty()) {
+            sb.append(": ${meal.foodItems.joinToString(", ") { it.name }}")
+        }
+        meal.nutrition?.let { n ->
+            val parts = listOfNotNull(
+                n.totalCalories?.let { "${it.toInt()} kcal" },
+                n.protein?.let { "${it.toInt()}g protein" },
+                n.carbohydrates?.let { "${it.toInt()}g carbs" },
+                n.fat?.let { "${it.toInt()}g fat" }
+            )
+            if (parts.isNotEmpty()) sb.append(" [${parts.joinToString(", ")}]")
+        }
+        meal.healthInsights?.summary?.let { sb.append("\n    Health: $it") }
+        entry.userNotes?.takeIf { it.isNotBlank() }?.let { sb.append("\n    User note: $it") }
+        return sb.toString()
+    }
+
+    private fun buildExerciseDetailLine(entry: TrackedEntry, exercise: ExerciseAnalysisResult): String {
+        val sb = StringBuilder("  - Exercise")
+        exercise.activityType?.let { sb.append(": $it") }
+        val metrics = exercise.metrics
+        val parts = listOfNotNull(
+            metrics.durationMinutes?.let { "${it.toInt()} min" },
+            metrics.distance?.let { d -> metrics.distanceUnit?.let { "$d $it" } ?: "$d" },
+            metrics.calories?.let { "${it.toInt()} kcal burned" },
+            metrics.averageHeartRate?.let { "${it.toInt()} bpm avg HR" }
+        )
+        if (parts.isNotEmpty()) sb.append(" [${parts.joinToString(", ")}]")
+        exercise.insights?.summary?.let { sb.append("\n    Insights: $it") }
+        entry.userNotes?.takeIf { it.isNotBlank() }?.let { sb.append("\n    User note: $it") }
+        return sb.toString()
+    }
+
+    private fun buildSleepDetailLine(entry: TrackedEntry, sleep: SleepAnalysisResult): String {
+        val sb = StringBuilder("  - Sleep")
+        sleep.durationHours?.let { sb.append(": ${it.toInt()}h") }
+        sleep.qualitySummary?.let { sb.append("\n    Quality: $it") }
+        if (sleep.environmentNotes.isNotEmpty()) {
+            sb.append("\n    Environment: ${sleep.environmentNotes.joinToString("; ")}")
+        }
+        entry.userNotes?.takeIf { it.isNotBlank() }?.let { sb.append("\n    User note: $it") }
+        return sb.toString()
+    }
+
+    private fun buildOtherDetailLine(entry: TrackedEntry, other: OtherAnalysisResult): String {
+        val sb = StringBuilder("  - Other")
+        other.summary?.let { sb.append(": $it") }
+        if (other.tags.isNotEmpty()) sb.append(" [${other.tags.joinToString(", ")}]")
+        entry.userNotes?.takeIf { it.isNotBlank() }?.let { sb.append("\n    User note: $it") }
+        return sb.toString()
+    }
+
     /**
      * Builds a prompt for daily summary generation.
      */
@@ -282,8 +362,13 @@ class DailySummaryService(
         sleepCount: Int,
         sleepHours: Double?,
         weightRecords: List<WeightRecord> = emptyList(),
-        userComments: String? = null
+        userComments: String? = null,
+        entryDetailLines: List<String> = emptyList()
     ): String {
+        val detailedEntryLog = if (entryDetailLines.isNotEmpty()) {
+            "\nDetailed Entry Log:\n${entryDetailLines.joinToString("\n")}"
+        } else ""
+
         return """
 Generate a daily health summary for $date. Return a JSON object with the following structure:
 
@@ -333,12 +418,14 @@ Nutrition Summary:
 - Carbohydrates: ${nutritionTotals.carbs.toInt()}g
 - Fat: ${nutritionTotals.fat.toInt()}g
 - Fiber: ${nutritionTotals.fiber.toInt()}g
+$detailedEntryLog
 
 ${if (!userComments.isNullOrBlank()) "User's note about their day:\n$userComments\n\n" else ""}Guidelines:
 1. Provide 2-4 key insights about the day's nutrition and activities
 2. Provide 2-3 specific, actionable recommendations for tomorrow
 3. Keep the tone positive and encouraging
-4. Focus on progress and achievable goals${if (!userComments.isNullOrBlank()) "\n5. Incorporate the user's note into your insights and recommendations where relevant" else ""}
+4. Focus on progress and achievable goals
+5. Incorporate individual entry notes from the user where relevant${if (!userComments.isNullOrBlank()) "\n6. Incorporate the user's note into your insights and recommendations where relevant" else ""}
 
 Return ONLY the JSON object.
         """.trimIndent()

@@ -58,7 +58,8 @@ class SqlDelightDailySummaryRepository(
             highlights = summary.highlights,
             recommendations = summary.recommendations,
             generatedAt = summary.generatedAt?.toEpochMilliseconds(),
-            userComments = summary.userComments
+            userComments = summary.userComments,
+            payloadJson = summary.payloadJson
         )
         queries.lastInsertRowId().executeAsOne()
     }
@@ -101,7 +102,8 @@ class SqlDelightDailySummaryRepository(
             highlights = summary.highlights,
             recommendations = summary.recommendations,
             generatedAt = summary.generatedAt?.toEpochMilliseconds(),
-            userComments = summary.userComments
+            userComments = summary.userComments,
+            payloadJson = summary.payloadJson
         )
     }
 
@@ -116,7 +118,8 @@ class SqlDelightDailySummaryRepository(
             highlights = highlights,
             recommendations = recommendations,
             generatedAt = generatedAt?.let { Instant.fromEpochMilliseconds(it) },
-            userComments = userComments
+            userComments = userComments,
+            payloadJson = payloadJson
         )
     }
 }
