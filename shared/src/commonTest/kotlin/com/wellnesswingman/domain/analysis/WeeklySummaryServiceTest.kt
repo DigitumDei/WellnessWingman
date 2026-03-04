@@ -502,6 +502,123 @@ class WeeklySummaryServiceTest {
     }
 
     @Test
+    fun `generateSummary handles weight repository exception and still succeeds`() = runTest {
+        val weekStart = LocalDate(2025, 3, 1)
+        val weeklyRepo = FakeWeeklySummaryRepository()
+        val throwingWeightRepo = object : WeightHistoryRepository {
+            override suspend fun getWeightHistory(startDate: Instant, endDate: Instant): List<WeightRecord> =
+                throw RuntimeException("Weight DB error")
+            override suspend fun addWeightRecord(record: WeightRecord) = 1L
+            override suspend fun getLatestWeightRecord() = null
+            override suspend fun getAllWeightRecords() = emptyList<WeightRecord>()
+            override suspend fun deleteWeightRecord(recordId: Long) {}
+            override suspend fun nullifyRelatedEntryId(entryId: Long) {}
+            override suspend fun upsertWeightRecord(record: WeightRecord) {}
+        }
+
+        val service = WeeklySummaryService(
+            trackedEntryRepository = FakeTrackedEntryRepository(
+                listOf(makeCompletedEntry(1, EntryType.MEAL))
+            ),
+            weeklySummaryRepository = weeklyRepo,
+            dailySummaryRepository = FakeDailySummaryRepository(),
+            llmClientFactory = makeLlmClientFactory(hasKey = true),
+            weightHistoryRepository = throwingWeightRepo
+        )
+
+        val result = service.generateSummary(weekStart)
+
+        assertIs<WeeklySummaryResult.Success>(result)
+    }
+
+    @Test
+    fun `generateSummary with all-blank daily summaries produces empty context`() = runTest {
+        // Both highlights and recommendations blank → mapNotNull returns null → summaryLines is ""
+        val weekStart = LocalDate(2025, 3, 1)
+        val blankSummary = DailySummary(
+            summaryDate = LocalDate(2025, 3, 1),
+            highlights = "   ",
+            recommendations = ""
+        )
+        val weeklyRepo = FakeWeeklySummaryRepository()
+
+        val service = WeeklySummaryService(
+            trackedEntryRepository = FakeTrackedEntryRepository(
+                listOf(makeCompletedEntry(1, EntryType.MEAL))
+            ),
+            weeklySummaryRepository = weeklyRepo,
+            dailySummaryRepository = FakeDailySummaryRepository(listOf(blankSummary)),
+            llmClientFactory = makeLlmClientFactory(hasKey = true),
+            weightHistoryRepository = FakeWeightHistoryRepository()
+        )
+
+        val result = service.generateSummary(weekStart)
+
+        assertIs<WeeklySummaryResult.Success>(result)
+        assertEquals(1, weeklyRepo.inserted.size)
+    }
+
+    @Test
+    fun `generateSummary text fallback handles insight keyword and numbered and bullet patterns`() = runTest {
+        // Tests: "insight" keyword → inHighlights, numbered list ^\\d+\\., bullet •, recommendation keyword
+        val response = """
+            Insights:
+            1. Consistent nutrition throughout the week
+            2. Regular exercise maintained
+            Recommendations:
+            • Increase hydration
+            • Prioritize sleep
+        """.trimIndent()
+
+        val weeklyRepo = FakeWeeklySummaryRepository()
+        val service = WeeklySummaryService(
+            trackedEntryRepository = FakeTrackedEntryRepository(
+                listOf(makeCompletedEntry(1, EntryType.MEAL))
+            ),
+            weeklySummaryRepository = weeklyRepo,
+            dailySummaryRepository = FakeDailySummaryRepository(),
+            llmClientFactory = makeLlmClientFactory(hasKey = true, response = response),
+            weightHistoryRepository = FakeWeightHistoryRepository()
+        )
+
+        val result = service.generateSummary(LocalDate(2025, 3, 1))
+
+        assertIs<WeeklySummaryResult.Success>(result)
+        val success = result as WeeklySummaryResult.Success
+        assertTrue(success.highlightsList.isNotEmpty())
+        assertTrue(success.recommendationsList.isNotEmpty())
+    }
+
+    @Test
+    fun `generateSummary text fallback with no patterns applies content and default fallbacks`() = runTest {
+        // No JSON braces, no insight/recommendation/bullet lines
+        // → highlights.isEmpty() → content.take(200)
+        // → recommendations.isEmpty() → "Keep tracking your health activities!"
+        val response = "Unable to generate a weekly summary at this time."
+
+        val weeklyRepo = FakeWeeklySummaryRepository()
+        val service = WeeklySummaryService(
+            trackedEntryRepository = FakeTrackedEntryRepository(
+                listOf(makeCompletedEntry(1, EntryType.MEAL))
+            ),
+            weeklySummaryRepository = weeklyRepo,
+            dailySummaryRepository = FakeDailySummaryRepository(),
+            llmClientFactory = makeLlmClientFactory(hasKey = true, response = response),
+            weightHistoryRepository = FakeWeightHistoryRepository()
+        )
+
+        val result = service.generateSummary(LocalDate(2025, 3, 1))
+
+        assertIs<WeeklySummaryResult.Success>(result)
+        val success = result as WeeklySummaryResult.Success
+        // Fallback: highlights gets first 200 chars of response
+        assertTrue(success.highlightsList.isNotEmpty())
+        // Fallback: recommendations gets "Keep tracking your health activities!"
+        assertTrue(success.recommendationsList.isNotEmpty())
+        assertTrue(success.recommendationsList.any { it.contains("tracking", ignoreCase = true) })
+    }
+
+    @Test
     fun `generateSummary with multiple weight records calculates change from first to last`() = runTest {
         val weekStart = LocalDate(2025, 3, 1)
         val baseTime = Clock.System.now().toEpochMilliseconds()

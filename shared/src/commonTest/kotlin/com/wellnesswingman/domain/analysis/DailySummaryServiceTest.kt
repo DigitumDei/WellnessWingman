@@ -601,4 +601,422 @@ class DailySummaryServiceTest {
 
         assertIs<DailySummaryResult.Success>(result)
     }
+
+    // ── calculateBalance branch coverage ────────────────────────────────────
+
+    @Test
+    fun `generateSummary exercise-only entry hits no-meals timing and null variety`() = runTest {
+        // mealCount == 0 → timing = "No meals logged", variety = null
+        // macroCalories == 0 → macroBalance = null
+        val entry = makeCompletedEntry(15, EntryType.EXERCISE)
+        val exerciseJson = makeUnifiedJson(UnifiedAnalysisResult(
+            exerciseAnalysis = ExerciseAnalysisResult(
+                activityType = "Walking",
+                metrics = ExerciseMetrics(durationMinutes = 30.0)
+            )
+        ))
+        val llmResponse = """{"insights":["Active day"],"recommendations":["Add meals"]}"""
+
+        val service = DailySummaryService(
+            trackedEntryRepository = FakeTrackedEntryRepository(listOf(entry)),
+            entryAnalysisRepository = FakeEntryAnalysisRepository(
+                mapOf(15L to makeAnalysis(15L, exerciseJson))
+            ),
+            dailySummaryRepository = FakeDailySummaryRepository(),
+            llmClientFactory = makeLlmClientFactory(hasKey = true, response = llmResponse),
+            dailyTotalsCalculator = DailyTotalsCalculator(),
+            weightHistoryRepository = FakeWeightHistoryRepository()
+        )
+
+        val result = service.generateSummary(LocalDate(2025, 3, 1))
+
+        assertIs<DailySummaryResult.Success>(result)
+        val payload = (result as DailySummaryResult.Success).payload
+        assertNull(payload.balance?.macroBalance)
+        assertEquals("No meals logged", payload.balance?.timing)
+        assertNull(payload.balance?.variety)
+    }
+
+    @Test
+    fun `generateSummary two meals hits consider consistent meal timing`() = runTest {
+        // mealCount == 2 → timing = "Consider more consistent meal timing"
+        // variety = "Consider adding more variety" (else branch)
+        val meal1 = makeCompletedEntry(16, EntryType.MEAL)
+        val meal2 = makeCompletedEntry(17, EntryType.MEAL)
+        val mealJsonLow = makeUnifiedJson(UnifiedAnalysisResult(
+            mealAnalysis = MealAnalysisResult(
+                nutrition = NutritionEstimate(totalCalories = 600.0, protein = 30.0, carbohydrates = 70.0, fat = 20.0, fiber = 8.0)
+            )
+        ))
+        val llmResponse = """{"insights":["Two meals"],"recommendations":["Add a meal"]}"""
+
+        val fakeSummaryRepo = FakeDailySummaryRepository()
+        val service = DailySummaryService(
+            trackedEntryRepository = FakeTrackedEntryRepository(listOf(meal1, meal2)),
+            entryAnalysisRepository = FakeEntryAnalysisRepository(
+                mapOf(
+                    16L to makeAnalysis(16L, mealJsonLow),
+                    17L to makeAnalysis(17L, mealJsonLow)
+                )
+            ),
+            dailySummaryRepository = fakeSummaryRepo,
+            llmClientFactory = makeLlmClientFactory(hasKey = true, response = llmResponse),
+            dailyTotalsCalculator = DailyTotalsCalculator(),
+            weightHistoryRepository = FakeWeightHistoryRepository()
+        )
+
+        val result = service.generateSummary(LocalDate(2025, 3, 1))
+
+        assertIs<DailySummaryResult.Success>(result)
+        val balance = (result as DailySummaryResult.Success).payload.balance
+        assertEquals("Consider more consistent meal timing", balance?.timing)
+        assertEquals("Consider adding more variety", balance?.variety)
+    }
+
+    @Test
+    fun `generateSummary three meals with balanced nutrition hits all positive balance branches`() = runTest {
+        // 3 meals × 700 kcal = 2100 kcal, protein 120g, fiber 30g → "Balanced"
+        // mealCount >= 3 → timing = "Well-distributed meals", variety = "Good meal variety"
+        val meals = (18L..20L).map { makeCompletedEntry(it, EntryType.MEAL) }
+        val mealJson = makeUnifiedJson(UnifiedAnalysisResult(
+            mealAnalysis = MealAnalysisResult(
+                nutrition = NutritionEstimate(
+                    totalCalories = 700.0, protein = 40.0, carbohydrates = 80.0, fat = 22.0, fiber = 10.0
+                )
+            )
+        ))
+        val llmResponse = """{"insights":["Balanced"],"recommendations":["Keep up"]}"""
+
+        val service = DailySummaryService(
+            trackedEntryRepository = FakeTrackedEntryRepository(meals),
+            entryAnalysisRepository = FakeEntryAnalysisRepository(
+                meals.associate { it.entryId to makeAnalysis(it.entryId, mealJson) }
+            ),
+            dailySummaryRepository = FakeDailySummaryRepository(),
+            llmClientFactory = makeLlmClientFactory(hasKey = true, response = llmResponse),
+            dailyTotalsCalculator = DailyTotalsCalculator(),
+            weightHistoryRepository = FakeWeightHistoryRepository()
+        )
+
+        val result = service.generateSummary(LocalDate(2025, 3, 1))
+
+        assertIs<DailySummaryResult.Success>(result)
+        val balance = (result as DailySummaryResult.Success).payload.balance
+        assertEquals("Well-distributed meals", balance?.timing)
+        assertEquals("Good meal variety", balance?.variety)
+        assertEquals("Balanced", balance?.overall)
+    }
+
+    @Test
+    fun `generateSummary with low calorie intake hits low-calorie overall balance`() = runTest {
+        // calories < 1200 → overall = "Low calorie intake"
+        val entry = makeCompletedEntry(21, EntryType.MEAL)
+        val mealJson = makeUnifiedJson(UnifiedAnalysisResult(
+            mealAnalysis = MealAnalysisResult(
+                nutrition = NutritionEstimate(
+                    totalCalories = 800.0, protein = 60.0, carbohydrates = 60.0, fat = 20.0, fiber = 25.0
+                )
+            )
+        ))
+        val llmResponse = """{"insights":["Low cal"],"recommendations":["Eat more"]}"""
+
+        val service = DailySummaryService(
+            trackedEntryRepository = FakeTrackedEntryRepository(listOf(entry)),
+            entryAnalysisRepository = FakeEntryAnalysisRepository(mapOf(21L to makeAnalysis(21L, mealJson))),
+            dailySummaryRepository = FakeDailySummaryRepository(),
+            llmClientFactory = makeLlmClientFactory(hasKey = true, response = llmResponse),
+            dailyTotalsCalculator = DailyTotalsCalculator(),
+            weightHistoryRepository = FakeWeightHistoryRepository()
+        )
+
+        val result = service.generateSummary(LocalDate(2025, 3, 1))
+
+        assertIs<DailySummaryResult.Success>(result)
+        assertEquals("Low calorie intake", (result as DailySummaryResult.Success).payload.balance?.overall)
+    }
+
+    @Test
+    fun `generateSummary with high calorie intake hits high-calorie overall balance`() = runTest {
+        // calories > 3000 → overall = "High calorie intake"
+        val entry = makeCompletedEntry(22, EntryType.MEAL)
+        val mealJson = makeUnifiedJson(UnifiedAnalysisResult(
+            mealAnalysis = MealAnalysisResult(
+                nutrition = NutritionEstimate(
+                    totalCalories = 3200.0, protein = 150.0, carbohydrates = 350.0, fat = 80.0, fiber = 30.0
+                )
+            )
+        ))
+        val llmResponse = """{"insights":["High cal"],"recommendations":["Reduce portions"]}"""
+
+        val service = DailySummaryService(
+            trackedEntryRepository = FakeTrackedEntryRepository(listOf(entry)),
+            entryAnalysisRepository = FakeEntryAnalysisRepository(mapOf(22L to makeAnalysis(22L, mealJson))),
+            dailySummaryRepository = FakeDailySummaryRepository(),
+            llmClientFactory = makeLlmClientFactory(hasKey = true, response = llmResponse),
+            dailyTotalsCalculator = DailyTotalsCalculator(),
+            weightHistoryRepository = FakeWeightHistoryRepository()
+        )
+
+        val result = service.generateSummary(LocalDate(2025, 3, 1))
+
+        assertIs<DailySummaryResult.Success>(result)
+        assertEquals("High calorie intake", (result as DailySummaryResult.Success).payload.balance?.overall)
+    }
+
+    @Test
+    fun `generateSummary with low protein hits low-protein overall balance`() = runTest {
+        // protein < 50, calories in [1200, 3000] → overall = "Low protein"
+        val entry = makeCompletedEntry(23, EntryType.MEAL)
+        val mealJson = makeUnifiedJson(UnifiedAnalysisResult(
+            mealAnalysis = MealAnalysisResult(
+                nutrition = NutritionEstimate(
+                    totalCalories = 1800.0, protein = 30.0, carbohydrates = 200.0, fat = 70.0, fiber = 25.0
+                )
+            )
+        ))
+        val llmResponse = """{"insights":["Low protein"],"recommendations":["Add protein"]}"""
+
+        val service = DailySummaryService(
+            trackedEntryRepository = FakeTrackedEntryRepository(listOf(entry)),
+            entryAnalysisRepository = FakeEntryAnalysisRepository(mapOf(23L to makeAnalysis(23L, mealJson))),
+            dailySummaryRepository = FakeDailySummaryRepository(),
+            llmClientFactory = makeLlmClientFactory(hasKey = true, response = llmResponse),
+            dailyTotalsCalculator = DailyTotalsCalculator(),
+            weightHistoryRepository = FakeWeightHistoryRepository()
+        )
+
+        val result = service.generateSummary(LocalDate(2025, 3, 1))
+
+        assertIs<DailySummaryResult.Success>(result)
+        assertEquals("Low protein", (result as DailySummaryResult.Success).payload.balance?.overall)
+    }
+
+    @Test
+    fun `generateSummary with low fiber hits low-fiber overall balance`() = runTest {
+        // protein >= 50, calories in [1200, 3000], fiber < 20 → overall = "Low fiber"
+        val entry = makeCompletedEntry(24, EntryType.MEAL)
+        val mealJson = makeUnifiedJson(UnifiedAnalysisResult(
+            mealAnalysis = MealAnalysisResult(
+                nutrition = NutritionEstimate(
+                    totalCalories = 1800.0, protein = 80.0, carbohydrates = 200.0, fat = 60.0, fiber = 10.0
+                )
+            )
+        ))
+        val llmResponse = """{"insights":["Low fiber"],"recommendations":["Add fiber"]}"""
+
+        val service = DailySummaryService(
+            trackedEntryRepository = FakeTrackedEntryRepository(listOf(entry)),
+            entryAnalysisRepository = FakeEntryAnalysisRepository(mapOf(24L to makeAnalysis(24L, mealJson))),
+            dailySummaryRepository = FakeDailySummaryRepository(),
+            llmClientFactory = makeLlmClientFactory(hasKey = true, response = llmResponse),
+            dailyTotalsCalculator = DailyTotalsCalculator(),
+            weightHistoryRepository = FakeWeightHistoryRepository()
+        )
+
+        val result = service.generateSummary(LocalDate(2025, 3, 1))
+
+        assertIs<DailySummaryResult.Success>(result)
+        assertEquals("Low fiber", (result as DailySummaryResult.Success).payload.balance?.overall)
+    }
+
+    // ── Detail-line edge cases ───────────────────────────────────────────────
+
+    @Test
+    fun `generateSummary buildSleepDetailLine with null duration and non-null userNotes`() = runTest {
+        val entry = makeCompletedEntry(25, EntryType.SLEEP, userNotes = "Rough night")
+        val sleepJson = makeUnifiedJson(UnifiedAnalysisResult(
+            sleepAnalysis = SleepAnalysisResult(
+                durationHours = null,
+                qualitySummary = null,
+                environmentNotes = emptyList()
+            )
+        ))
+        val llmResponse = """{"insights":["Sleep logged"],"recommendations":["Track more"]}"""
+
+        val service = DailySummaryService(
+            trackedEntryRepository = FakeTrackedEntryRepository(listOf(entry)),
+            entryAnalysisRepository = FakeEntryAnalysisRepository(
+                mapOf(25L to makeAnalysis(25L, sleepJson))
+            ),
+            dailySummaryRepository = FakeDailySummaryRepository(),
+            llmClientFactory = makeLlmClientFactory(hasKey = true, response = llmResponse),
+            dailyTotalsCalculator = DailyTotalsCalculator(),
+            weightHistoryRepository = FakeWeightHistoryRepository()
+        )
+
+        val result = service.generateSummary(LocalDate(2025, 3, 1))
+        assertIs<DailySummaryResult.Success>(result)
+    }
+
+    @Test
+    fun `generateSummary buildOtherDetailLine with null summary and empty tags`() = runTest {
+        val entry = makeCompletedEntry(26, EntryType.OTHER) // no userNotes
+        val otherJson = makeUnifiedJson(UnifiedAnalysisResult(
+            otherAnalysis = OtherAnalysisResult(summary = null, tags = emptyList())
+        ))
+        val llmResponse = """{"insights":["Other logged"],"recommendations":["Keep tracking"]}"""
+
+        val service = DailySummaryService(
+            trackedEntryRepository = FakeTrackedEntryRepository(listOf(entry)),
+            entryAnalysisRepository = FakeEntryAnalysisRepository(
+                mapOf(26L to makeAnalysis(26L, otherJson))
+            ),
+            dailySummaryRepository = FakeDailySummaryRepository(),
+            llmClientFactory = makeLlmClientFactory(hasKey = true, response = llmResponse),
+            dailyTotalsCalculator = DailyTotalsCalculator(),
+            weightHistoryRepository = FakeWeightHistoryRepository()
+        )
+
+        val result = service.generateSummary(LocalDate(2025, 3, 1))
+        assertIs<DailySummaryResult.Success>(result)
+    }
+
+    @Test
+    fun `generateSummary buildExerciseDetailLine with null activityType and distance without unit`() = runTest {
+        val entry = makeCompletedEntry(27, EntryType.EXERCISE) // no userNotes
+        val exerciseJson = makeUnifiedJson(UnifiedAnalysisResult(
+            exerciseAnalysis = ExerciseAnalysisResult(
+                activityType = null, // null → activityType?.let not called
+                metrics = ExerciseMetrics(
+                    distance = 5.0,
+                    distanceUnit = null // distance without unit → fallback "$d"
+                ),
+                insights = null // null → insights?.summary?.let not called
+            )
+        ))
+        val llmResponse = """{"insights":["Exercise logged"],"recommendations":["Track more"]}"""
+
+        val service = DailySummaryService(
+            trackedEntryRepository = FakeTrackedEntryRepository(listOf(entry)),
+            entryAnalysisRepository = FakeEntryAnalysisRepository(
+                mapOf(27L to makeAnalysis(27L, exerciseJson))
+            ),
+            dailySummaryRepository = FakeDailySummaryRepository(),
+            llmClientFactory = makeLlmClientFactory(hasKey = true, response = llmResponse),
+            dailyTotalsCalculator = DailyTotalsCalculator(),
+            weightHistoryRepository = FakeWeightHistoryRepository()
+        )
+
+        val result = service.generateSummary(LocalDate(2025, 3, 1))
+        assertIs<DailySummaryResult.Success>(result)
+    }
+
+    @Test
+    fun `generateSummary buildExerciseDetailLine with all-null metrics produces empty parts list`() = runTest {
+        val entry = makeCompletedEntry(28, EntryType.EXERCISE)
+        val exerciseJson = makeUnifiedJson(UnifiedAnalysisResult(
+            exerciseAnalysis = ExerciseAnalysisResult(
+                activityType = "Walk", // non-null so activityType branch is covered
+                metrics = ExerciseMetrics(
+                    durationMinutes = null,
+                    distance = null,
+                    calories = null,
+                    averageHeartRate = null
+                ),
+                insights = ExerciseInsights(summary = null) // non-null insights, null summary
+            )
+        ))
+        val llmResponse = """{"insights":["Walk logged"],"recommendations":["Keep it up"]}"""
+
+        val service = DailySummaryService(
+            trackedEntryRepository = FakeTrackedEntryRepository(listOf(entry)),
+            entryAnalysisRepository = FakeEntryAnalysisRepository(
+                mapOf(28L to makeAnalysis(28L, exerciseJson))
+            ),
+            dailySummaryRepository = FakeDailySummaryRepository(),
+            llmClientFactory = makeLlmClientFactory(hasKey = true, response = llmResponse),
+            dailyTotalsCalculator = DailyTotalsCalculator(),
+            weightHistoryRepository = FakeWeightHistoryRepository()
+        )
+
+        val result = service.generateSummary(LocalDate(2025, 3, 1))
+        assertIs<DailySummaryResult.Success>(result)
+    }
+
+    // ── Exception and fallback paths ─────────────────────────────────────────
+
+    @Test
+    fun `generateSummary handles weight repository exception gracefully`() = runTest {
+        val entry = makeCompletedEntry(29, EntryType.MEAL)
+        val mealJson = makeUnifiedJson(UnifiedAnalysisResult(
+            mealAnalysis = MealAnalysisResult(
+                nutrition = NutritionEstimate(totalCalories = 1800.0, protein = 80.0, carbohydrates = 200.0, fat = 60.0)
+            )
+        ))
+        val throwingWeightRepo = object : WeightHistoryRepository {
+            override suspend fun getWeightHistory(startDate: Instant, endDate: Instant): List<WeightRecord> =
+                throw RuntimeException("DB error")
+            override suspend fun addWeightRecord(record: WeightRecord) = 1L
+            override suspend fun getLatestWeightRecord() = null
+            override suspend fun getAllWeightRecords() = emptyList<WeightRecord>()
+            override suspend fun deleteWeightRecord(recordId: Long) {}
+            override suspend fun nullifyRelatedEntryId(entryId: Long) {}
+            override suspend fun upsertWeightRecord(record: WeightRecord) {}
+        }
+        val llmResponse = """{"insights":["Summary"],"recommendations":["Keep going"]}"""
+
+        val service = DailySummaryService(
+            trackedEntryRepository = FakeTrackedEntryRepository(listOf(entry)),
+            entryAnalysisRepository = FakeEntryAnalysisRepository(mapOf(29L to makeAnalysis(29L, mealJson))),
+            dailySummaryRepository = FakeDailySummaryRepository(),
+            llmClientFactory = makeLlmClientFactory(hasKey = true, response = llmResponse),
+            dailyTotalsCalculator = DailyTotalsCalculator(),
+            weightHistoryRepository = throwingWeightRepo
+        )
+
+        val result = service.generateSummary(LocalDate(2025, 3, 1))
+        assertIs<DailySummaryResult.Success>(result)
+    }
+
+    @Test
+    fun `generateSummary text fallback with no patterns uses content and default recommendation`() = runTest {
+        // Response has no JSON and no insight/recommendation/bullet patterns
+        // → highlights.isEmpty() fallback: content.take(200)
+        // → recommendations.isEmpty() fallback: "Continue your healthy habits!"
+        val entry = makeCompletedEntry(30, EntryType.MEAL)
+        val mealJson = makeUnifiedJson(UnifiedAnalysisResult(
+            mealAnalysis = MealAnalysisResult(
+                nutrition = NutritionEstimate(totalCalories = 1800.0, protein = 80.0)
+            )
+        ))
+        val unstructuredResponse = "Health data unavailable at this time."
+
+        val service = DailySummaryService(
+            trackedEntryRepository = FakeTrackedEntryRepository(listOf(entry)),
+            entryAnalysisRepository = FakeEntryAnalysisRepository(mapOf(30L to makeAnalysis(30L, mealJson))),
+            dailySummaryRepository = FakeDailySummaryRepository(),
+            llmClientFactory = makeLlmClientFactory(hasKey = true, response = unstructuredResponse),
+            dailyTotalsCalculator = DailyTotalsCalculator(),
+            weightHistoryRepository = FakeWeightHistoryRepository()
+        )
+
+        val result = service.generateSummary(LocalDate(2025, 3, 1))
+        assertIs<DailySummaryResult.Success>(result)
+        val payload = (result as DailySummaryResult.Success).payload
+        assertTrue(payload.highlights.isNotEmpty())
+        assertTrue(payload.recommendations.isNotEmpty())
+    }
+
+    @Test
+    fun `generateSummary with non-MEAL entry that has legacy-parse failure is handled gracefully`() = runTest {
+        // Entry is EXERCISE type; analysis JSON is not valid UnifiedAnalysisResult,
+        // and the legacy fallback only applies to MEAL → exception logged, no detail line added
+        val entry = makeCompletedEntry(31, EntryType.EXERCISE)
+        val badJson = """{"invalid": "json structure"}"""
+        val llmResponse = """{"insights":["Exercise day"],"recommendations":["Rest tomorrow"]}"""
+
+        val service = DailySummaryService(
+            trackedEntryRepository = FakeTrackedEntryRepository(listOf(entry)),
+            entryAnalysisRepository = FakeEntryAnalysisRepository(
+                mapOf(31L to makeAnalysis(31L, badJson))
+            ),
+            dailySummaryRepository = FakeDailySummaryRepository(),
+            llmClientFactory = makeLlmClientFactory(hasKey = true, response = llmResponse),
+            dailyTotalsCalculator = DailyTotalsCalculator(),
+            weightHistoryRepository = FakeWeightHistoryRepository()
+        )
+
+        val result = service.generateSummary(LocalDate(2025, 3, 1))
+        assertIs<DailySummaryResult.Success>(result)
+    }
 }
