@@ -57,6 +57,12 @@ actual class FileSystem {
         return NSFileManager.defaultManager.fileExistsAtPath(path)
     }
 
+    actual fun isDirectory(path: String): Boolean {
+        val isDir = kotlinx.cinterop.alloc<kotlinx.cinterop.BooleanVar>()
+        val exists = NSFileManager.defaultManager.fileExistsAtPath(path, isDirectory = isDir.ptr)
+        return exists && isDir.value
+    }
+
     actual fun listFiles(path: String): List<String> {
         val contents = NSFileManager.defaultManager.contentsOfDirectoryAtPath(path, null)
         return (contents as? List<*>)?.mapNotNull { it as? String } ?: emptyList()
@@ -73,6 +79,12 @@ actual class FileSystem {
 
     actual fun getCacheDirectory(): String {
         return NSTemporaryDirectory()
+    }
+
+    actual fun getExportsDirectory(): String {
+        val exportsPath = "${getAppDataDirectory()}/exports"
+        NSFileManager.defaultManager.createDirectoryAtPath(exportsPath, true, null, null)
+        return exportsPath
     }
 
     actual fun listFilesRecursively(path: String): List<String> {

@@ -7,6 +7,14 @@ actual class ZipUtil actual constructor() {
         throw UnsupportedOperationException("ZIP operations are not yet supported on iOS")
     }
 
+    actual suspend fun createZipWithFiles(
+        zipPath: String,
+        inMemoryEntries: List<ZipEntry>,
+        fileEntries: List<ZipFileSource>
+    ) {
+        throw UnsupportedOperationException("ZIP operations are not yet supported on iOS")
+    }
+
     actual suspend fun extractZip(zipPath: String, destDir: String) {
         throw UnsupportedOperationException("ZIP operations are not yet supported on iOS")
     }

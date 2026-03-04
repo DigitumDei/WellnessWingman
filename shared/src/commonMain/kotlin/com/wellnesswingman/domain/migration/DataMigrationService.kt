@@ -9,6 +9,7 @@ import com.wellnesswingman.data.repository.TrackedEntryRepository
 import com.wellnesswingman.data.repository.WeeklySummaryRepository
 import com.wellnesswingman.platform.FileSystem
 import com.wellnesswingman.platform.ZipEntry
+import com.wellnesswingman.platform.ZipFileSource
 import com.wellnesswingman.platform.ZipUtil
 import io.github.aakira.napier.Napier
 import kotlinx.datetime.Clock
@@ -80,10 +81,8 @@ class DefaultDataMigrationService(
         val jsonString = json.encodeToString(ExportData.serializer(), exportData)
         val jsonBytes = jsonString.encodeToByteArray()
 
-        // 4. Gather image files
-        val zipEntries = mutableListOf<ZipEntry>()
-        zipEntries.add(ZipEntry("data.json", jsonBytes))
-
+        // 4. Gather image file paths (do not load into memory)
+        val imageFiles = mutableListOf<ZipFileSource>()
         val appDataPrefix = appDataDir.replace('\\', '/').trimEnd('/') + "/"
         val exportedPaths = mutableSetOf<String>()
 
@@ -102,25 +101,29 @@ class DefaultDataMigrationService(
 
                 if (relativePath in exportedPaths) continue
 
-                try {
-                    val bytes = fileSystem.readBytes(absolutePath)
-                    zipEntries.add(ZipEntry(relativePath, bytes))
-                    exportedPaths.add(relativePath)
-                } catch (e: Exception) {
-                    Napier.w("Failed to read image: $absolutePath", e)
-                }
+                imageFiles.add(ZipFileSource(relativePath, absolutePath))
+                exportedPaths.add(relativePath)
             }
         }
 
-        // 5. Create ZIP
+        // 5. Create ZIP — JSON is in memory; images stream from disk one at a time
         val now = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())
         val timestamp = "${now.year}${now.monthNumber.toString().padStart(2, '0')}${now.dayOfMonth.toString().padStart(2, '0')}_${now.hour.toString().padStart(2, '0')}${now.minute.toString().padStart(2, '0')}${now.second.toString().padStart(2, '0')}"
         val fileName = "wellnesswingman_export_$timestamp.zip"
-        val zipPath = "${fileSystem.getCacheDirectory()}${fileSeparator}$fileName"
 
-        zipUtil.createZip(zipPath, zipEntries)
+        // Use a persistent exports directory so the file survives while the share sheet is open
+        val exportsDir = fileSystem.getExportsDirectory()
 
-        Napier.i("Export completed: $zipPath (${zipEntries.size} files)")
+        // Purge any previous exports to avoid accumulating stale files
+        fileSystem.listFiles(exportsDir)
+            .filter { it.endsWith(".zip") }
+            .forEach { fileSystem.delete(it) }
+
+        val zipPath = "$exportsDir$fileSeparator$fileName"
+
+        zipUtil.createZipWithFiles(zipPath, listOf(ZipEntry("data.json", jsonBytes)), imageFiles)
+
+        Napier.i("Export completed: $zipPath (${1 + imageFiles.size} files)")
         return zipPath
     }
 
@@ -128,12 +131,22 @@ class DefaultDataMigrationService(
         Napier.i("Starting data import from: $zipFilePath")
         val errors = mutableListOf<String>()
 
-        // 1. Extract ZIP to temp dir
-        val tempDir = "${fileSystem.getCacheDirectory()}${fileSeparator}import_temp_${Clock.System.now().toEpochMilliseconds()}"
-        fileSystem.createDirectory(tempDir)
+        // Support pre-extracted directories (e.g. Android FilePicker stream-extracts directly
+        // from the content URI to avoid copying the full archive to cache first).
+        val alreadyExtracted = fileSystem.isDirectory(zipFilePath)
+        val tempDir = if (alreadyExtracted) {
+            zipFilePath
+        } else {
+            "${fileSystem.getCacheDirectory()}${fileSeparator}import_temp_${Clock.System.now().toEpochMilliseconds()}"
+        }
+        if (!alreadyExtracted) {
+            fileSystem.createDirectory(tempDir)
+        }
 
         try {
-            zipUtil.extractZip(zipFilePath, tempDir)
+            if (!alreadyExtracted) {
+                zipUtil.extractZip(zipFilePath, tempDir)
+            }
 
             // 2. Read and parse data.json
             val jsonPath = "$tempDir${fileSeparator}data.json"

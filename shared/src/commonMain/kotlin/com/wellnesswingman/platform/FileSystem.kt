@@ -35,6 +35,11 @@ expect class FileSystem {
     fun exists(path: String): Boolean
 
     /**
+     * Returns true if the path exists and is a directory.
+     */
+    fun isDirectory(path: String): Boolean
+
+    /**
      * Lists files in a directory.
      */
     fun listFiles(path: String): List<String>
@@ -48,6 +53,11 @@ expect class FileSystem {
      * Gets the app's cache directory path.
      */
     fun getCacheDirectory(): String
+
+    /**
+     * Gets a persistent directory for export files (not subject to cache eviction).
+     */
+    fun getExportsDirectory(): String
 
     /**
      * Lists all files in a directory recursively.

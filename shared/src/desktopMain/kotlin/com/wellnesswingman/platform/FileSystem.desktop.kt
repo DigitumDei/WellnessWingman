@@ -42,6 +42,10 @@ actual class FileSystem {
         return File(path).exists()
     }
 
+    actual fun isDirectory(path: String): Boolean {
+        return File(path).isDirectory
+    }
+
     actual fun listFiles(path: String): List<String> {
         return File(path).listFiles()?.map { it.absolutePath } ?: emptyList()
     }
@@ -56,6 +60,14 @@ actual class FileSystem {
             cacheDir.mkdirs()
         }
         return cacheDir.absolutePath
+    }
+
+    actual fun getExportsDirectory(): String {
+        val exportsDir = File(getAppDataDirectory(), "exports")
+        if (!exportsDir.exists()) {
+            exportsDir.mkdirs()
+        }
+        return exportsDir.absolutePath
     }
 
     actual fun listFilesRecursively(path: String): List<String> {
