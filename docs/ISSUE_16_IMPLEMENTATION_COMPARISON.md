@@ -17,7 +17,7 @@ Issue #16: Historical View Navigation with Arrow Controls and Hierarchical Drill
 | Tap a month in Year View → Month View | Implemented (but see known bug below) |
 | Tap a day in Month View → Day Detail | Implemented |
 | ViewModels for all views | `WeekViewModel`, `CalendarViewModel`, `YearViewModel`, `DayDetailViewModel` all exist |
-| Data repositories with date-range queries | `TrackedEntryRepository` and summary repos exist |
+| Data repositories with date-range queries | `TrackedEntryRepository`, `DailySummaryRepository`, and `WeeklySummaryRepository` exist |
 | Weekly AI summary card | Implemented in Week View |
 
 ---
