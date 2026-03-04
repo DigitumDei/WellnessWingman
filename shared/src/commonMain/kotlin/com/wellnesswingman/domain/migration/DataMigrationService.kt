@@ -6,6 +6,7 @@ import com.wellnesswingman.data.model.export.toExport
 import com.wellnesswingman.data.repository.DailySummaryRepository
 import com.wellnesswingman.data.repository.EntryAnalysisRepository
 import com.wellnesswingman.data.repository.TrackedEntryRepository
+import com.wellnesswingman.data.repository.WeeklySummaryRepository
 import com.wellnesswingman.platform.FileSystem
 import com.wellnesswingman.platform.ZipEntry
 import com.wellnesswingman.platform.ZipUtil
@@ -24,6 +25,7 @@ data class ImportResult(
     val entriesImported: Int = 0,
     val analysesImported: Int = 0,
     val summariesImported: Int = 0,
+    val weeklySummariesImported: Int = 0,
     val errors: List<String> = emptyList()
 ) {
     val isSuccess get() = errors.isEmpty()
@@ -33,6 +35,7 @@ class DefaultDataMigrationService(
     private val trackedEntryRepository: TrackedEntryRepository,
     private val entryAnalysisRepository: EntryAnalysisRepository,
     private val dailySummaryRepository: DailySummaryRepository,
+    private val weeklySummaryRepository: WeeklySummaryRepository,
     private val fileSystem: FileSystem,
     private val zipUtil: ZipUtil
 ) : DataMigrationService {
@@ -51,8 +54,9 @@ class DefaultDataMigrationService(
         val entries = trackedEntryRepository.getAllEntries()
         val analyses = entryAnalysisRepository.getAllAnalyses()
         val summaries = dailySummaryRepository.getAllSummaries()
+        val weeklySummaries = weeklySummaryRepository.getAllSummaries()
 
-        Napier.i("Exporting ${entries.size} entries, ${analyses.size} analyses, ${summaries.size} summaries")
+        Napier.i("Exporting ${entries.size} entries, ${analyses.size} analyses, ${summaries.size} daily summaries, ${weeklySummaries.size} weekly summaries")
 
         // 2. Build export model (relativize absolute paths for MAUI compatibility)
         val appDataDir = fileSystem.getAppDataDirectory()
@@ -68,7 +72,8 @@ class DefaultDataMigrationService(
             },
             analyses = analyses.map { it.toExport() },
             summaries = summaries.map { it.toExport() },
-            summariesAnalyses = emptyList() // Kotlin doesn't have this junction table
+            summariesAnalyses = emptyList(), // Kotlin doesn't have this junction table
+            weeklySummaries = weeklySummaries.map { it.toExport() }
         )
 
         // 3. Serialize to JSON
@@ -146,7 +151,7 @@ class DefaultDataMigrationService(
                 return ImportResult(errors = listOf("Failed to parse data.json: ${e.message}"))
             }
 
-            Napier.i("Parsed: ${exportData.entries.size} entries, ${exportData.analyses.size} analyses, ${exportData.summaries.size} summaries")
+            Napier.i("Parsed: ${exportData.entries.size} entries, ${exportData.analyses.size} analyses, ${exportData.summaries.size} daily summaries, ${exportData.weeklySummaries.size} weekly summaries")
 
             // 3. Copy images to app data directory
             val appDataDir = fileSystem.getAppDataDirectory()
@@ -212,11 +217,30 @@ class DefaultDataMigrationService(
 
             // SummariesAnalyses junction table: ignored (Kotlin doesn't have this)
 
-            Napier.i("Import completed: $entriesImported entries, $analysesImported analyses, $summariesImported summaries")
+            // 7. Upsert weekly summaries
+            var weeklySummariesImported = 0
+            for (exportWeeklySummary in exportData.weeklySummaries) {
+                try {
+                    val domainSummary = exportWeeklySummary.toDomain()
+                    val existing = weeklySummaryRepository.getSummaryForWeek(domainSummary.weekStartDate)
+                    if (existing != null) {
+                        weeklySummaryRepository.updateSummaryByWeek(domainSummary.weekStartDate, domainSummary.copy(summaryId = existing.summaryId))
+                    } else {
+                        weeklySummaryRepository.insertSummary(domainSummary)
+                    }
+                    weeklySummariesImported++
+                } catch (e: Exception) {
+                    Napier.w("Failed to import weekly summary ${exportWeeklySummary.summaryId}", e)
+                    errors.add("Failed to import weekly summary ${exportWeeklySummary.summaryId}: ${e.message}")
+                }
+            }
+
+            Napier.i("Import completed: $entriesImported entries, $analysesImported analyses, $summariesImported daily summaries, $weeklySummariesImported weekly summaries")
             return ImportResult(
                 entriesImported = entriesImported,
                 analysesImported = analysesImported,
                 summariesImported = summariesImported,
+                weeklySummariesImported = weeklySummariesImported,
                 errors = errors
             )
         } finally {

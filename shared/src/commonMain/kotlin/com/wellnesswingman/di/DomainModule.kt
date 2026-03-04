@@ -86,6 +86,7 @@ val domainModule = module {
             trackedEntryRepository = get(),
             entryAnalysisRepository = get(),
             dailySummaryRepository = get(),
+            weeklySummaryRepository = get(),
             fileSystem = get(),
             zipUtil = get()
         )
