@@ -133,6 +133,29 @@ class DailySummaryServiceTest {
         return factory
     }
 
+    /**
+     * Like [makeLlmClientFactory] but also appends each completion prompt to [capturedPrompts],
+     * enabling tests to assert what was sent to the LLM.
+     */
+    private fun makeCapturingLlmClientFactory(
+        response: String = """{"insights":[],"recommendations":[]}""",
+        capturedPrompts: MutableList<String>
+    ): LlmClientFactory {
+        val fakeLlmClient = object : LlmClient {
+            override suspend fun analyzeImage(imageBytes: ByteArray, prompt: String, jsonSchema: String?) =
+                LlmAnalysisResult(response, LlmDiagnostics())
+            override suspend fun transcribeAudio(audioBytes: ByteArray, mimeType: String) = ""
+            override suspend fun generateCompletion(prompt: String, jsonSchema: String?): LlmAnalysisResult {
+                capturedPrompts.add(prompt)
+                return LlmAnalysisResult(response, LlmDiagnostics())
+            }
+        }
+        val factory = mockk<LlmClientFactory>()
+        every { factory.hasCurrentApiKey() } returns true
+        every { factory.createForCurrentProvider() } returns fakeLlmClient
+        return factory
+    }
+
     private fun makeCompletedEntry(
         entryId: Long,
         entryType: EntryType,
@@ -255,13 +278,14 @@ class DailySummaryServiceTest {
         """.trimIndent()
 
         val fakeSummaryRepo = FakeDailySummaryRepository()
+        val capturedPrompts = mutableListOf<String>()
         val service = DailySummaryService(
             trackedEntryRepository = FakeTrackedEntryRepository(listOf(entry)),
             entryAnalysisRepository = FakeEntryAnalysisRepository(
                 mapOf(1L to makeAnalysis(1L, makeUnifiedJson(mealAnalysis)))
             ),
             dailySummaryRepository = fakeSummaryRepo,
-            llmClientFactory = makeLlmClientFactory(hasKey = true, response = llmResponse),
+            llmClientFactory = makeCapturingLlmClientFactory(response = llmResponse, capturedPrompts = capturedPrompts),
             dailyTotalsCalculator = DailyTotalsCalculator(),
             weightHistoryRepository = FakeWeightHistoryRepository()
         )
@@ -273,6 +297,11 @@ class DailySummaryServiceTest {
         val saved = fakeSummaryRepo.inserted.first()
         assertNotNull(saved.payloadJson)
         assertTrue(saved.payloadJson!!.contains("2025-03-01"))
+        // Verify food items from meal analysis appear in the prompt
+        assertTrue(capturedPrompts.isNotEmpty())
+        val prompt = capturedPrompts.first()
+        assertTrue(prompt.contains("Salad"), "Expected food item 'Salad' in prompt")
+        assertTrue(prompt.contains("Chicken"), "Expected food item 'Chicken' in prompt")
     }
 
     @Test
@@ -293,13 +322,14 @@ class DailySummaryServiceTest {
         )
         val llmResponse = """{"insights":["Great run"],"recommendations":["Rest tomorrow"]}"""
 
+        val capturedPrompts = mutableListOf<String>()
         val service = DailySummaryService(
             trackedEntryRepository = FakeTrackedEntryRepository(listOf(entry)),
             entryAnalysisRepository = FakeEntryAnalysisRepository(
                 mapOf(2L to makeAnalysis(2L, makeUnifiedJson(exerciseAnalysis)))
             ),
             dailySummaryRepository = FakeDailySummaryRepository(),
-            llmClientFactory = makeLlmClientFactory(hasKey = true, response = llmResponse),
+            llmClientFactory = makeCapturingLlmClientFactory(response = llmResponse, capturedPrompts = capturedPrompts),
             dailyTotalsCalculator = DailyTotalsCalculator(),
             weightHistoryRepository = FakeWeightHistoryRepository()
         )
@@ -307,6 +337,11 @@ class DailySummaryServiceTest {
         val result = service.generateSummary(LocalDate(2025, 3, 1))
 
         assertIs<DailySummaryResult.Success>(result)
+        assertTrue(capturedPrompts.isNotEmpty())
+        val prompt = capturedPrompts.first()
+        assertTrue(prompt.contains("Running"), "Expected activity type 'Running' in prompt")
+        assertTrue(prompt.contains("8.0 km"), "Expected distance '8.0 km' in prompt")
+        assertTrue(prompt.contains("Tough run"), "Expected user note 'Tough run' in prompt")
     }
 
     @Test
@@ -321,13 +356,14 @@ class DailySummaryServiceTest {
         )
         val llmResponse = """{"insights":["Good sleep quality"],"recommendations":["Maintain schedule"]}"""
 
+        val capturedPrompts = mutableListOf<String>()
         val service = DailySummaryService(
             trackedEntryRepository = FakeTrackedEntryRepository(listOf(entry)),
             entryAnalysisRepository = FakeEntryAnalysisRepository(
                 mapOf(3L to makeAnalysis(3L, makeUnifiedJson(sleepAnalysis)))
             ),
             dailySummaryRepository = FakeDailySummaryRepository(),
-            llmClientFactory = makeLlmClientFactory(hasKey = true, response = llmResponse),
+            llmClientFactory = makeCapturingLlmClientFactory(response = llmResponse, capturedPrompts = capturedPrompts),
             dailyTotalsCalculator = DailyTotalsCalculator(),
             weightHistoryRepository = FakeWeightHistoryRepository()
         )
@@ -335,6 +371,11 @@ class DailySummaryServiceTest {
         val result = service.generateSummary(LocalDate(2025, 3, 1))
 
         assertIs<DailySummaryResult.Success>(result)
+        assertTrue(capturedPrompts.isNotEmpty())
+        val prompt = capturedPrompts.first()
+        assertTrue(prompt.contains("7"), "Expected sleep duration in prompt")
+        assertTrue(prompt.contains("Restful sleep"), "Expected quality summary in prompt")
+        assertTrue(prompt.contains("Cool room"), "Expected environment note in prompt")
     }
 
     @Test
@@ -348,13 +389,14 @@ class DailySummaryServiceTest {
         )
         val llmResponse = """{"insights":["Good supplement habit"],"recommendations":["Continue vitamins"]}"""
 
+        val capturedPrompts = mutableListOf<String>()
         val service = DailySummaryService(
             trackedEntryRepository = FakeTrackedEntryRepository(listOf(entry)),
             entryAnalysisRepository = FakeEntryAnalysisRepository(
                 mapOf(4L to makeAnalysis(4L, makeUnifiedJson(otherAnalysis)))
             ),
             dailySummaryRepository = FakeDailySummaryRepository(),
-            llmClientFactory = makeLlmClientFactory(hasKey = true, response = llmResponse),
+            llmClientFactory = makeCapturingLlmClientFactory(response = llmResponse, capturedPrompts = capturedPrompts),
             dailyTotalsCalculator = DailyTotalsCalculator(),
             weightHistoryRepository = FakeWeightHistoryRepository()
         )
@@ -362,6 +404,11 @@ class DailySummaryServiceTest {
         val result = service.generateSummary(LocalDate(2025, 3, 1))
 
         assertIs<DailySummaryResult.Success>(result)
+        assertTrue(capturedPrompts.isNotEmpty())
+        val prompt = capturedPrompts.first()
+        assertTrue(prompt.contains("Vitamin supplement"), "Expected other summary in prompt")
+        assertTrue(prompt.contains("supplement"), "Expected tag in prompt")
+        assertTrue(prompt.contains("Took vitamins"), "Expected user note in prompt")
     }
 
     @Test
@@ -374,11 +421,12 @@ class DailySummaryServiceTest {
         ))
         val llmResponse = """{"insights":["Good day"],"recommendations":["Keep going"]}"""
 
+        val capturedPrompts = mutableListOf<String>()
         val service = DailySummaryService(
             trackedEntryRepository = FakeTrackedEntryRepository(listOf(entry)),
             entryAnalysisRepository = FakeEntryAnalysisRepository(mapOf(5L to makeAnalysis(5L, mealJson))),
             dailySummaryRepository = FakeDailySummaryRepository(),
-            llmClientFactory = makeLlmClientFactory(hasKey = true, response = llmResponse),
+            llmClientFactory = makeCapturingLlmClientFactory(response = llmResponse, capturedPrompts = capturedPrompts),
             dailyTotalsCalculator = DailyTotalsCalculator(),
             weightHistoryRepository = FakeWeightHistoryRepository()
         )
@@ -386,6 +434,8 @@ class DailySummaryServiceTest {
         val result = service.generateSummary(LocalDate(2025, 3, 1), userComments = "Felt energetic today!")
 
         assertIs<DailySummaryResult.Success>(result)
+        assertTrue(capturedPrompts.isNotEmpty())
+        assertTrue(capturedPrompts.first().contains("Felt energetic today!"), "Expected user comments in prompt")
     }
 
     @Test
@@ -467,11 +517,12 @@ class DailySummaryServiceTest {
         )
         val llmResponse = """{"insights":["Tracked weight today"],"recommendations":["Keep tracking"]}"""
 
+        val capturedPrompts = mutableListOf<String>()
         val service = DailySummaryService(
             trackedEntryRepository = FakeTrackedEntryRepository(listOf(entry)),
             entryAnalysisRepository = FakeEntryAnalysisRepository(mapOf(8L to makeAnalysis(8L, mealJson))),
             dailySummaryRepository = FakeDailySummaryRepository(),
-            llmClientFactory = makeLlmClientFactory(hasKey = true, response = llmResponse),
+            llmClientFactory = makeCapturingLlmClientFactory(response = llmResponse, capturedPrompts = capturedPrompts),
             dailyTotalsCalculator = DailyTotalsCalculator(),
             weightHistoryRepository = FakeWeightHistoryRepository(listOf(weightRecord))
         )
@@ -479,6 +530,10 @@ class DailySummaryServiceTest {
         val result = service.generateSummary(LocalDate(2025, 3, 1))
 
         assertIs<DailySummaryResult.Success>(result)
+        assertTrue(capturedPrompts.isNotEmpty())
+        val prompt = capturedPrompts.first()
+        assertTrue(prompt.contains("72.5"), "Expected weight value '72.5' in prompt")
+        assertTrue(prompt.contains("kg"), "Expected weight unit 'kg' in prompt")
     }
 
     @Test

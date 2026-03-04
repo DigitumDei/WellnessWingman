@@ -136,6 +136,29 @@ class WeeklySummaryServiceTest {
         return factory
     }
 
+    /**
+     * Like [makeLlmClientFactory] but captures completion prompts into [capturedPrompts],
+     * enabling tests to assert what was actually sent to the LLM.
+     */
+    private fun makeCapturingLlmClientFactory(
+        response: String = VALID_WEEKLY_JSON,
+        capturedPrompts: MutableList<String>
+    ): LlmClientFactory {
+        val fakeLlmClient = object : LlmClient {
+            override suspend fun analyzeImage(imageBytes: ByteArray, prompt: String, jsonSchema: String?) =
+                LlmAnalysisResult(response, LlmDiagnostics())
+            override suspend fun transcribeAudio(audioBytes: ByteArray, mimeType: String) = ""
+            override suspend fun generateCompletion(prompt: String, jsonSchema: String?): LlmAnalysisResult {
+                capturedPrompts.add(prompt)
+                return LlmAnalysisResult(response, LlmDiagnostics())
+            }
+        }
+        val factory = mockk<LlmClientFactory>()
+        every { factory.hasCurrentApiKey() } returns true
+        every { factory.createForCurrentProvider() } returns fakeLlmClient
+        return factory
+    }
+
     private fun makeCompletedEntry(entryId: Long, entryType: EntryType) = TrackedEntry(
         entryId = entryId,
         entryType = entryType,
@@ -326,13 +349,14 @@ class WeeklySummaryServiceTest {
     fun `generateSummary with userComments persists them in summary`() = runTest {
         val weekStart = LocalDate(2025, 3, 1)
         val weeklyRepo = FakeWeeklySummaryRepository()
+        val capturedPrompts = mutableListOf<String>()
         val service = WeeklySummaryService(
             trackedEntryRepository = FakeTrackedEntryRepository(
                 listOf(makeCompletedEntry(1, EntryType.MEAL))
             ),
             weeklySummaryRepository = weeklyRepo,
             dailySummaryRepository = FakeDailySummaryRepository(),
-            llmClientFactory = makeLlmClientFactory(hasKey = true),
+            llmClientFactory = makeCapturingLlmClientFactory(capturedPrompts = capturedPrompts),
             weightHistoryRepository = FakeWeightHistoryRepository()
         )
 
@@ -341,6 +365,9 @@ class WeeklySummaryServiceTest {
         assertIs<WeeklySummaryResult.Success>(result)
         assertEquals(1, weeklyRepo.inserted.size)
         assertEquals("This was a great week!", weeklyRepo.inserted.first().userComments)
+        // Verify user comments are actually included in the LLM prompt
+        assertTrue(capturedPrompts.isNotEmpty())
+        assertTrue(capturedPrompts.first().contains("This was a great week!"), "Expected user comments in prompt")
     }
 
     @Test
@@ -384,19 +411,25 @@ class WeeklySummaryServiceTest {
         )
 
         val weeklyRepo = FakeWeeklySummaryRepository()
+        val capturedPrompts = mutableListOf<String>()
         val service = WeeklySummaryService(
             trackedEntryRepository = FakeTrackedEntryRepository(
                 listOf(makeCompletedEntry(1, EntryType.MEAL))
             ),
             weeklySummaryRepository = weeklyRepo,
             dailySummaryRepository = FakeDailySummaryRepository(listOf(dailySummary)),
-            llmClientFactory = makeLlmClientFactory(hasKey = true),
+            llmClientFactory = makeCapturingLlmClientFactory(capturedPrompts = capturedPrompts),
             weightHistoryRepository = FakeWeightHistoryRepository()
         )
 
         val result = service.generateSummary(weekStart)
 
         assertIs<WeeklySummaryResult.Success>(result)
+        // Verify daily summary context is included in the prompt
+        assertTrue(capturedPrompts.isNotEmpty())
+        val prompt = capturedPrompts.first()
+        assertTrue(prompt.contains("Good day"), "Expected daily highlights in prompt")
+        assertTrue(prompt.contains("Felt energetic"), "Expected daily user comments in prompt")
     }
 
     @Test

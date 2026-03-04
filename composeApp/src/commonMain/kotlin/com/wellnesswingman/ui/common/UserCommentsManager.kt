@@ -32,7 +32,8 @@ data class CommentsState(
  * Reusable manager for user comments (text + voice notes) on summary screens.
  * Handles text editing, audio recording, and transcription.
  *
- * The actual persistence (save to repository) is delegated to the caller via [saveToRepository].
+ * The actual persistence (e.g., saving to a repository) is delegated to the caller.
+ * After a successful save, the caller should invoke [markSaved] to update the UI state.
  */
 class UserCommentsManager(
     private val audioRecordingService: AudioRecordingService,
