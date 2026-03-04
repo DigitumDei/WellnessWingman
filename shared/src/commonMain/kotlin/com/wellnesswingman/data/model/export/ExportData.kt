@@ -6,6 +6,7 @@ import com.wellnesswingman.data.model.EntryType
 import com.wellnesswingman.data.model.ProcessingStatus
 import com.wellnesswingman.data.model.TrackedEntry
 import com.wellnesswingman.data.model.WeeklySummary
+import com.wellnesswingman.data.model.WeightRecord
 import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
@@ -146,7 +147,9 @@ data class ExportData(
     @SerialName("Analyses") val analyses: List<ExportEntryAnalysis> = emptyList(),
     @SerialName("Summaries") val summaries: List<ExportDailySummary> = emptyList(),
     @SerialName("SummariesAnalyses") val summariesAnalyses: List<ExportSummaryAnalysis> = emptyList(),
-    @SerialName("WeeklySummaries") val weeklySummaries: List<ExportWeeklySummary> = emptyList()
+    @SerialName("WeeklySummaries") val weeklySummaries: List<ExportWeeklySummary> = emptyList(),
+    @SerialName("UserProfile") val userProfile: ExportUserProfile? = null,
+    @SerialName("WeightRecords") val weightRecords: List<ExportWeightRecord> = emptyList()
 )
 
 @Serializable
@@ -210,9 +213,51 @@ data class ExportSummaryAnalysis(
     @SerialName("AnalysisId") val analysisId: Long
 )
 
+@Serializable
+data class ExportUserProfile(
+    @SerialName("Height") val height: Double? = null,
+    @SerialName("HeightUnit") val heightUnit: String = "cm",
+    @SerialName("Sex") val sex: String? = null,
+    @SerialName("CurrentWeight") val currentWeight: Double? = null,
+    @SerialName("WeightUnit") val weightUnit: String = "kg",
+    @SerialName("DateOfBirth") val dateOfBirth: String? = null,
+    @SerialName("ActivityLevel") val activityLevel: String? = null
+)
+
+@Serializable
+data class ExportWeightRecord(
+    @SerialName("WeightRecordId") val weightRecordId: Long,
+    @SerialName("ExternalId") val externalId: String? = null,
+    @SerialName("RecordedAt") val recordedAt: String, // ISO 8601
+    @SerialName("WeightValue") val weightValue: Double,
+    @SerialName("WeightUnit") val weightUnit: String,
+    @SerialName("Source") val source: String,
+    @SerialName("RelatedEntryId") val relatedEntryId: Long? = null
+)
+
 // endregion
 
 // region -- Mapping functions --
+
+fun WeightRecord.toExport(): ExportWeightRecord = ExportWeightRecord(
+    weightRecordId = weightRecordId,
+    externalId = externalId,
+    recordedAt = recordedAt.toString(),
+    weightValue = weightValue,
+    weightUnit = weightUnit,
+    source = source,
+    relatedEntryId = relatedEntryId
+)
+
+fun ExportWeightRecord.toDomain(): WeightRecord = WeightRecord(
+    weightRecordId = weightRecordId,
+    externalId = externalId,
+    recordedAt = parseCSharpInstant(recordedAt),
+    weightValue = weightValue,
+    weightUnit = weightUnit,
+    source = source,
+    relatedEntryId = relatedEntryId
+)
 
 fun TrackedEntry.toExport(): ExportTrackedEntry = ExportTrackedEntry(
     entryId = entryId,

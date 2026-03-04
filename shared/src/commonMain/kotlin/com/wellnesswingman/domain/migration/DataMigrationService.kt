@@ -1,12 +1,15 @@
 package com.wellnesswingman.domain.migration
 
 import com.wellnesswingman.data.model.export.ExportData
+import com.wellnesswingman.data.model.export.ExportUserProfile
 import com.wellnesswingman.data.model.export.toDomain
 import com.wellnesswingman.data.model.export.toExport
+import com.wellnesswingman.data.repository.AppSettingsRepository
 import com.wellnesswingman.data.repository.DailySummaryRepository
 import com.wellnesswingman.data.repository.EntryAnalysisRepository
 import com.wellnesswingman.data.repository.TrackedEntryRepository
 import com.wellnesswingman.data.repository.WeeklySummaryRepository
+import com.wellnesswingman.data.repository.WeightHistoryRepository
 import com.wellnesswingman.platform.FileSystem
 import com.wellnesswingman.platform.ZipEntry
 import com.wellnesswingman.platform.ZipFileSource
@@ -27,6 +30,7 @@ data class ImportResult(
     val analysesImported: Int = 0,
     val summariesImported: Int = 0,
     val weeklySummariesImported: Int = 0,
+    val weightRecordsImported: Int = 0,
     val errors: List<String> = emptyList()
 ) {
     val isSuccess get() = errors.isEmpty()
@@ -37,6 +41,8 @@ class DefaultDataMigrationService(
     private val entryAnalysisRepository: EntryAnalysisRepository,
     private val dailySummaryRepository: DailySummaryRepository,
     private val weeklySummaryRepository: WeeklySummaryRepository,
+    private val appSettingsRepository: AppSettingsRepository,
+    private val weightHistoryRepository: WeightHistoryRepository,
     private val fileSystem: FileSystem,
     private val zipUtil: ZipUtil
 ) : DataMigrationService {
@@ -56,8 +62,20 @@ class DefaultDataMigrationService(
         val analyses = entryAnalysisRepository.getAllAnalyses()
         val summaries = dailySummaryRepository.getAllSummaries()
         val weeklySummaries = weeklySummaryRepository.getAllSummaries()
+        val weightRecords = weightHistoryRepository.getAllWeightRecords()
 
-        Napier.i("Exporting ${entries.size} entries, ${analyses.size} analyses, ${summaries.size} daily summaries, ${weeklySummaries.size} weekly summaries")
+        // Gather user profile
+        val userProfile = ExportUserProfile(
+            height = appSettingsRepository.getHeight(),
+            heightUnit = appSettingsRepository.getHeightUnit(),
+            sex = appSettingsRepository.getSex(),
+            currentWeight = appSettingsRepository.getCurrentWeight(),
+            weightUnit = appSettingsRepository.getWeightUnit(),
+            dateOfBirth = appSettingsRepository.getDateOfBirth(),
+            activityLevel = appSettingsRepository.getActivityLevel()
+        )
+
+        Napier.i("Exporting ${entries.size} entries, ${analyses.size} analyses, ${summaries.size} daily summaries, ${weeklySummaries.size} weekly summaries, ${weightRecords.size} weight records, user profile")
 
         // 2. Build export model (relativize absolute paths for MAUI compatibility)
         val appDataDir = fileSystem.getAppDataDirectory()
@@ -74,7 +92,9 @@ class DefaultDataMigrationService(
             analyses = analyses.map { it.toExport() },
             summaries = summaries.map { it.toExport() },
             summariesAnalyses = emptyList(), // Kotlin doesn't have this junction table
-            weeklySummaries = weeklySummaries.map { it.toExport() }
+            weeklySummaries = weeklySummaries.map { it.toExport() },
+            userProfile = userProfile,
+            weightRecords = weightRecords.map { it.toExport() }
         )
 
         // 3. Serialize to JSON
@@ -248,12 +268,43 @@ class DefaultDataMigrationService(
                 }
             }
 
-            Napier.i("Import completed: $entriesImported entries, $analysesImported analyses, $summariesImported daily summaries, $weeklySummariesImported weekly summaries")
+            // 8. Import user profile
+            exportData.userProfile?.let { profile ->
+                try {
+                    profile.height?.let { appSettingsRepository.setHeight(it) }
+                    appSettingsRepository.setHeightUnit(profile.heightUnit)
+                    profile.sex?.let { appSettingsRepository.setSex(it) }
+                    profile.currentWeight?.let { appSettingsRepository.setCurrentWeight(it) }
+                    appSettingsRepository.setWeightUnit(profile.weightUnit)
+                    profile.dateOfBirth?.let { appSettingsRepository.setDateOfBirth(it) }
+                    profile.activityLevel?.let { appSettingsRepository.setActivityLevel(it) }
+                    Napier.i("Imported user profile")
+                } catch (e: Exception) {
+                    Napier.w("Failed to import user profile", e)
+                    errors.add("Failed to import user profile: ${e.message}")
+                }
+            }
+
+            // 9. Upsert weight records
+            var weightRecordsImported = 0
+            for (exportRecord in exportData.weightRecords) {
+                try {
+                    val domainRecord = exportRecord.toDomain()
+                    weightHistoryRepository.upsertWeightRecord(domainRecord)
+                    weightRecordsImported++
+                } catch (e: Exception) {
+                    Napier.w("Failed to import weight record ${exportRecord.weightRecordId}", e)
+                    errors.add("Failed to import weight record ${exportRecord.weightRecordId}: ${e.message}")
+                }
+            }
+
+            Napier.i("Import completed: $entriesImported entries, $analysesImported analyses, $summariesImported daily summaries, $weeklySummariesImported weekly summaries, $weightRecordsImported weight records")
             return ImportResult(
                 entriesImported = entriesImported,
                 analysesImported = analysesImported,
                 summariesImported = summariesImported,
                 weeklySummariesImported = weeklySummariesImported,
+                weightRecordsImported = weightRecordsImported,
                 errors = errors
             )
         } finally {
@@ -273,8 +324,18 @@ class DefaultDataMigrationService(
     private fun enumerateImageAbsolutePaths(entry: com.wellnesswingman.data.model.TrackedEntry, appDataDir: String): List<String> {
         val rawPaths = mutableListOf<String>()
 
-        // Add blob path
-        entry.blobPath?.takeIf { it.isNotBlank() }?.let { rawPaths.add(it) }
+        // Add blob path and its computed preview (Kotlin entries don't store
+        // preview paths in dataPayload — the preview is derived by convention)
+        entry.blobPath?.takeIf { it.isNotBlank() }?.let { blobPath ->
+            rawPaths.add(blobPath)
+            val lastDot = blobPath.lastIndexOf('.')
+            val previewPath = if (lastDot > 0) {
+                "${blobPath.substring(0, lastDot)}_preview${blobPath.substring(lastDot)}"
+            } else {
+                "${blobPath}_preview"
+            }
+            rawPaths.add(previewPath)
+        }
 
         // Try to extract preview paths from payload JSON
         if (entry.dataPayload.isNotBlank()) {
