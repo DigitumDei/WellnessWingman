@@ -48,7 +48,8 @@ class DailySummaryService(
      */
     suspend fun generateSummary(
         date: LocalDate,
-        timeZone: TimeZone = TimeZone.currentSystemDefault()
+        timeZone: TimeZone = TimeZone.currentSystemDefault(),
+        userComments: String? = null
     ): DailySummaryResult {
         try {
             Napier.d("Generating daily summary for $date")
@@ -162,7 +163,8 @@ class DailySummaryService(
                 exerciseCount = exerciseCount,
                 sleepCount = sleepCount,
                 sleepHours = totalSleepHours,
-                weightRecords = weightRecords
+                weightRecords = weightRecords,
+                userComments = userComments
             )
 
             // Generate summary using LLM
@@ -209,12 +211,12 @@ class DailySummaryService(
     /**
      * Regenerates a daily summary for a specific date.
      */
-    suspend fun regenerateSummary(date: LocalDate): DailySummaryResult {
+    suspend fun regenerateSummary(date: LocalDate, userComments: String? = null): DailySummaryResult {
         // Delete existing summary if present
         dailySummaryRepository.deleteSummaryByDate(date)
 
         // Generate new summary
-        return generateSummary(date)
+        return generateSummary(date, userComments = userComments)
     }
 
     /**
@@ -279,7 +281,8 @@ class DailySummaryService(
         exerciseCount: Int,
         sleepCount: Int,
         sleepHours: Double?,
-        weightRecords: List<WeightRecord> = emptyList()
+        weightRecords: List<WeightRecord> = emptyList(),
+        userComments: String? = null
     ): String {
         return """
 Generate a daily health summary for $date. Return a JSON object with the following structure:
@@ -331,11 +334,11 @@ Nutrition Summary:
 - Fat: ${nutritionTotals.fat.toInt()}g
 - Fiber: ${nutritionTotals.fiber.toInt()}g
 
-Guidelines:
+${if (!userComments.isNullOrBlank()) "User's note about their day:\n$userComments\n\n" else ""}Guidelines:
 1. Provide 2-4 key insights about the day's nutrition and activities
 2. Provide 2-3 specific, actionable recommendations for tomorrow
 3. Keep the tone positive and encouraging
-4. Focus on progress and achievable goals
+4. Focus on progress and achievable goals${if (!userComments.isNullOrBlank()) "\n5. Incorporate the user's note into your insights and recommendations where relevant" else ""}
 
 Return ONLY the JSON object.
         """.trimIndent()

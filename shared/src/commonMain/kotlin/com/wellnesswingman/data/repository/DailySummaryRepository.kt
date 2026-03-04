@@ -16,6 +16,7 @@ interface DailySummaryRepository {
     suspend fun insertSummary(summary: DailySummary): Long
     suspend fun updateSummary(id: Long, highlights: String, recommendations: String)
     suspend fun updateSummaryByDate(date: LocalDate, highlights: String, recommendations: String)
+    suspend fun updateUserComments(date: LocalDate, comments: String?)
     suspend fun deleteSummary(id: Long)
     suspend fun deleteSummaryByDate(date: LocalDate)
     suspend fun deleteOldSummaries(beforeDate: LocalDate)

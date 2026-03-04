@@ -6,7 +6,8 @@ CREATE TABLE DailySummary (
     summaryDate INTEGER NOT NULL,
     highlights TEXT NOT NULL DEFAULT '',
     recommendations TEXT NOT NULL DEFAULT '',
-    generatedAt INTEGER
+    generatedAt INTEGER,
+    userComments TEXT
 );
 
 -- Index for date queries
@@ -53,8 +54,9 @@ INSERT INTO DailySummary(
     summaryDate,
     highlights,
     recommendations,
-    generatedAt
-) VALUES (?, ?, ?, ?, ?);
+    generatedAt,
+    userComments
+) VALUES (?, ?, ?, ?, ?, ?);
 
 -- Update summary
 updateSummary:
@@ -66,6 +68,12 @@ WHERE summaryId = ?;
 updateSummaryByDate:
 UPDATE DailySummary
 SET highlights = ?, recommendations = ?, generatedAt = ?
+WHERE summaryDate = ?;
+
+-- Update user comments by date
+updateUserComments:
+UPDATE DailySummary
+SET userComments = ?
 WHERE summaryDate = ?;
 
 -- Delete summary
@@ -91,8 +99,9 @@ INSERT OR REPLACE INTO DailySummary(
     summaryDate,
     highlights,
     recommendations,
-    generatedAt
-) VALUES (?, ?, ?, ?, ?, ?);
+    generatedAt,
+    userComments
+) VALUES (?, ?, ?, ?, ?, ?, ?);
 
 -- Get last inserted row ID
 lastInsertRowId:

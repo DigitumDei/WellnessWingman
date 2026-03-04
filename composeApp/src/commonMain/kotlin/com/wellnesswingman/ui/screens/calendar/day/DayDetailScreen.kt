@@ -70,7 +70,7 @@ data class DayDetailScreen(val date: LocalDate) : Screen {
                     isGeneratingSummary = isGeneratingSummary,
                     onEntryClick = { entry -> navigator.push(EntryDetailScreen(entry.entryId)) },
                     onGenerateSummary = { viewModel.generateDailySummary() },
-                    onViewSummary = { navigator.push(DailySummaryScreen()) },
+                    onViewSummary = { navigator.push(DailySummaryScreen(date)) },
                     onPreviousDay = { navigator.replace(DayDetailScreen(date.plus(-1, DateTimeUnit.DAY))) },
                     onNextDay = { navigator.replace(DayDetailScreen(date.plus(1, DateTimeUnit.DAY))) },
                     modifier = Modifier.padding(paddingValues)

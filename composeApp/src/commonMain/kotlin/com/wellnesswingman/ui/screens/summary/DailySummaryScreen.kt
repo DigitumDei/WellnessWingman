@@ -8,8 +8,12 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -20,16 +24,22 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import com.wellnesswingman.data.model.DailySummary
 import com.wellnesswingman.ui.components.ErrorMessage
 import com.wellnesswingman.ui.components.LoadingIndicator
+import com.wellnesswingman.ui.screens.detail.VoiceRecordingButton
 import com.wellnesswingman.util.DateTimeUtil
 import kotlinx.datetime.LocalDate
 
-class DailySummaryScreen : Screen {
+data class DailySummaryScreen(val date: LocalDate) : Screen {
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
         val viewModel = getScreenModel<DailySummaryViewModel>()
         val uiState by viewModel.uiState.collectAsState()
         val isGenerating by viewModel.isGenerating.collectAsState()
+        val commentsState by viewModel.commentsState.collectAsState()
+
+        LaunchedEffect(date) {
+            viewModel.loadSummary(date)
+        }
 
         Scaffold(
             topBar = {
@@ -62,12 +72,19 @@ class DailySummaryScreen : Screen {
                 is DailySummaryUiState.Success -> SummaryContent(
                     summary = state.summary,
                     date = state.date,
+                    commentsState = commentsState,
+                    onCommentsChange = viewModel::updateCommentsText,
+                    onSaveComments = viewModel::saveComments,
+                    onToggleRecording = viewModel::toggleRecording,
                     modifier = Modifier.padding(paddingValues)
                 )
                 is DailySummaryUiState.NoSummary -> NoSummaryState(
                     date = state.date,
                     onGenerate = { viewModel.generateSummary() },
                     isGenerating = isGenerating,
+                    commentsState = commentsState,
+                    onCommentsChange = viewModel::updateCommentsText,
+                    onToggleRecording = viewModel::toggleRecording,
                     modifier = Modifier.padding(paddingValues)
                 )
                 is DailySummaryUiState.NoEntries -> NoEntriesState(
@@ -88,6 +105,10 @@ class DailySummaryScreen : Screen {
 fun SummaryContent(
     summary: DailySummary,
     date: LocalDate,
+    commentsState: CommentsState,
+    onCommentsChange: (String) -> Unit,
+    onSaveComments: () -> Unit,
+    onToggleRecording: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -142,6 +163,14 @@ fun SummaryContent(
                 }
             }
         }
+
+        // User comments
+        UserCommentsSection(
+            commentsState = commentsState,
+            onCommentsChange = onCommentsChange,
+            onSaveComments = onSaveComments,
+            onToggleRecording = onToggleRecording
+        )
     }
 }
 
@@ -150,26 +179,174 @@ fun NoSummaryState(
     date: LocalDate,
     onGenerate: () -> Unit,
     isGenerating: Boolean,
+    commentsState: CommentsState,
+    onCommentsChange: (String) -> Unit,
+    onToggleRecording: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var showDialog by remember { mutableStateOf(false) }
+
+    if (showDialog) {
+        GenerateWithNotesDialog(
+            commentsState = commentsState,
+            onCommentsChange = onCommentsChange,
+            onToggleRecording = onToggleRecording,
+            onGenerate = {
+                showDialog = false
+                onGenerate()
+            },
+            onDismiss = { showDialog = false }
+        )
+    }
+
     Box(
         modifier = modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            modifier = Modifier.padding(32.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text(
                 text = "No summary for ${DateTimeUtil.formatDate(date)}",
                 style = MaterialTheme.typography.titleMedium
             )
             Button(
-                onClick = onGenerate,
+                onClick = { showDialog = true },
                 enabled = !isGenerating
             ) {
                 Text("Generate Summary")
+            }
+        }
+    }
+}
+
+@Composable
+fun GenerateWithNotesDialog(
+    commentsState: CommentsState,
+    onCommentsChange: (String) -> Unit,
+    onToggleRecording: () -> Unit,
+    onGenerate: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val busy = commentsState.isRecording || commentsState.isTranscribing
+
+    AlertDialog(
+        onDismissRequest = { if (!busy) onDismiss() },
+        title = { Text("Generate Summary") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = "Optionally add a note about your day before generating.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                OutlinedTextField(
+                    value = commentsState.text,
+                    onValueChange = onCommentsChange,
+                    label = { Text("Notes (optional)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 3,
+                    maxLines = 6,
+                    enabled = !busy
+                )
+
+                if (commentsState.transcriptionError != null) {
+                    Text(
+                        text = commentsState.transcriptionError,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+
+                VoiceRecordingButton(
+                    onToggleRecording = onToggleRecording,
+                    isRecording = commentsState.isRecording,
+                    isTranscribing = commentsState.isTranscribing,
+                    recordingDurationSeconds = commentsState.recordingDurationSeconds,
+                    enabled = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onGenerate,
+                enabled = !busy
+            ) {
+                Text("Generate")
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
+                enabled = !busy
+            ) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+fun UserCommentsSection(
+    commentsState: CommentsState,
+    onCommentsChange: (String) -> Unit,
+    onSaveComments: () -> Unit,
+    onToggleRecording: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(modifier = modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = "My Notes",
+                style = MaterialTheme.typography.titleMedium
+            )
+
+            OutlinedTextField(
+                value = commentsState.text,
+                onValueChange = onCommentsChange,
+                label = { Text("Add notes about your day (or use the mic)") },
+                modifier = Modifier.fillMaxWidth(),
+                minLines = 3,
+                maxLines = 8,
+                enabled = !commentsState.isRecording && !commentsState.isTranscribing
+            )
+
+            if (commentsState.transcriptionError != null) {
+                Text(
+                    text = commentsState.transcriptionError,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                VoiceRecordingButton(
+                    onToggleRecording = onToggleRecording,
+                    isRecording = commentsState.isRecording,
+                    isTranscribing = commentsState.isTranscribing,
+                    recordingDurationSeconds = commentsState.recordingDurationSeconds,
+                    enabled = true,
+                    modifier = Modifier.weight(1f)
+                )
+
+                Button(
+                    onClick = onSaveComments,
+                    enabled = commentsState.hasUnsavedChanges && !commentsState.isRecording && !commentsState.isTranscribing
+                ) {
+                    Text(if (commentsState.hasUnsavedChanges) "Save" else "Saved")
+                }
             }
         }
     }
