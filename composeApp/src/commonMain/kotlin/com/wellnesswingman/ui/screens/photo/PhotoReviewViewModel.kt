@@ -212,10 +212,13 @@ class PhotoReviewViewModel(
                 )
                 val entryId = trackedEntryRepository.insertEntry(entry)
 
-                // Queue analysis via BackgroundAnalysisService so status events are emitted
-                backgroundAnalysisService.queueEntry(entryId, userNotes)
-
-                _uiState.value = PhotoReviewUiState.Success(entryId)
+                if (!llmClientFactory.hasCurrentApiKey()) {
+                    _uiState.value = PhotoReviewUiState.Success(entryId, apiKeyMissing = true)
+                } else {
+                    // Queue analysis via BackgroundAnalysisService so status events are emitted
+                    backgroundAnalysisService.queueEntry(entryId, userNotes)
+                    _uiState.value = PhotoReviewUiState.Success(entryId)
+                }
             } catch (e: Exception) {
                 Napier.e("Failed to create entry", e)
                 _uiState.value = PhotoReviewUiState.Error(e.message ?: "Unknown error")
@@ -266,10 +269,13 @@ class PhotoReviewViewModel(
                 )
                 val entryId = trackedEntryRepository.insertEntry(entry)
 
-                // Queue analysis via BackgroundAnalysisService so status events are emitted
-                backgroundAnalysisService.queueEntry(entryId, userNotes)
-
-                _uiState.value = PhotoReviewUiState.Success(entryId)
+                if (!llmClientFactory.hasCurrentApiKey()) {
+                    _uiState.value = PhotoReviewUiState.Success(entryId, apiKeyMissing = true)
+                } else {
+                    // Queue analysis via BackgroundAnalysisService so status events are emitted
+                    backgroundAnalysisService.queueEntry(entryId, userNotes)
+                    _uiState.value = PhotoReviewUiState.Success(entryId)
+                }
             } catch (e: Exception) {
                 Napier.e("Failed to create entry from photo", e)
                 _uiState.value = PhotoReviewUiState.Error(e.message ?: "Unknown error")
@@ -312,7 +318,7 @@ sealed class PhotoReviewUiState {
     object Picking : PhotoReviewUiState()
     data class Review(val blobPath: String, val photoBytes: ByteArray) : PhotoReviewUiState()
     object Processing : PhotoReviewUiState()
-    data class Success(val entryId: Long) : PhotoReviewUiState()
+    data class Success(val entryId: Long, val apiKeyMissing: Boolean = false) : PhotoReviewUiState()
     data class Error(val message: String) : PhotoReviewUiState()
     object Cancelled : PhotoReviewUiState()
 }
