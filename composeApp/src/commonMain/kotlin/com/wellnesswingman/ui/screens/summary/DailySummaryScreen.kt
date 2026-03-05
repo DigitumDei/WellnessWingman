@@ -22,6 +22,7 @@ import cafe.adriel.voyager.koin.getScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import com.wellnesswingman.data.model.DailySummary
+import com.wellnesswingman.ui.common.CommentsState
 import com.wellnesswingman.ui.components.ErrorMessage
 import com.wellnesswingman.ui.components.LoadingIndicator
 import com.wellnesswingman.ui.screens.detail.VoiceRecordingButton

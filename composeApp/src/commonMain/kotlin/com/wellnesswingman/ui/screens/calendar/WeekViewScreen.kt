@@ -23,9 +23,11 @@ import cafe.adriel.voyager.koin.getScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import com.wellnesswingman.data.model.TrackedEntry
+import com.wellnesswingman.ui.common.CommentsState
 import com.wellnesswingman.ui.components.ErrorMessage
 import com.wellnesswingman.ui.components.LoadingIndicator
 import com.wellnesswingman.ui.screens.calendar.day.DayDetailScreen
+import com.wellnesswingman.ui.screens.detail.VoiceRecordingButton
 import com.wellnesswingman.ui.screens.main.EntryCard
 import com.wellnesswingman.util.DateTimeUtil
 import kotlinx.datetime.*
@@ -39,6 +41,7 @@ class WeekViewScreen : Screen {
         val currentWeek by viewModel.currentWeekStart.collectAsState()
         val weeklySummaryState by viewModel.weeklySummaryState.collectAsState()
         val entryCounts by viewModel.entryCounts.collectAsState()
+        val commentsState by viewModel.commentsState.collectAsState()
 
         // Swipe gesture handling
         var swipeOffset by remember { mutableStateOf(0f) }
@@ -89,10 +92,14 @@ class WeekViewScreen : Screen {
                     entriesByDate = state.entriesByDate,
                     weeklySummaryState = weeklySummaryState,
                     entryCounts = entryCounts,
+                    commentsState = commentsState,
                     onDateClick = { date -> navigator.push(DayDetailScreen(date)) },
                     onEntryClick = { entry -> navigator.push(com.wellnesswingman.ui.screens.detail.EntryDetailScreen(entry.entryId)) },
                     onGenerateSummary = { viewModel.generateWeeklySummary() },
                     onRegenerateSummary = { viewModel.regenerateWeeklySummary() },
+                    onCommentsChange = { viewModel.updateCommentsText(it) },
+                    onToggleRecording = { viewModel.toggleRecording() },
+                    onSaveComments = { viewModel.saveComments() },
                     modifier = Modifier.padding(paddingValues)
                 )
                 is WeekUiState.Error -> ErrorMessage(
@@ -111,10 +118,14 @@ fun WeekContent(
     entriesByDate: Map<LocalDate, List<TrackedEntry>>,
     weeklySummaryState: WeeklySummaryState,
     entryCounts: EntryCounts,
+    commentsState: CommentsState,
     onDateClick: (LocalDate) -> Unit,
     onEntryClick: (TrackedEntry) -> Unit,
     onGenerateSummary: () -> Unit,
     onRegenerateSummary: () -> Unit,
+    onCommentsChange: (String) -> Unit,
+    onToggleRecording: () -> Unit,
+    onSaveComments: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     LazyColumn(
@@ -128,8 +139,12 @@ fun WeekContent(
                 weekStart = weekStart,
                 weeklySummaryState = weeklySummaryState,
                 entryCounts = entryCounts,
+                commentsState = commentsState,
                 onGenerateSummary = onGenerateSummary,
-                onRegenerateSummary = onRegenerateSummary
+                onRegenerateSummary = onRegenerateSummary,
+                onCommentsChange = onCommentsChange,
+                onToggleRecording = onToggleRecording,
+                onSaveComments = onSaveComments
             )
         }
 
@@ -165,8 +180,12 @@ fun WeeklySummaryCard(
     weekStart: LocalDate,
     weeklySummaryState: WeeklySummaryState,
     entryCounts: EntryCounts,
+    commentsState: CommentsState,
     onGenerateSummary: () -> Unit,
     onRegenerateSummary: () -> Unit,
+    onCommentsChange: (String) -> Unit,
+    onToggleRecording: () -> Unit,
+    onSaveComments: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -215,6 +234,14 @@ fun WeeklySummaryCard(
                     }
                 }
                 is WeeklySummaryState.NoSummary -> {
+                    // User notes section (visible even before generating)
+                    WeeklyUserNotesSection(
+                        commentsState = commentsState,
+                        onCommentsChange = onCommentsChange,
+                        onToggleRecording = onToggleRecording,
+                        onSaveComments = onSaveComments
+                    )
+
                     if (entryCounts.totalEntries > 0) {
                         Button(
                             onClick = onGenerateSummary,
@@ -302,8 +329,17 @@ fun WeeklySummaryCard(
                         }
                     }
 
+                    HorizontalDivider()
+
+                    // User notes section
+                    WeeklyUserNotesSection(
+                        commentsState = commentsState,
+                        onCommentsChange = onCommentsChange,
+                        onToggleRecording = onToggleRecording,
+                        onSaveComments = onSaveComments
+                    )
+
                     // Regenerate button
-                    Spacer(modifier = Modifier.height(8.dp))
                     OutlinedButton(
                         onClick = onRegenerateSummary,
                         modifier = Modifier.fillMaxWidth()
@@ -331,6 +367,66 @@ fun WeeklySummaryCard(
                         Text("Try Again")
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun WeeklyUserNotesSection(
+    commentsState: CommentsState,
+    onCommentsChange: (String) -> Unit,
+    onToggleRecording: () -> Unit,
+    onSaveComments: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            text = "My Notes",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Medium
+        )
+
+        OutlinedTextField(
+            value = commentsState.text,
+            onValueChange = onCommentsChange,
+            label = { Text("Add notes about your week (or use the mic)") },
+            modifier = Modifier.fillMaxWidth(),
+            minLines = 3,
+            maxLines = 8,
+            enabled = !commentsState.isRecording && !commentsState.isTranscribing
+        )
+
+        if (commentsState.transcriptionError != null) {
+            Text(
+                text = commentsState.transcriptionError,
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            VoiceRecordingButton(
+                onToggleRecording = onToggleRecording,
+                isRecording = commentsState.isRecording,
+                isTranscribing = commentsState.isTranscribing,
+                recordingDurationSeconds = commentsState.recordingDurationSeconds,
+                enabled = true,
+                modifier = Modifier.weight(1f)
+            )
+
+            Button(
+                onClick = onSaveComments,
+                enabled = commentsState.hasUnsavedChanges && !commentsState.isRecording && !commentsState.isTranscribing
+            ) {
+                Text(if (commentsState.hasUnsavedChanges) "Save" else "Saved")
             }
         }
     }

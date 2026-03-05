@@ -1,0 +1,7 @@
+-- Migration from version 4 to version 5
+-- Adds payloadJson column to DailySummary
+-- Adds userComments and payloadJson columns to WeeklySummary
+
+ALTER TABLE DailySummary ADD COLUMN payloadJson TEXT;
+ALTER TABLE WeeklySummary ADD COLUMN userComments TEXT;
+ALTER TABLE WeeklySummary ADD COLUMN payloadJson TEXT;

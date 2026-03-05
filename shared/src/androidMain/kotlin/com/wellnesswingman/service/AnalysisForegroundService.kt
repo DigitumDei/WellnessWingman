@@ -24,17 +24,24 @@ class AnalysisForegroundService : Service() {
         return null
     }
 
+    override fun onCreate() {
+        super.onCreate()
+        // Call startForeground() as early as possible to avoid
+        // ForegroundServiceDidNotStartInTimeException on slow/busy devices.
+        createNotificationChannel()
+        val notification = buildNotification()
+        startForeground(NOTIFICATION_ID, notification)
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         synchronized(lock) {
             activeTaskCount++
             Napier.d("Foreground service started. Active tasks: $activeTaskCount")
 
-            // Create notification channel (required for Android 8+)
-            createNotificationChannel()
-
-            // Build and display notification
+            // Update the notification with the current task count
             val notification = buildNotification()
-            startForeground(NOTIFICATION_ID, notification)
+            val notificationManager = getSystemService(NotificationManager::class.java)
+            notificationManager?.notify(NOTIFICATION_ID, notification)
         }
 
         // Return Sticky so service is restarted if killed by system

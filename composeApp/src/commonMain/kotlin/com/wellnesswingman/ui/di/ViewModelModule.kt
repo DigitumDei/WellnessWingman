@@ -36,7 +36,11 @@ val viewModelModule = module {
     factory {
         WeekViewModel(
             trackedEntryRepository = get(),
-            weeklySummaryService = get()
+            weeklySummaryService = get(),
+            weeklySummaryRepository = get(),
+            audioRecordingService = get(),
+            llmClientFactory = get(),
+            fileSystem = get()
         )
     }
     factoryOf(::YearViewModel)

@@ -7,7 +7,8 @@ CREATE TABLE DailySummary (
     highlights TEXT NOT NULL DEFAULT '',
     recommendations TEXT NOT NULL DEFAULT '',
     generatedAt INTEGER,
-    userComments TEXT
+    userComments TEXT,
+    payloadJson TEXT
 );
 
 -- Index for date queries
@@ -55,8 +56,9 @@ INSERT INTO DailySummary(
     highlights,
     recommendations,
     generatedAt,
-    userComments
-) VALUES (?, ?, ?, ?, ?, ?);
+    userComments,
+    payloadJson
+) VALUES (?, ?, ?, ?, ?, ?, ?);
 
 -- Update summary
 updateSummary:
@@ -100,8 +102,9 @@ INSERT OR REPLACE INTO DailySummary(
     highlights,
     recommendations,
     generatedAt,
-    userComments
-) VALUES (?, ?, ?, ?, ?, ?, ?);
+    userComments,
+    payloadJson
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?);
 
 -- Get last inserted row ID
 lastInsertRowId:

@@ -8,7 +8,13 @@ import com.wellnesswingman.data.model.TrackedEntry
 import com.wellnesswingman.data.model.WeeklySummary
 import com.wellnesswingman.data.model.WeeklySummaryResult
 import com.wellnesswingman.data.repository.TrackedEntryRepository
+import com.wellnesswingman.data.repository.WeeklySummaryRepository
 import com.wellnesswingman.domain.analysis.WeeklySummaryService
+import com.wellnesswingman.domain.llm.LlmClientFactory
+import com.wellnesswingman.platform.AudioRecordingService
+import com.wellnesswingman.platform.FileSystem
+import com.wellnesswingman.ui.common.CommentsState
+import com.wellnesswingman.ui.common.UserCommentsManager
 import io.github.aakira.napier.Napier
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -18,7 +24,11 @@ import kotlinx.datetime.*
 
 class WeekViewModel(
     private val trackedEntryRepository: TrackedEntryRepository,
-    private val weeklySummaryService: WeeklySummaryService
+    private val weeklySummaryService: WeeklySummaryService,
+    private val weeklySummaryRepository: WeeklySummaryRepository,
+    private val audioRecordingService: AudioRecordingService,
+    private val llmClientFactory: LlmClientFactory,
+    private val fileSystem: FileSystem
 ) : ScreenModel {
 
     private val _uiState = MutableStateFlow<WeekUiState>(WeekUiState.Loading)
@@ -32,6 +42,16 @@ class WeekViewModel(
 
     private val _entryCounts = MutableStateFlow(EntryCounts())
     val entryCounts: StateFlow<EntryCounts> = _entryCounts.asStateFlow()
+
+    private val commentsManager = UserCommentsManager(
+        audioRecordingService = audioRecordingService,
+        llmClientFactory = llmClientFactory,
+        fileSystem = fileSystem,
+        scope = screenModelScope,
+        audioFilePrefix = "weekcomment"
+    )
+
+    val commentsState: StateFlow<CommentsState> = commentsManager.commentsState
 
     init {
         loadWeek(_currentWeekStart.value)
@@ -97,6 +117,7 @@ class WeekViewModel(
         try {
             val existingSummary = weeklySummaryService.getSummaryForWeek(weekStart)
             if (existingSummary != null) {
+                commentsManager.loadComments(existingSummary.userComments)
                 val highlightsList = existingSummary.highlights.lines().filter { it.isNotBlank() }
                 val recommendationsList = existingSummary.recommendations.lines().filter { it.isNotBlank() }
                 _weeklySummaryState.value = WeeklySummaryState.HasSummary(
@@ -105,6 +126,7 @@ class WeekViewModel(
                     recommendationsList = recommendationsList
                 )
             } else {
+                commentsManager.loadComments(null)
                 _weeklySummaryState.value = WeeklySummaryState.NoSummary
             }
         } catch (e: Exception) {
@@ -115,10 +137,11 @@ class WeekViewModel(
 
     fun generateWeeklySummary() {
         val weekStart = _currentWeekStart.value
+        val userComments = commentsManager.commentsState.value.text.takeIf { it.isNotBlank() }
         screenModelScope.launch {
             _weeklySummaryState.value = WeeklySummaryState.Generating
 
-            when (val result = weeklySummaryService.generateSummary(weekStart)) {
+            when (val result = weeklySummaryService.generateSummary(weekStart, userComments = userComments)) {
                 is WeeklySummaryResult.Success -> {
                     _weeklySummaryState.value = WeeklySummaryState.HasSummary(
                         summary = result.summary,
@@ -138,10 +161,11 @@ class WeekViewModel(
 
     fun regenerateWeeklySummary() {
         val weekStart = _currentWeekStart.value
+        val userComments = commentsManager.commentsState.value.text.takeIf { it.isNotBlank() }
         screenModelScope.launch {
             _weeklySummaryState.value = WeeklySummaryState.Generating
 
-            when (val result = weeklySummaryService.regenerateSummary(weekStart)) {
+            when (val result = weeklySummaryService.regenerateSummary(weekStart, userComments = userComments)) {
                 is WeeklySummaryResult.Success -> {
                     _weeklySummaryState.value = WeeklySummaryState.HasSummary(
                         summary = result.summary,
@@ -158,6 +182,46 @@ class WeekViewModel(
             }
         }
     }
+
+    // --- Comments ---
+
+    fun updateCommentsText(text: String) {
+        commentsManager.updateText(text)
+    }
+
+    fun saveComments() {
+        screenModelScope.launch {
+            val text = commentsManager.commentsState.value.text
+            val weekStart = _currentWeekStart.value
+            try {
+                val existing = weeklySummaryRepository.getSummaryForWeek(weekStart)
+                if (existing != null) {
+                    weeklySummaryRepository.updateUserComments(weekStart, text.takeIf { it.isNotBlank() })
+                } else if (text.isNotBlank()) {
+                    weeklySummaryRepository.insertSummary(
+                        WeeklySummary(weekStartDate = weekStart, userComments = text)
+                    )
+                }
+                commentsManager.markSaved()
+
+                // Update in-memory state if present
+                val state = _weeklySummaryState.value
+                if (state is WeeklySummaryState.HasSummary) {
+                    _weeklySummaryState.value = state.copy(
+                        summary = state.summary.copy(userComments = text.takeIf { it.isNotBlank() })
+                    )
+                }
+            } catch (e: Exception) {
+                Napier.e("Failed to save weekly comments", e)
+            }
+        }
+    }
+
+    fun toggleRecording() {
+        commentsManager.toggleRecording()
+    }
+
+    suspend fun checkMicPermission(): Boolean = commentsManager.checkMicPermission()
 
     fun previousWeek() {
         val current = _currentWeekStart.value

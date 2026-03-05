@@ -5,6 +5,8 @@ import com.wellnesswingman.data.model.EntryAnalysis
 import com.wellnesswingman.data.model.EntryType
 import com.wellnesswingman.data.model.ProcessingStatus
 import com.wellnesswingman.data.model.TrackedEntry
+import com.wellnesswingman.data.model.WeeklySummary
+import com.wellnesswingman.data.model.WeightRecord
 import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
@@ -144,7 +146,10 @@ data class ExportData(
     @SerialName("Entries") val entries: List<ExportTrackedEntry> = emptyList(),
     @SerialName("Analyses") val analyses: List<ExportEntryAnalysis> = emptyList(),
     @SerialName("Summaries") val summaries: List<ExportDailySummary> = emptyList(),
-    @SerialName("SummariesAnalyses") val summariesAnalyses: List<ExportSummaryAnalysis> = emptyList()
+    @SerialName("SummariesAnalyses") val summariesAnalyses: List<ExportSummaryAnalysis> = emptyList(),
+    @SerialName("WeeklySummaries") val weeklySummaries: List<ExportWeeklySummary> = emptyList(),
+    @SerialName("UserProfile") val userProfile: ExportUserProfile? = null,
+    @SerialName("WeightRecords") val weightRecords: List<ExportWeightRecord> = emptyList()
 )
 
 @Serializable
@@ -180,7 +185,26 @@ data class ExportDailySummary(
     @SerialName("ExternalId") val externalId: String? = null,
     @SerialName("SummaryDate") val summaryDate: String, // ISO 8601
     @SerialName("Highlights") val highlights: String = "",
-    @SerialName("Recommendations") val recommendations: String = ""
+    @SerialName("Recommendations") val recommendations: String = "",
+    @SerialName("GeneratedAt") val generatedAt: String? = null, // ISO 8601
+    @SerialName("UserComments") val userComments: String? = null,
+    @SerialName("PayloadJson") val payloadJson: String? = null
+)
+
+@Serializable
+data class ExportWeeklySummary(
+    @SerialName("SummaryId") val summaryId: Long,
+    @SerialName("WeekStartDate") val weekStartDate: String, // ISO 8601 date
+    @SerialName("Highlights") val highlights: String = "",
+    @SerialName("Recommendations") val recommendations: String = "",
+    @SerialName("MealCount") val mealCount: Int = 0,
+    @SerialName("ExerciseCount") val exerciseCount: Int = 0,
+    @SerialName("SleepCount") val sleepCount: Int = 0,
+    @SerialName("OtherCount") val otherCount: Int = 0,
+    @SerialName("TotalEntries") val totalEntries: Int = 0,
+    @SerialName("GeneratedAt") val generatedAt: String? = null, // ISO 8601
+    @SerialName("UserComments") val userComments: String? = null,
+    @SerialName("PayloadJson") val payloadJson: String? = null
 )
 
 @Serializable
@@ -189,9 +213,51 @@ data class ExportSummaryAnalysis(
     @SerialName("AnalysisId") val analysisId: Long
 )
 
+@Serializable
+data class ExportUserProfile(
+    @SerialName("Height") val height: Double? = null,
+    @SerialName("HeightUnit") val heightUnit: String = "cm",
+    @SerialName("Sex") val sex: String? = null,
+    @SerialName("CurrentWeight") val currentWeight: Double? = null,
+    @SerialName("WeightUnit") val weightUnit: String = "kg",
+    @SerialName("DateOfBirth") val dateOfBirth: String? = null,
+    @SerialName("ActivityLevel") val activityLevel: String? = null
+)
+
+@Serializable
+data class ExportWeightRecord(
+    @SerialName("WeightRecordId") val weightRecordId: Long,
+    @SerialName("ExternalId") val externalId: String? = null,
+    @SerialName("RecordedAt") val recordedAt: String, // ISO 8601
+    @SerialName("WeightValue") val weightValue: Double,
+    @SerialName("WeightUnit") val weightUnit: String,
+    @SerialName("Source") val source: String,
+    @SerialName("RelatedEntryId") val relatedEntryId: Long? = null
+)
+
 // endregion
 
 // region -- Mapping functions --
+
+fun WeightRecord.toExport(): ExportWeightRecord = ExportWeightRecord(
+    weightRecordId = weightRecordId,
+    externalId = externalId,
+    recordedAt = recordedAt.toString(),
+    weightValue = weightValue,
+    weightUnit = weightUnit,
+    source = source,
+    relatedEntryId = relatedEntryId
+)
+
+fun ExportWeightRecord.toDomain(): WeightRecord = WeightRecord(
+    weightRecordId = weightRecordId,
+    externalId = externalId,
+    recordedAt = parseCSharpInstant(recordedAt),
+    weightValue = weightValue,
+    weightUnit = weightUnit,
+    source = source,
+    relatedEntryId = relatedEntryId
+)
 
 fun TrackedEntry.toExport(): ExportTrackedEntry = ExportTrackedEntry(
     entryId = entryId,
@@ -248,12 +314,13 @@ fun DailySummary.toExport(): ExportDailySummary = ExportDailySummary(
     externalId = externalId,
     summaryDate = summaryDate.atStartOfDayIn(TimeZone.UTC).toString(),
     highlights = highlights,
-    recommendations = recommendations
-    // Note: generatedAt is Kotlin-only, not exported
+    recommendations = recommendations,
+    generatedAt = generatedAt?.toString(),
+    userComments = userComments,
+    payloadJson = payloadJson
 )
 
 fun ExportDailySummary.toDomain(): DailySummary {
-    // Parse date - could be ISO datetime or just a date
     val date = try {
         LocalDate.parse(summaryDate.substringBefore('T'))
     } catch (_: Exception) {
@@ -265,7 +332,46 @@ fun ExportDailySummary.toDomain(): DailySummary {
         summaryDate = date,
         highlights = highlights,
         recommendations = recommendations,
-        generatedAt = null // Kotlin-only field
+        generatedAt = generatedAt?.let { runCatching { parseCSharpInstant(it) }.getOrNull() },
+        userComments = userComments,
+        payloadJson = payloadJson
+    )
+}
+
+fun WeeklySummary.toExport(): ExportWeeklySummary = ExportWeeklySummary(
+    summaryId = summaryId,
+    weekStartDate = weekStartDate.toString(),
+    highlights = highlights,
+    recommendations = recommendations,
+    mealCount = mealCount,
+    exerciseCount = exerciseCount,
+    sleepCount = sleepCount,
+    otherCount = otherCount,
+    totalEntries = totalEntries,
+    generatedAt = generatedAt?.toString(),
+    userComments = userComments,
+    payloadJson = payloadJson
+)
+
+fun ExportWeeklySummary.toDomain(): WeeklySummary {
+    val date = try {
+        LocalDate.parse(weekStartDate.substringBefore('T'))
+    } catch (_: Exception) {
+        parseCSharpInstant(weekStartDate).toLocalDateTime(TimeZone.UTC).date
+    }
+    return WeeklySummary(
+        summaryId = summaryId,
+        weekStartDate = date,
+        highlights = highlights,
+        recommendations = recommendations,
+        mealCount = mealCount,
+        exerciseCount = exerciseCount,
+        sleepCount = sleepCount,
+        otherCount = otherCount,
+        totalEntries = totalEntries,
+        generatedAt = generatedAt?.let { runCatching { parseCSharpInstant(it) }.getOrNull() },
+        userComments = userComments,
+        payloadJson = payloadJson
     )
 }
 

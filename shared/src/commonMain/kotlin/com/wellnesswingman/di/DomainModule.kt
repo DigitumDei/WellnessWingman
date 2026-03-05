@@ -86,6 +86,9 @@ val domainModule = module {
             trackedEntryRepository = get(),
             entryAnalysisRepository = get(),
             dailySummaryRepository = get(),
+            weeklySummaryRepository = get(),
+            appSettingsRepository = get(),
+            weightHistoryRepository = get(),
             fileSystem = get(),
             zipUtil = get()
         )

@@ -22,7 +22,9 @@ data class WeeklySummary(
     /**
      * Timestamp when the summary was generated. Used for outdated detection.
      */
-    val generatedAt: Instant? = null
+    val generatedAt: Instant? = null,
+    val userComments: String? = null,
+    val payloadJson: String? = null
 )
 
 /**
@@ -41,12 +43,25 @@ sealed class WeeklySummaryResult {
 }
 
 /**
+ * Weight change data for a week.
+ */
+@Serializable
+data class WeightChangeSummary(
+    @SerialName("start")
+    val start: Double? = null,
+    @SerialName("end")
+    val end: Double? = null,
+    @SerialName("unit")
+    val unit: String = "kg"
+)
+
+/**
  * Payload structure for weekly summary LLM responses.
  */
 @Serializable
 data class WeeklySummaryPayload(
     @SerialName("schemaVersion")
-    val schemaVersion: String = "1.0",
+    val schemaVersion: String = "1.1",
     @SerialName("weekStartDate")
     val weekStartDate: String,
     @SerialName("highlights")
@@ -62,5 +77,13 @@ data class WeeklySummaryPayload(
     @SerialName("otherCount")
     val otherCount: Int = 0,
     @SerialName("totalEntries")
-    val totalEntries: Int = 0
+    val totalEntries: Int = 0,
+    @SerialName("nutritionAverages")
+    val nutritionAverages: NutritionTotals? = null,
+    @SerialName("nutritionTrend")
+    val nutritionTrend: String? = null,
+    @SerialName("weightChange")
+    val weightChange: WeightChangeSummary? = null,
+    @SerialName("balanceSummary")
+    val balanceSummary: String? = null
 )

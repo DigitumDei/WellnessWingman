@@ -10,7 +10,9 @@ CREATE TABLE WeeklySummary (
     sleepCount INTEGER NOT NULL DEFAULT 0,
     otherCount INTEGER NOT NULL DEFAULT 0,
     totalEntries INTEGER NOT NULL DEFAULT 0,
-    generatedAt INTEGER
+    generatedAt INTEGER,
+    userComments TEXT,
+    payloadJson TEXT
 );
 
 -- Index for week queries
@@ -56,19 +58,27 @@ INSERT INTO WeeklySummary(
     sleepCount,
     otherCount,
     totalEntries,
-    generatedAt
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+    generatedAt,
+    userComments,
+    payloadJson
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- Update summary
 updateSummary:
 UPDATE WeeklySummary
-SET highlights = ?, recommendations = ?, mealCount = ?, exerciseCount = ?, sleepCount = ?, otherCount = ?, totalEntries = ?, generatedAt = ?
+SET highlights = ?, recommendations = ?, mealCount = ?, exerciseCount = ?, sleepCount = ?, otherCount = ?, totalEntries = ?, generatedAt = ?, payloadJson = ?
 WHERE summaryId = ?;
 
 -- Update summary by week
 updateSummaryByWeek:
 UPDATE WeeklySummary
-SET highlights = ?, recommendations = ?, mealCount = ?, exerciseCount = ?, sleepCount = ?, otherCount = ?, totalEntries = ?, generatedAt = ?
+SET highlights = ?, recommendations = ?, mealCount = ?, exerciseCount = ?, sleepCount = ?, otherCount = ?, totalEntries = ?, generatedAt = ?, payloadJson = ?
+WHERE weekStartDate = ?;
+
+-- Update user comments by week
+updateUserComments:
+UPDATE WeeklySummary
+SET userComments = ?
 WHERE weekStartDate = ?;
 
 -- Delete summary
