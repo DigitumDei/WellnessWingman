@@ -10,10 +10,10 @@ import com.wellnesswingman.data.repository.EntryAnalysisRepository
 import com.wellnesswingman.data.repository.TrackedEntryRepository
 import com.wellnesswingman.data.repository.WeeklySummaryRepository
 import com.wellnesswingman.data.repository.WeightHistoryRepository
-import com.wellnesswingman.platform.FileSystem
+import com.wellnesswingman.platform.FileSystemOperations
 import com.wellnesswingman.platform.ZipEntry
 import com.wellnesswingman.platform.ZipFileSource
-import com.wellnesswingman.platform.ZipUtil
+import com.wellnesswingman.platform.ZipOperations
 import io.github.aakira.napier.Napier
 import kotlinx.datetime.Clock
 import kotlinx.datetime.TimeZone
@@ -43,8 +43,8 @@ class DefaultDataMigrationService(
     private val weeklySummaryRepository: WeeklySummaryRepository,
     private val appSettingsRepository: AppSettingsRepository,
     private val weightHistoryRepository: WeightHistoryRepository,
-    private val fileSystem: FileSystem,
-    private val zipUtil: ZipUtil
+    private val fileSystem: FileSystemOperations,
+    private val zipUtil: ZipOperations
 ) : DataMigrationService {
 
     private val json = Json {

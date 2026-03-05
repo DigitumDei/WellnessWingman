@@ -13,9 +13,9 @@ import java.util.zip.ZipFile
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 
-actual class ZipUtil actual constructor() {
+actual class ZipUtil actual constructor() : ZipOperations {
 
-    actual suspend fun createZip(zipPath: String, entries: List<ZipEntry>) = withContext(Dispatchers.IO) {
+    actual override suspend fun createZip(zipPath: String, entries: List<ZipEntry>) = withContext(Dispatchers.IO) {
         val zipFile = File(zipPath)
         zipFile.parentFile?.mkdirs()
 
@@ -28,7 +28,7 @@ actual class ZipUtil actual constructor() {
         }
     }
 
-    actual suspend fun createZipWithFiles(
+    actual override suspend fun createZipWithFiles(
         zipPath: String,
         inMemoryEntries: List<ZipEntry>,
         fileEntries: List<ZipFileSource>
@@ -52,7 +52,7 @@ actual class ZipUtil actual constructor() {
         }
     }
 
-    actual suspend fun extractZip(zipPath: String, destDir: String) = withContext(Dispatchers.IO) {
+    actual override suspend fun extractZip(zipPath: String, destDir: String) = withContext(Dispatchers.IO) {
         val zipFile = File(zipPath)
         if (!zipFile.exists()) {
             throw java.io.FileNotFoundException("ZIP file not found: $zipPath")
@@ -65,7 +65,7 @@ actual class ZipUtil actual constructor() {
         destDirectory.mkdirs()
         val canonicalDestDir = destDirectory.canonicalPath
 
-        // We use ZipInputStream instead of ZipFile to be more resilient to truncated or 
+        // We use ZipInputStream instead of ZipFile to be more resilient to truncated or
         // slightly corrupted archives (e.g., missing the END header/EOCD record).
         // ZipFile is more strict and requires a valid Central Directory at the end of the file.
         try {
@@ -102,7 +102,7 @@ actual class ZipUtil actual constructor() {
         }
     }
 
-    actual suspend fun readFileFromZip(zipPath: String, fileName: String): ByteArray? =
+    actual override suspend fun readFileFromZip(zipPath: String, fileName: String): ByteArray? =
         withContext(Dispatchers.IO) {
             val zipFile = File(zipPath)
             if (!zipFile.exists() || zipFile.length() == 0L) return@withContext null

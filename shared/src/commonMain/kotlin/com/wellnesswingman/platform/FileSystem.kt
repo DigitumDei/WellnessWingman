@@ -3,69 +3,18 @@ package com.wellnesswingman.platform
 /**
  * Platform-specific file system operations.
  */
-expect class FileSystem {
-    /**
-     * Gets the app's data directory path.
-     */
-    fun getAppDataDirectory(): String
-
-    /**
-     * Gets the photos directory path.
-     */
-    fun getPhotosDirectory(): String
-
-    /**
-     * Reads bytes from a file.
-     */
-    suspend fun readBytes(path: String): ByteArray
-
-    /**
-     * Writes bytes to a file.
-     */
-    suspend fun writeBytes(path: String, bytes: ByteArray)
-
-    /**
-     * Deletes a file.
-     */
-    suspend fun delete(path: String): Boolean
-
-    /**
-     * Checks if a file exists.
-     */
-    fun exists(path: String): Boolean
-
-    /**
-     * Returns true if the path exists and is a directory.
-     */
-    fun isDirectory(path: String): Boolean
-
-    /**
-     * Lists files in a directory.
-     */
-    fun listFiles(path: String): List<String>
-
-    /**
-     * Creates a directory.
-     */
-    fun createDirectory(path: String): Boolean
-
-    /**
-     * Gets the app's cache directory path.
-     */
-    fun getCacheDirectory(): String
-
-    /**
-     * Gets a persistent directory for export files (not subject to cache eviction).
-     */
-    fun getExportsDirectory(): String
-
-    /**
-     * Lists all files in a directory recursively.
-     */
-    fun listFilesRecursively(path: String): List<String>
-
-    /**
-     * Copies a file from source to destination.
-     */
-    suspend fun copyFile(sourcePath: String, destPath: String)
+expect class FileSystem : FileSystemOperations {
+    override fun getAppDataDirectory(): String
+    override fun getPhotosDirectory(): String
+    override suspend fun readBytes(path: String): ByteArray
+    override suspend fun writeBytes(path: String, bytes: ByteArray)
+    override suspend fun delete(path: String): Boolean
+    override fun exists(path: String): Boolean
+    override fun isDirectory(path: String): Boolean
+    override fun listFiles(path: String): List<String>
+    override fun createDirectory(path: String): Boolean
+    override fun getCacheDirectory(): String
+    override fun getExportsDirectory(): String
+    override fun listFilesRecursively(path: String): List<String>
+    override suspend fun copyFile(sourcePath: String, destPath: String)
 }

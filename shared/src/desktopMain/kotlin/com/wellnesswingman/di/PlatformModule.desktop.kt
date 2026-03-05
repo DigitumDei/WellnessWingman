@@ -8,8 +8,11 @@ import com.wellnesswingman.platform.BackgroundExecutionService
 import com.wellnesswingman.platform.DesktopBackgroundExecutionService
 import com.wellnesswingman.platform.DiagnosticShare
 import com.wellnesswingman.platform.FileSystem
+import com.wellnesswingman.platform.FileSystemOperations
 import com.wellnesswingman.platform.ShareUtil
+import com.wellnesswingman.platform.ZipOperations
 import com.wellnesswingman.platform.ZipUtil
+import org.koin.dsl.bind
 import org.koin.dsl.module
 import java.util.prefs.Preferences
 
@@ -27,10 +30,10 @@ val platformModule = module {
     }
 
     // Platform services
-    single { FileSystem() }
+    single { FileSystem() } bind FileSystemOperations::class
     single { AudioRecordingService() }
     single { DiagnosticShare() }
-    single { ZipUtil() }
+    single { ZipUtil() } bind ZipOperations::class
     single { ShareUtil() }
 
     // Background execution service (no-op on desktop)
