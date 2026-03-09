@@ -11,9 +11,12 @@ import com.wellnesswingman.platform.CameraCaptureService
 import com.wellnesswingman.platform.DiagnosticLogger
 import com.wellnesswingman.platform.DiagnosticShare
 import com.wellnesswingman.platform.FileSystem
+import com.wellnesswingman.platform.FileSystemOperations
 import com.wellnesswingman.platform.PhotoResizer
 import com.wellnesswingman.platform.ShareUtil
+import com.wellnesswingman.platform.ZipOperations
 import com.wellnesswingman.platform.ZipUtil
+import org.koin.dsl.bind
 import org.koin.dsl.module
 
 /**
@@ -35,7 +38,7 @@ val platformModule = module {
     }
 
     // Platform services
-    single { FileSystem(get<Context>()) }
+    single { FileSystem(get<Context>()) } bind FileSystemOperations::class
     single { CameraCaptureService(get<Context>()) }
     single { AudioRecordingService(get<Context>()) }
     single { PhotoResizer() }
@@ -43,7 +46,7 @@ val platformModule = module {
     single { DiagnosticShare(get<Context>(), get()) }
 
     // ZIP and sharing
-    single { ZipUtil() }
+    single { ZipUtil() } bind ZipOperations::class
     single { ShareUtil(get<Context>()) }
 
     // Background execution service

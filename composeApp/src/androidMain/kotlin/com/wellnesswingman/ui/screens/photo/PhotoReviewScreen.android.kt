@@ -223,8 +223,25 @@ private class PhotoReviewScreen : Screen {
                     LoadingIndicator(Modifier.padding(paddingValues))
                 }
                 is PhotoReviewUiState.Success -> {
-                    LaunchedEffect(state.entryId) {
-                        navigator.replace(EntryDetailScreen(state.entryId))
+                    if (state.apiKeyMissing) {
+                        AlertDialog(
+                            onDismissRequest = {
+                                navigator.replace(EntryDetailScreen(state.entryId))
+                            },
+                            title = { Text("API Key Required") },
+                            text = { Text("No API key is configured. Your entry was saved but cannot be analyzed. Please add an API key in Settings to enable analysis.") },
+                            confirmButton = {
+                                TextButton(onClick = {
+                                    navigator.replace(EntryDetailScreen(state.entryId))
+                                }) {
+                                    Text("OK")
+                                }
+                            }
+                        )
+                    } else {
+                        LaunchedEffect(state.entryId) {
+                            navigator.replace(EntryDetailScreen(state.entryId))
+                        }
                     }
                 }
                 is PhotoReviewUiState.Error -> {

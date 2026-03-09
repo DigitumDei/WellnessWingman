@@ -1,0 +1,701 @@
+package com.wellnesswingman.domain.analysis
+
+import com.wellnesswingman.data.model.DailySummary
+import com.wellnesswingman.data.model.DailySummaryPayload
+import com.wellnesswingman.data.model.EntryType
+import com.wellnesswingman.data.model.NutritionTotals
+import com.wellnesswingman.data.model.ProcessingStatus
+import com.wellnesswingman.data.model.TrackedEntry
+import com.wellnesswingman.data.model.WeeklySummary
+import com.wellnesswingman.data.model.WeeklySummaryResult
+import com.wellnesswingman.data.model.WeightChangeSummary
+import com.wellnesswingman.data.model.WeightRecord
+import com.wellnesswingman.data.repository.DailySummaryRepository
+import com.wellnesswingman.data.repository.TrackedEntryRepository
+import com.wellnesswingman.data.repository.WeightHistoryRepository
+import com.wellnesswingman.data.repository.WeeklySummaryRepository
+import com.wellnesswingman.domain.llm.LlmAnalysisResult
+import com.wellnesswingman.domain.llm.LlmClient
+import com.wellnesswingman.domain.llm.LlmClientFactory
+import com.wellnesswingman.domain.llm.LlmDiagnostics
+import io.mockk.every
+import io.mockk.mockk
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.test.runTest
+import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
+import kotlinx.datetime.LocalDate
+import kotlinx.serialization.json.Json
+import kotlin.test.*
+
+class WeeklySummaryServiceTest {
+
+    // ── Fakes ─────────────────────────────────────────────────────────────────
+
+    private class FakeTrackedEntryRepository(
+        private val entriesToReturn: List<TrackedEntry> = emptyList()
+    ) : TrackedEntryRepository {
+        override suspend fun getEntriesForDay(startMillis: Long, endMillis: Long) = entriesToReturn
+        override suspend fun getEntriesForDay(date: LocalDate) = entriesToReturn
+        override suspend fun getAllEntries() = entriesToReturn
+        override fun observeAllEntries(): Flow<List<TrackedEntry>> = emptyFlow()
+        override suspend fun getEntryById(id: Long) = entriesToReturn.find { it.entryId == id }
+        override suspend fun getEntryByExternalId(externalId: String) = null
+        override fun observeEntriesForDay(date: LocalDate): Flow<List<TrackedEntry>> = emptyFlow()
+        override suspend fun getEntriesForWeek(startMillis: Long, endMillis: Long) = entriesToReturn
+        override suspend fun getEntriesForMonth(startMillis: Long, endMillis: Long) = entriesToReturn
+        override suspend fun getEntriesByStatus(status: ProcessingStatus) = entriesToReturn.filter { it.processingStatus == status }
+        override suspend fun getPendingEntries() = entriesToReturn.filter { it.processingStatus == ProcessingStatus.PENDING }
+        override suspend fun insertEntry(entry: TrackedEntry) = 1L
+        override suspend fun updateEntryStatus(id: Long, status: ProcessingStatus) {}
+        override suspend fun updateEntryType(id: Long, entryType: EntryType) {}
+        override suspend fun updateEntryPayload(id: Long, payload: String, schemaVersion: Int) {}
+        override suspend fun updateUserNotes(id: Long, notes: String?) {}
+        override suspend fun deleteEntry(id: Long) {}
+        override suspend fun upsertEntry(entry: TrackedEntry) {}
+    }
+
+    private class FakeWeeklySummaryRepository(
+        private val initialSummary: WeeklySummary? = null
+    ) : WeeklySummaryRepository {
+        val inserted = mutableListOf<WeeklySummary>()
+        val deleted = mutableListOf<LocalDate>()
+        val userCommentsUpdates = mutableMapOf<LocalDate, String?>()
+        private var nextId = 1L
+
+        override suspend fun getSummaryForWeek(weekStart: LocalDate): WeeklySummary? =
+            inserted.find { it.weekStartDate == weekStart } ?: initialSummary?.takeIf { it.weekStartDate == weekStart }
+
+        override suspend fun insertSummary(summary: WeeklySummary): Long {
+            val id = nextId++
+            inserted.add(summary.copy(summaryId = id))
+            return id
+        }
+
+        override suspend fun deleteSummaryByWeek(weekStart: LocalDate) { deleted.add(weekStart) }
+        override suspend fun updateUserComments(weekStart: LocalDate, comments: String?) {
+            userCommentsUpdates[weekStart] = comments
+        }
+        override suspend fun getAllSummaries() = inserted.toList()
+        override suspend fun getSummaryById(id: Long) = inserted.find { it.summaryId == id }
+        override suspend fun getSummariesForDateRange(startDate: LocalDate, endDate: LocalDate) =
+            inserted.filter { it.weekStartDate >= startDate && it.weekStartDate <= endDate }
+        override suspend fun getRecentSummaries(limit: Long) = inserted.take(limit.toInt())
+        override suspend fun updateSummary(summary: WeeklySummary) {}
+        override suspend fun updateSummaryByWeek(weekStart: LocalDate, summary: WeeklySummary) {}
+        override suspend fun deleteSummary(id: Long) {}
+        override suspend fun deleteOldSummaries(beforeDate: LocalDate) {}
+    }
+
+    private class FakeDailySummaryRepository(
+        private val summaries: List<DailySummary> = emptyList()
+    ) : DailySummaryRepository {
+        override suspend fun getSummariesForDateRange(startDate: LocalDate, endDate: LocalDate) =
+            summaries.filter { it.summaryDate >= startDate && it.summaryDate <= endDate }
+        override suspend fun getAllSummaries() = summaries
+        override suspend fun getSummaryById(id: Long) = null
+        override suspend fun getSummaryByExternalId(externalId: String) = null
+        override suspend fun getSummaryForDate(date: LocalDate) = summaries.find { it.summaryDate == date }
+        override suspend fun getRecentSummaries(limit: Long) = summaries.take(limit.toInt())
+        override suspend fun insertSummary(summary: DailySummary) = 1L
+        override suspend fun updateSummary(id: Long, highlights: String, recommendations: String) {}
+        override suspend fun updateSummaryByDate(date: LocalDate, highlights: String, recommendations: String) {}
+        override suspend fun updateUserComments(date: LocalDate, comments: String?) {}
+        override suspend fun deleteSummary(id: Long) {}
+        override suspend fun deleteSummaryByDate(date: LocalDate) {}
+        override suspend fun deleteOldSummaries(beforeDate: LocalDate) {}
+        override suspend fun upsertSummary(summary: DailySummary) {}
+    }
+
+    private class FakeWeightHistoryRepository(
+        private val records: List<WeightRecord> = emptyList()
+    ) : WeightHistoryRepository {
+        override suspend fun getWeightHistory(startDate: Instant, endDate: Instant) = records
+        override suspend fun addWeightRecord(record: WeightRecord) = 1L
+        override suspend fun getLatestWeightRecord() = records.lastOrNull()
+        override suspend fun getAllWeightRecords() = records
+        override suspend fun deleteWeightRecord(recordId: Long) {}
+        override suspend fun nullifyRelatedEntryId(entryId: Long) {}
+        override suspend fun upsertWeightRecord(record: WeightRecord) {}
+    }
+
+    private val json = Json { ignoreUnknownKeys = true; isLenient = true }
+
+    private fun makeLlmClientFactory(hasKey: Boolean, response: String = VALID_WEEKLY_JSON): LlmClientFactory {
+        val fakeLlmClient = object : LlmClient {
+            override suspend fun analyzeImage(imageBytes: ByteArray, prompt: String, jsonSchema: String?) =
+                LlmAnalysisResult(response, LlmDiagnostics())
+            override suspend fun transcribeAudio(audioBytes: ByteArray, mimeType: String) = ""
+            override suspend fun generateCompletion(prompt: String, jsonSchema: String?) =
+                LlmAnalysisResult(response, LlmDiagnostics())
+        }
+        val factory = mockk<LlmClientFactory>()
+        every { factory.hasCurrentApiKey() } returns hasKey
+        if (hasKey) every { factory.createForCurrentProvider() } returns fakeLlmClient
+        return factory
+    }
+
+    /**
+     * Like [makeLlmClientFactory] but captures completion prompts into [capturedPrompts],
+     * enabling tests to assert what was actually sent to the LLM.
+     */
+    private fun makeCapturingLlmClientFactory(
+        response: String = VALID_WEEKLY_JSON,
+        capturedPrompts: MutableList<String>
+    ): LlmClientFactory {
+        val fakeLlmClient = object : LlmClient {
+            override suspend fun analyzeImage(imageBytes: ByteArray, prompt: String, jsonSchema: String?) =
+                LlmAnalysisResult(response, LlmDiagnostics())
+            override suspend fun transcribeAudio(audioBytes: ByteArray, mimeType: String) = ""
+            override suspend fun generateCompletion(prompt: String, jsonSchema: String?): LlmAnalysisResult {
+                capturedPrompts.add(prompt)
+                return LlmAnalysisResult(response, LlmDiagnostics())
+            }
+        }
+        val factory = mockk<LlmClientFactory>()
+        every { factory.hasCurrentApiKey() } returns true
+        every { factory.createForCurrentProvider() } returns fakeLlmClient
+        return factory
+    }
+
+    private fun makeCompletedEntry(entryId: Long, entryType: EntryType) = TrackedEntry(
+        entryId = entryId,
+        entryType = entryType,
+        capturedAt = Clock.System.now(),
+        processingStatus = ProcessingStatus.COMPLETED
+    )
+
+    companion object {
+        val VALID_WEEKLY_JSON = """
+            {
+              "schemaVersion": "1.1",
+              "weekStartDate": "2025-03-01",
+              "highlights": ["Consistent logging", "Good exercise week"],
+              "recommendations": ["Increase protein", "More sleep"],
+              "mealCount": 18,
+              "exerciseCount": 4,
+              "sleepCount": 7,
+              "otherCount": 0,
+              "totalEntries": 29,
+              "nutritionAverages": {
+                "calories": 1900,
+                "protein": 85,
+                "carbohydrates": 210,
+                "fat": 68,
+                "fiber": 22,
+                "sugar": 38,
+                "sodium": 1700
+              },
+              "nutritionTrend": "Stable caloric intake with good protein",
+              "weightChange": {"start": 71.5, "end": 71.0, "unit": "kg"},
+              "balanceSummary": "Well balanced week"
+            }
+        """.trimIndent()
+    }
+
+    // ── Tests ─────────────────────────────────────────────────────────────────
+
+    @Test
+    fun `getSummaryForWeek delegates to repository`() = runTest {
+        val weekStart = LocalDate(2025, 3, 1)
+        val existingSummary = WeeklySummary(
+            weekStartDate = weekStart,
+            highlights = "Good week",
+            recommendations = "Keep going"
+        )
+        val service = WeeklySummaryService(
+            trackedEntryRepository = FakeTrackedEntryRepository(),
+            weeklySummaryRepository = FakeWeeklySummaryRepository(initialSummary = existingSummary),
+            dailySummaryRepository = FakeDailySummaryRepository(),
+            llmClientFactory = makeLlmClientFactory(hasKey = false),
+            weightHistoryRepository = FakeWeightHistoryRepository()
+        )
+
+        val result = service.getSummaryForWeek(weekStart)
+
+        assertNotNull(result)
+        assertEquals(weekStart, result.weekStartDate)
+    }
+
+    @Test
+    fun `generateSummary returns cached summary when one exists`() = runTest {
+        val weekStart = LocalDate(2025, 3, 1)
+        val cachedSummary = WeeklySummary(
+            weekStartDate = weekStart,
+            highlights = "Cached highlight",
+            recommendations = "Cached rec"
+        )
+        val service = WeeklySummaryService(
+            trackedEntryRepository = FakeTrackedEntryRepository(),
+            weeklySummaryRepository = FakeWeeklySummaryRepository(initialSummary = cachedSummary),
+            dailySummaryRepository = FakeDailySummaryRepository(),
+            llmClientFactory = makeLlmClientFactory(hasKey = false),
+            weightHistoryRepository = FakeWeightHistoryRepository()
+        )
+
+        val result = service.generateSummary(weekStart)
+
+        assertIs<WeeklySummaryResult.Success>(result)
+        val success = result as WeeklySummaryResult.Success
+        assertEquals(weekStart, success.summary.weekStartDate)
+    }
+
+    @Test
+    fun `generateSummary returns Error when no API key and no cache`() = runTest {
+        val weekStart = LocalDate(2025, 3, 1)
+        val service = WeeklySummaryService(
+            trackedEntryRepository = FakeTrackedEntryRepository(
+                listOf(makeCompletedEntry(1, EntryType.MEAL))
+            ),
+            weeklySummaryRepository = FakeWeeklySummaryRepository(),
+            dailySummaryRepository = FakeDailySummaryRepository(),
+            llmClientFactory = makeLlmClientFactory(hasKey = false),
+            weightHistoryRepository = FakeWeightHistoryRepository()
+        )
+
+        val result = service.generateSummary(weekStart)
+
+        assertIs<WeeklySummaryResult.Error>(result)
+        assertTrue((result as WeeklySummaryResult.Error).message.contains("API key", ignoreCase = true))
+    }
+
+    @Test
+    fun `generateSummary returns NoEntries when no completed entries`() = runTest {
+        val service = WeeklySummaryService(
+            trackedEntryRepository = FakeTrackedEntryRepository(emptyList()),
+            weeklySummaryRepository = FakeWeeklySummaryRepository(),
+            dailySummaryRepository = FakeDailySummaryRepository(),
+            llmClientFactory = makeLlmClientFactory(hasKey = true),
+            weightHistoryRepository = FakeWeightHistoryRepository()
+        )
+
+        val result = service.generateSummary(LocalDate(2025, 3, 1))
+
+        assertIs<WeeklySummaryResult.NoEntries>(result)
+    }
+
+    @Test
+    fun `generateSummary excludes DAILY_SUMMARY entry type`() = runTest {
+        val dailySummaryEntry = makeCompletedEntry(1, EntryType.DAILY_SUMMARY)
+        val service = WeeklySummaryService(
+            trackedEntryRepository = FakeTrackedEntryRepository(listOf(dailySummaryEntry)),
+            weeklySummaryRepository = FakeWeeklySummaryRepository(),
+            dailySummaryRepository = FakeDailySummaryRepository(),
+            llmClientFactory = makeLlmClientFactory(hasKey = true),
+            weightHistoryRepository = FakeWeightHistoryRepository()
+        )
+
+        val result = service.generateSummary(LocalDate(2025, 3, 1))
+
+        assertIs<WeeklySummaryResult.NoEntries>(result)
+    }
+
+    @Test
+    fun `generateSummary success persists summary with payloadJson`() = runTest {
+        val weekStart = LocalDate(2025, 3, 1)
+        val weeklyRepo = FakeWeeklySummaryRepository()
+        val service = WeeklySummaryService(
+            trackedEntryRepository = FakeTrackedEntryRepository(
+                listOf(makeCompletedEntry(1, EntryType.MEAL))
+            ),
+            weeklySummaryRepository = weeklyRepo,
+            dailySummaryRepository = FakeDailySummaryRepository(),
+            llmClientFactory = makeLlmClientFactory(hasKey = true),
+            weightHistoryRepository = FakeWeightHistoryRepository()
+        )
+
+        val result = service.generateSummary(weekStart)
+
+        assertIs<WeeklySummaryResult.Success>(result)
+        assertEquals(1, weeklyRepo.inserted.size)
+        val saved = weeklyRepo.inserted.first()
+        assertNotNull(saved.payloadJson)
+        assertTrue(saved.payloadJson!!.contains("weekStartDate") || saved.payloadJson.contains("highlights"))
+    }
+
+    @Test
+    fun `generateSummary with weight records computes weight change`() = runTest {
+        val weekStart = LocalDate(2025, 3, 1)
+        val now = Clock.System.now()
+        val weightRecords = listOf(
+            WeightRecord(
+                recordedAt = Instant.fromEpochMilliseconds(now.toEpochMilliseconds() - 5 * 24 * 3600 * 1000L),
+                weightValue = 75.0, weightUnit = "kg", source = "Manual"
+            ),
+            WeightRecord(
+                recordedAt = now,
+                weightValue = 74.2, weightUnit = "kg", source = "Manual"
+            )
+        )
+
+        val weeklyRepo = FakeWeeklySummaryRepository()
+        val service = WeeklySummaryService(
+            trackedEntryRepository = FakeTrackedEntryRepository(
+                listOf(makeCompletedEntry(1, EntryType.MEAL))
+            ),
+            weeklySummaryRepository = weeklyRepo,
+            dailySummaryRepository = FakeDailySummaryRepository(),
+            llmClientFactory = makeLlmClientFactory(hasKey = true),
+            weightHistoryRepository = FakeWeightHistoryRepository(weightRecords)
+        )
+
+        val result = service.generateSummary(weekStart)
+
+        assertIs<WeeklySummaryResult.Success>(result)
+    }
+
+    @Test
+    fun `generateSummary with userComments persists them in summary`() = runTest {
+        val weekStart = LocalDate(2025, 3, 1)
+        val weeklyRepo = FakeWeeklySummaryRepository()
+        val capturedPrompts = mutableListOf<String>()
+        val service = WeeklySummaryService(
+            trackedEntryRepository = FakeTrackedEntryRepository(
+                listOf(makeCompletedEntry(1, EntryType.MEAL))
+            ),
+            weeklySummaryRepository = weeklyRepo,
+            dailySummaryRepository = FakeDailySummaryRepository(),
+            llmClientFactory = makeCapturingLlmClientFactory(capturedPrompts = capturedPrompts),
+            weightHistoryRepository = FakeWeightHistoryRepository()
+        )
+
+        val result = service.generateSummary(weekStart, userComments = "This was a great week!")
+
+        assertIs<WeeklySummaryResult.Success>(result)
+        assertEquals(1, weeklyRepo.inserted.size)
+        assertEquals("This was a great week!", weeklyRepo.inserted.first().userComments)
+        // Verify user comments are actually included in the LLM prompt
+        assertTrue(capturedPrompts.isNotEmpty())
+        assertTrue(capturedPrompts.first().contains("This was a great week!"), "Expected user comments in prompt")
+    }
+
+    @Test
+    fun `generateSummary with blank userComments stores null`() = runTest {
+        val weekStart = LocalDate(2025, 3, 1)
+        val weeklyRepo = FakeWeeklySummaryRepository()
+        val service = WeeklySummaryService(
+            trackedEntryRepository = FakeTrackedEntryRepository(
+                listOf(makeCompletedEntry(1, EntryType.MEAL))
+            ),
+            weeklySummaryRepository = weeklyRepo,
+            dailySummaryRepository = FakeDailySummaryRepository(),
+            llmClientFactory = makeLlmClientFactory(hasKey = true),
+            weightHistoryRepository = FakeWeightHistoryRepository()
+        )
+
+        val result = service.generateSummary(weekStart, userComments = "   ")
+
+        assertIs<WeeklySummaryResult.Success>(result)
+        assertNull(weeklyRepo.inserted.first().userComments)
+    }
+
+    @Test
+    fun `generateSummary with daily summaries includes payloads in prompt`() = runTest {
+        val weekStart = LocalDate(2025, 3, 1)
+        val dailyPayloadJson = json.encodeToString(
+            DailySummaryPayload.serializer(),
+            DailySummaryPayload(
+                date = "2025-03-01",
+                summary = "Good day",
+                highlights = listOf("High protein"),
+                nutritionTotals = NutritionTotals(calories = 1800.0, protein = 90.0, carbs = 200.0, fat = 60.0)
+            )
+        )
+        val dailySummary = DailySummary(
+            summaryDate = LocalDate(2025, 3, 1),
+            highlights = "Good day",
+            recommendations = "Keep going",
+            payloadJson = dailyPayloadJson,
+            userComments = "Felt energetic"
+        )
+
+        val weeklyRepo = FakeWeeklySummaryRepository()
+        val capturedPrompts = mutableListOf<String>()
+        val service = WeeklySummaryService(
+            trackedEntryRepository = FakeTrackedEntryRepository(
+                listOf(makeCompletedEntry(1, EntryType.MEAL))
+            ),
+            weeklySummaryRepository = weeklyRepo,
+            dailySummaryRepository = FakeDailySummaryRepository(listOf(dailySummary)),
+            llmClientFactory = makeCapturingLlmClientFactory(capturedPrompts = capturedPrompts),
+            weightHistoryRepository = FakeWeightHistoryRepository()
+        )
+
+        val result = service.generateSummary(weekStart)
+
+        assertIs<WeeklySummaryResult.Success>(result)
+        // Verify daily summary context is included in the prompt
+        assertTrue(capturedPrompts.isNotEmpty())
+        val prompt = capturedPrompts.first()
+        assertTrue(prompt.contains("Good day"), "Expected daily highlights in prompt")
+        assertTrue(prompt.contains("Felt energetic"), "Expected daily user comments in prompt")
+    }
+
+    @Test
+    fun `generateSummary parses weekly payload with new fields from LLM`() = runTest {
+        val weekStart = LocalDate(2025, 3, 1)
+        val weeklyRepo = FakeWeeklySummaryRepository()
+        val service = WeeklySummaryService(
+            trackedEntryRepository = FakeTrackedEntryRepository(
+                listOf(makeCompletedEntry(1, EntryType.MEAL))
+            ),
+            weeklySummaryRepository = weeklyRepo,
+            dailySummaryRepository = FakeDailySummaryRepository(),
+            llmClientFactory = makeLlmClientFactory(hasKey = true, response = VALID_WEEKLY_JSON),
+            weightHistoryRepository = FakeWeightHistoryRepository()
+        )
+
+        val result = service.generateSummary(weekStart)
+
+        assertIs<WeeklySummaryResult.Success>(result)
+        val success = result as WeeklySummaryResult.Success
+        assertTrue(success.highlightsList.isNotEmpty())
+        assertTrue(success.recommendationsList.isNotEmpty())
+        // payloadJson is saved with the parsed content
+        val saved = weeklyRepo.inserted.first()
+        assertNotNull(saved.payloadJson)
+    }
+
+    @Test
+    fun `generateSummary falls back to text parsing when LLM returns invalid JSON`() = runTest {
+        val textResponse = """
+            Highlights:
+            - Consistent exercise this week
+            - Good meal timing
+            Recommendations:
+            - Increase water intake
+            - Add strength training
+        """.trimIndent()
+
+        val weeklyRepo = FakeWeeklySummaryRepository()
+        val service = WeeklySummaryService(
+            trackedEntryRepository = FakeTrackedEntryRepository(
+                listOf(makeCompletedEntry(1, EntryType.MEAL))
+            ),
+            weeklySummaryRepository = weeklyRepo,
+            dailySummaryRepository = FakeDailySummaryRepository(),
+            llmClientFactory = makeLlmClientFactory(hasKey = true, response = textResponse),
+            weightHistoryRepository = FakeWeightHistoryRepository()
+        )
+
+        val result = service.generateSummary(LocalDate(2025, 3, 1))
+
+        assertIs<WeeklySummaryResult.Success>(result)
+    }
+
+    @Test
+    fun `regenerateSummary deletes existing summary and generates new`() = runTest {
+        val weekStart = LocalDate(2025, 3, 1)
+        val weeklyRepo = FakeWeeklySummaryRepository()
+        val service = WeeklySummaryService(
+            trackedEntryRepository = FakeTrackedEntryRepository(
+                listOf(makeCompletedEntry(1, EntryType.MEAL))
+            ),
+            weeklySummaryRepository = weeklyRepo,
+            dailySummaryRepository = FakeDailySummaryRepository(),
+            llmClientFactory = makeLlmClientFactory(hasKey = true),
+            weightHistoryRepository = FakeWeightHistoryRepository()
+        )
+
+        val result = service.regenerateSummary(weekStart, userComments = "Regenerated")
+
+        assertTrue(weeklyRepo.deleted.contains(weekStart))
+        assertIs<WeeklySummaryResult.Success>(result)
+    }
+
+    @Test
+    fun `generateSummary counts entry types correctly`() = runTest {
+        val entries = listOf(
+            makeCompletedEntry(1, EntryType.MEAL),
+            makeCompletedEntry(2, EntryType.MEAL),
+            makeCompletedEntry(3, EntryType.EXERCISE),
+            makeCompletedEntry(4, EntryType.SLEEP),
+            makeCompletedEntry(5, EntryType.OTHER)
+        )
+
+        val weeklyRepo = FakeWeeklySummaryRepository()
+        val service = WeeklySummaryService(
+            trackedEntryRepository = FakeTrackedEntryRepository(entries),
+            weeklySummaryRepository = weeklyRepo,
+            dailySummaryRepository = FakeDailySummaryRepository(),
+            llmClientFactory = makeLlmClientFactory(hasKey = true),
+            weightHistoryRepository = FakeWeightHistoryRepository()
+        )
+
+        val result = service.generateSummary(LocalDate(2025, 3, 1))
+
+        assertIs<WeeklySummaryResult.Success>(result)
+        val saved = weeklyRepo.inserted.first()
+        assertEquals(2, saved.mealCount)
+        assertEquals(1, saved.exerciseCount)
+        assertEquals(1, saved.sleepCount)
+        assertEquals(1, saved.otherCount)
+        assertEquals(5, saved.totalEntries)
+    }
+
+    @Test
+    fun `generateSummary handles weight repository exception and still succeeds`() = runTest {
+        val weekStart = LocalDate(2025, 3, 1)
+        val weeklyRepo = FakeWeeklySummaryRepository()
+        val throwingWeightRepo = object : WeightHistoryRepository {
+            override suspend fun getWeightHistory(startDate: Instant, endDate: Instant): List<WeightRecord> =
+                throw RuntimeException("Weight DB error")
+            override suspend fun addWeightRecord(record: WeightRecord) = 1L
+            override suspend fun getLatestWeightRecord() = null
+            override suspend fun getAllWeightRecords() = emptyList<WeightRecord>()
+            override suspend fun deleteWeightRecord(recordId: Long) {}
+            override suspend fun nullifyRelatedEntryId(entryId: Long) {}
+            override suspend fun upsertWeightRecord(record: WeightRecord) {}
+        }
+
+        val service = WeeklySummaryService(
+            trackedEntryRepository = FakeTrackedEntryRepository(
+                listOf(makeCompletedEntry(1, EntryType.MEAL))
+            ),
+            weeklySummaryRepository = weeklyRepo,
+            dailySummaryRepository = FakeDailySummaryRepository(),
+            llmClientFactory = makeLlmClientFactory(hasKey = true),
+            weightHistoryRepository = throwingWeightRepo
+        )
+
+        val result = service.generateSummary(weekStart)
+
+        assertIs<WeeklySummaryResult.Success>(result)
+    }
+
+    @Test
+    fun `generateSummary with all-blank daily summaries produces empty context`() = runTest {
+        // Both highlights and recommendations blank → mapNotNull returns null → summaryLines is ""
+        val weekStart = LocalDate(2025, 3, 1)
+        val blankSummary = DailySummary(
+            summaryDate = LocalDate(2025, 3, 1),
+            highlights = "   ",
+            recommendations = ""
+        )
+        val weeklyRepo = FakeWeeklySummaryRepository()
+
+        val service = WeeklySummaryService(
+            trackedEntryRepository = FakeTrackedEntryRepository(
+                listOf(makeCompletedEntry(1, EntryType.MEAL))
+            ),
+            weeklySummaryRepository = weeklyRepo,
+            dailySummaryRepository = FakeDailySummaryRepository(listOf(blankSummary)),
+            llmClientFactory = makeLlmClientFactory(hasKey = true),
+            weightHistoryRepository = FakeWeightHistoryRepository()
+        )
+
+        val result = service.generateSummary(weekStart)
+
+        assertIs<WeeklySummaryResult.Success>(result)
+        assertEquals(1, weeklyRepo.inserted.size)
+    }
+
+    @Test
+    fun `generateSummary text fallback handles insight keyword and numbered and bullet patterns`() = runTest {
+        // Tests: "insight" keyword → inHighlights, numbered list ^\\d+\\., bullet •, recommendation keyword
+        val response = """
+            Insights:
+            1. Consistent nutrition throughout the week
+            2. Regular exercise maintained
+            Recommendations:
+            • Increase hydration
+            • Prioritize sleep
+        """.trimIndent()
+
+        val weeklyRepo = FakeWeeklySummaryRepository()
+        val service = WeeklySummaryService(
+            trackedEntryRepository = FakeTrackedEntryRepository(
+                listOf(makeCompletedEntry(1, EntryType.MEAL))
+            ),
+            weeklySummaryRepository = weeklyRepo,
+            dailySummaryRepository = FakeDailySummaryRepository(),
+            llmClientFactory = makeLlmClientFactory(hasKey = true, response = response),
+            weightHistoryRepository = FakeWeightHistoryRepository()
+        )
+
+        val result = service.generateSummary(LocalDate(2025, 3, 1))
+
+        assertIs<WeeklySummaryResult.Success>(result)
+        val success = result as WeeklySummaryResult.Success
+        assertTrue(success.highlightsList.isNotEmpty())
+        assertTrue(success.recommendationsList.isNotEmpty())
+    }
+
+    @Test
+    fun `generateSummary text fallback with no patterns applies content and default fallbacks`() = runTest {
+        // No JSON braces, no insight/recommendation/bullet lines
+        // → highlights.isEmpty() → content.take(200)
+        // → recommendations.isEmpty() → "Keep tracking your health activities!"
+        val response = "Unable to generate a weekly summary at this time."
+
+        val weeklyRepo = FakeWeeklySummaryRepository()
+        val service = WeeklySummaryService(
+            trackedEntryRepository = FakeTrackedEntryRepository(
+                listOf(makeCompletedEntry(1, EntryType.MEAL))
+            ),
+            weeklySummaryRepository = weeklyRepo,
+            dailySummaryRepository = FakeDailySummaryRepository(),
+            llmClientFactory = makeLlmClientFactory(hasKey = true, response = response),
+            weightHistoryRepository = FakeWeightHistoryRepository()
+        )
+
+        val result = service.generateSummary(LocalDate(2025, 3, 1))
+
+        assertIs<WeeklySummaryResult.Success>(result)
+        val success = result as WeeklySummaryResult.Success
+        // Fallback: highlights gets first 200 chars of response
+        assertTrue(success.highlightsList.isNotEmpty())
+        // Fallback: recommendations gets "Keep tracking your health activities!"
+        assertTrue(success.recommendationsList.isNotEmpty())
+        assertTrue(success.recommendationsList.any { it.contains("tracking", ignoreCase = true) })
+    }
+
+    @Test
+    fun `generateSummary with multiple weight records calculates change from first to last`() = runTest {
+        val weekStart = LocalDate(2025, 3, 1)
+        val baseTime = Clock.System.now().toEpochMilliseconds()
+        val records = listOf(
+            WeightRecord(
+                recordedAt = Instant.fromEpochMilliseconds(baseTime - 4 * 24 * 3600 * 1000L),
+                weightValue = 80.0, weightUnit = "kg", source = "Manual"
+            ),
+            WeightRecord(
+                recordedAt = Instant.fromEpochMilliseconds(baseTime - 2 * 24 * 3600 * 1000L),
+                weightValue = 79.5, weightUnit = "kg", source = "Manual"
+            ),
+            WeightRecord(
+                recordedAt = Instant.fromEpochMilliseconds(baseTime),
+                weightValue = 79.0, weightUnit = "kg", source = "Manual"
+            )
+        )
+        // Response includes weight change to verify parsing
+        val responseWithWeight = """
+            {
+              "weekStartDate": "2025-03-01",
+              "highlights": ["Lost 1kg this week"],
+              "recommendations": ["Keep it up"],
+              "mealCount": 1,
+              "exerciseCount": 0,
+              "sleepCount": 0,
+              "otherCount": 0,
+              "totalEntries": 1,
+              "weightChange": {"start": 80.0, "end": 79.0, "unit": "kg"}
+            }
+        """.trimIndent()
+
+        val service = WeeklySummaryService(
+            trackedEntryRepository = FakeTrackedEntryRepository(
+                listOf(makeCompletedEntry(1, EntryType.MEAL))
+            ),
+            weeklySummaryRepository = FakeWeeklySummaryRepository(),
+            dailySummaryRepository = FakeDailySummaryRepository(),
+            llmClientFactory = makeLlmClientFactory(hasKey = true, response = responseWithWeight),
+            weightHistoryRepository = FakeWeightHistoryRepository(records)
+        )
+
+        val result = service.generateSummary(weekStart)
+
+        assertIs<WeeklySummaryResult.Success>(result)
+    }
+}

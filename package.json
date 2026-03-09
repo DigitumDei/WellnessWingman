@@ -1,5 +1,9 @@
 {
   "dependencies": {
     "@google/gemini-cli": "^0.29.5"
+  },
+  "devDependencies": {
+    "@aspect-ratio/core": "^1.0.0",
+    "sharp": "^0.34.5"
   }
 }

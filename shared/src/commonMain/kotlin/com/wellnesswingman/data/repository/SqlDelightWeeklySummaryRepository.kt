@@ -56,7 +56,9 @@ class SqlDelightWeeklySummaryRepository(
             sleepCount = summary.sleepCount.toLong(),
             otherCount = summary.otherCount.toLong(),
             totalEntries = summary.totalEntries.toLong(),
-            generatedAt = summary.generatedAt?.toEpochMilliseconds()
+            generatedAt = summary.generatedAt?.toEpochMilliseconds(),
+            userComments = summary.userComments,
+            payloadJson = summary.payloadJson
         )
         queries.lastInsertRowId().executeAsOne()
     }
@@ -72,6 +74,7 @@ class SqlDelightWeeklySummaryRepository(
                 otherCount = summary.otherCount.toLong(),
                 totalEntries = summary.totalEntries.toLong(),
                 generatedAt = summary.generatedAt?.toEpochMilliseconds(),
+                payloadJson = summary.payloadJson,
                 summaryId = summary.summaryId
             )
         }
@@ -89,9 +92,15 @@ class SqlDelightWeeklySummaryRepository(
             otherCount = summary.otherCount.toLong(),
             totalEntries = summary.totalEntries.toLong(),
             generatedAt = summary.generatedAt?.toEpochMilliseconds(),
+            payloadJson = summary.payloadJson,
             weekStartDate = weekStart.toEpochDays().toLong()
         )
     }
+
+    override suspend fun updateUserComments(weekStart: LocalDate, comments: String?) =
+        withContext(Dispatchers.IO) {
+            queries.updateUserComments(comments, weekStart.toEpochDays().toLong())
+        }
 
     override suspend fun deleteSummary(id: Long) = withContext(Dispatchers.IO) {
         queries.deleteSummary(id)
@@ -119,7 +128,9 @@ class SqlDelightWeeklySummaryRepository(
             sleepCount = sleepCount.toInt(),
             otherCount = otherCount.toInt(),
             totalEntries = totalEntries.toInt(),
-            generatedAt = generatedAt?.let { Instant.fromEpochMilliseconds(it) }
+            generatedAt = generatedAt?.let { Instant.fromEpochMilliseconds(it) },
+            userComments = userComments,
+            payloadJson = payloadJson
         )
     }
 }

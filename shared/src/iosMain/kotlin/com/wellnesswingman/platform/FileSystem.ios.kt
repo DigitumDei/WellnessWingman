@@ -9,9 +9,9 @@ import kotlinx.coroutines.withContext
  * iOS implementation of FileSystem.
  */
 @OptIn(ExperimentalForeignApi::class)
-actual class FileSystem {
+actual class FileSystem : FileSystemOperations {
 
-    actual fun getAppDataDirectory(): String {
+    actual override fun getAppDataDirectory(): String {
         val paths = NSSearchPathForDirectoriesInDomains(
             NSDocumentDirectory,
             NSUserDomainMask,
@@ -20,7 +20,7 @@ actual class FileSystem {
         return paths.firstOrNull() as? String ?: ""
     }
 
-    actual fun getPhotosDirectory(): String {
+    actual override fun getPhotosDirectory(): String {
         val docsDir = getAppDataDirectory()
         val photosPath = "$docsDir/photos"
         NSFileManager.defaultManager.createDirectoryAtPath(
@@ -32,7 +32,7 @@ actual class FileSystem {
         return photosPath
     }
 
-    actual suspend fun readBytes(path: String): ByteArray = withContext(Dispatchers.Default) {
+    actual override suspend fun readBytes(path: String): ByteArray = withContext(Dispatchers.Default) {
         val data = NSData.dataWithContentsOfFile(path)
             ?: throw Exception("Failed to read file: $path")
         ByteArray(data.length.toInt()).apply {
@@ -44,25 +44,31 @@ actual class FileSystem {
         }
     }
 
-    actual suspend fun writeBytes(path: String, bytes: ByteArray) = withContext(Dispatchers.Default) {
+    actual override suspend fun writeBytes(path: String, bytes: ByteArray) = withContext(Dispatchers.Default) {
         val data = bytes.toNSData()
         data.writeToFile(path, true)
     }
 
-    actual suspend fun delete(path: String): Boolean = withContext(Dispatchers.Default) {
+    actual override suspend fun delete(path: String): Boolean = withContext(Dispatchers.Default) {
         NSFileManager.defaultManager.removeItemAtPath(path, null)
     }
 
-    actual fun exists(path: String): Boolean {
+    actual override fun exists(path: String): Boolean {
         return NSFileManager.defaultManager.fileExistsAtPath(path)
     }
 
-    actual fun listFiles(path: String): List<String> {
+    actual override fun isDirectory(path: String): Boolean {
+        val isDir = kotlinx.cinterop.alloc<kotlinx.cinterop.BooleanVar>()
+        val exists = NSFileManager.defaultManager.fileExistsAtPath(path, isDirectory = isDir.ptr)
+        return exists && isDir.value
+    }
+
+    actual override fun listFiles(path: String): List<String> {
         val contents = NSFileManager.defaultManager.contentsOfDirectoryAtPath(path, null)
         return (contents as? List<*>)?.mapNotNull { it as? String } ?: emptyList()
     }
 
-    actual fun createDirectory(path: String): Boolean {
+    actual override fun createDirectory(path: String): Boolean {
         return NSFileManager.defaultManager.createDirectoryAtPath(
             path,
             true,
@@ -71,11 +77,17 @@ actual class FileSystem {
         )
     }
 
-    actual fun getCacheDirectory(): String {
+    actual override fun getCacheDirectory(): String {
         return NSTemporaryDirectory()
     }
 
-    actual fun listFilesRecursively(path: String): List<String> {
+    actual override fun getExportsDirectory(): String {
+        val exportsPath = "${getAppDataDirectory()}/exports"
+        NSFileManager.defaultManager.createDirectoryAtPath(exportsPath, true, null, null)
+        return exportsPath
+    }
+
+    actual override fun listFilesRecursively(path: String): List<String> {
         val fm = NSFileManager.defaultManager
         val enumerator = fm.enumeratorAtPath(path) ?: return emptyList()
         val result = mutableListOf<String>()
@@ -92,7 +104,7 @@ actual class FileSystem {
         return result
     }
 
-    actual suspend fun copyFile(sourcePath: String, destPath: String) = withContext(Dispatchers.Default) {
+    actual override suspend fun copyFile(sourcePath: String, destPath: String) = withContext(Dispatchers.Default) {
         val fm = NSFileManager.defaultManager
         val destDir = destPath.substringBeforeLast('/')
         fm.createDirectoryAtPath(destDir, true, null, null)
