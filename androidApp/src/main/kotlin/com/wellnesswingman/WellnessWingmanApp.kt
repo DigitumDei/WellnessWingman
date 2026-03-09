@@ -1,11 +1,16 @@
 package com.wellnesswingman
 
 import android.app.Application
+import androidx.work.Constraints
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
 import com.wellnesswingman.di.getSharedModules
 import com.wellnesswingman.di.platformModule
 import com.wellnesswingman.domain.analysis.StaleEntryRecoveryService
 import com.wellnesswingman.platform.LogBuffer
 import com.wellnesswingman.ui.di.viewModelModule
+import com.wellnesswingman.workers.ImageRetentionWorker
 import io.github.aakira.napier.Napier
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -14,6 +19,7 @@ import org.koin.android.ext.koin.androidContext
 import org.koin.android.ext.koin.androidLogger
 import org.koin.core.context.startKoin
 import org.koin.core.logger.Level
+import java.util.concurrent.TimeUnit
 
 class WellnessWingmanApp : Application() {
     override fun onCreate() {
@@ -41,6 +47,24 @@ class WellnessWingmanApp : Application() {
             koinApp.koin.get<StaleEntryRecoveryService>().recoverStaleEntries()
         }
 
+        setupBackgroundJobs()
+
         Napier.i("WellnessWingman app initialized")
+    }
+
+    private fun setupBackgroundJobs() {
+        val constraints = Constraints.Builder()
+            .setRequiresBatteryNotLow(true)
+            .build()
+
+        val retentionWorkRequest = PeriodicWorkRequestBuilder<ImageRetentionWorker>(1, TimeUnit.DAYS)
+            .setConstraints(constraints)
+            .build()
+
+        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+            ImageRetentionWorker.WORK_NAME,
+            ExistingPeriodicWorkPolicy.KEEP,
+            retentionWorkRequest
+        )
     }
 }

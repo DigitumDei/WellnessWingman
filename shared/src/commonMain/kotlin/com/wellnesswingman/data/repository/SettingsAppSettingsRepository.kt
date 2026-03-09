@@ -32,8 +32,11 @@ class SettingsAppSettingsRepository(
         private const val KEY_PROFILE_DOB = "profile_dob"
         private const val KEY_PROFILE_ACTIVITY_LEVEL = "profile_activity_level"
 
+        private const val KEY_IMAGE_RETENTION_DAYS = "image_retention_days"
+
         private const val DEFAULT_HEIGHT_UNIT = "cm"
         private const val DEFAULT_WEIGHT_UNIT = "kg"
+        private const val DEFAULT_IMAGE_RETENTION_DAYS = 30
     }
 
     override fun getApiKey(provider: LlmProvider): String? {
@@ -153,5 +156,13 @@ class SettingsAppSettingsRepository(
         settings.remove(KEY_PROFILE_WEIGHT_UNIT)
         settings.remove(KEY_PROFILE_DOB)
         settings.remove(KEY_PROFILE_ACTIVITY_LEVEL)
+    }
+
+    override fun getImageRetentionThresholdDays(): Int {
+        return settings.getInt(KEY_IMAGE_RETENTION_DAYS, DEFAULT_IMAGE_RETENTION_DAYS)
+    }
+
+    override fun setImageRetentionThresholdDays(days: Int) {
+        settings[KEY_IMAGE_RETENTION_DAYS] = days
     }
 }

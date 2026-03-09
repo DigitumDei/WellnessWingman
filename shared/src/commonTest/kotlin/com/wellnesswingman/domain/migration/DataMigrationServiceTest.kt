@@ -150,6 +150,8 @@ private class FakeAppSettingsRepository : AppSettingsRepository {
     override fun clearHeight() { settings.remove("height") }
     override fun clearCurrentWeight() { settings.remove("currentWeight") }
     override fun clearProfileData() { settings.clear() }
+    override fun getImageRetentionThresholdDays(): Int = (settings["imageRetentionDays"] as? Int) ?: 30
+    override fun setImageRetentionThresholdDays(days: Int) { settings["imageRetentionDays"] = days }
 }
 
 private class FakeWeightHistoryRepository : WeightHistoryRepository {

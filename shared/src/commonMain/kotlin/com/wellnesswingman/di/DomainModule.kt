@@ -93,4 +93,7 @@ val domainModule = module {
             zipUtil = get()
         )
     }
+
+    // Media
+    single { com.wellnesswingman.domain.media.ImageRetentionService(get(), get(), get(), get()) }
 }
