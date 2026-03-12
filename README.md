@@ -155,9 +155,9 @@ The project follows clean architecture principles:
 - **Domain Layer:** Business logic, use cases, LLM orchestration
 - **UI Layer:** Compose Multiplatform screens and components
 
-## Migration from .NET MAUI
+## Migration History
 
-This project is a migration from the original .NET MAUI implementation. Key differences:
+This repository previously contained a .NET MAUI implementation. That code is no longer shipped or supported here; this section is historical context only. Key migration differences were:
 
 - C# → Kotlin
 - XAML → Compose
@@ -165,7 +165,7 @@ This project is a migration from the original .NET MAUI implementation. Key diff
 - .NET DI → Koin
 - Platform-specific code using expect/actual pattern
 
-See `MIGRATION_ANALYSIS.md` for full migration documentation.
+See `MIGRATION_ANALYSIS.md` for the archived migration analysis.
 
 ## Contributing
 
