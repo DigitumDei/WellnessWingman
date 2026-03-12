@@ -24,14 +24,16 @@
 - Mock AI integrations so Gradle test runs remain deterministic and offline-friendly.
 
 ### Code Coverage
-- Run coverage with `./gradlew :shared:desktopTest :shared:koverXmlReport :shared:koverHtmlReport`.
-- This generates machine-readable XML at `shared/build/reports/kover/report.xml` and browsable HTML under `shared/build/reports/kover/html/`.
-- Generate additional summaries with your preferred reporting tooling if needed; Codecov consumes the XML report directly in CI.
-- Example local report workflow:
+- For CI, generate all reports with:
+  ```bash
+  ./gradlew :shared:desktopTest :shared:koverXmlReport :shared:koverHtmlReport
+  ```
+- For a local browsable report, run:
   ```bash
   ./gradlew :shared:desktopTest :shared:koverHtmlReport
   ```
-- Open `shared/build/reports/kover/html/index.html` in a browser to inspect coverage locally.
+- The XML report is at `shared/build/reports/kover/report.xml`.
+- Open `shared/build/reports/kover/html/index.html` to view the HTML report.
 - Target minimum coverage thresholds: 80% line coverage, 70% branch coverage for production code.
 
 ## Security & Configuration
