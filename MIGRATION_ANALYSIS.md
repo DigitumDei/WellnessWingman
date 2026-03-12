@@ -1,5 +1,7 @@
 # WellnessWingman: Kotlin Multiplatform Migration Analysis
 
+> Historical document: this file describes the completed migration away from the former .NET MAUI application. It is retained for archival/reference purposes and is not an operational guide for the current Kotlin Multiplatform codebase.
+
 ## Executive Summary
 
 This document provides a comprehensive analysis for migrating WellnessWingman from .NET MAUI to Kotlin Multiplatform (KMP) with Compose Multiplatform.

@@ -1,43 +1,41 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-- `WellnessWingman.slnx` coordinates the MAUI app in `WellnessWingman/` and shared defaults in `WellnessWingman.ServiceDefaults/`.
-- Domain entities live under `Data/` and `Models/`; presentation logic sits in `PageModels/`; XAML pages and controls reside in `Pages/` and `Pages/Controls/`.
-- Cross-platform assets (icons, fonts, styles) are in `Resources/`; platform-specific heads stay within `Platforms/`.
-- Reusable helpers belong in `Utilities/`, and new services should be registered centrally through `MauiProgram.cs`.
+- `shared/` contains shared domain, data, and platform abstractions for the Kotlin Multiplatform codebase.
+- `composeApp/` contains shared Compose UI, while `androidApp/` and `iosApp/` provide platform entry points and packaging.
+- SQLDelight schema and migrations live under `shared/src/commonMain/sqldelight/`; platform-specific implementations live in the matching `androidMain/`, `iosMain/`, and `desktopMain/` source sets.
+- Register shared services through the Koin modules under `shared/src/commonMain/kotlin/com/wellnesswingman/di/`.
 
 ## Build, Test, and Development Commands
-- `dotnet restore WellnessWingman.slnx` pulls all NuGet dependencies prior to any build.
-- `dotnet build WellnessWingman.slnx` validates the full solution as CI would.
-- `dotnet build WellnessWingman/WellnessWingman.csproj -t:Run` launches the MAUI app on the default target.
-- `dotnet test` (run from the repo root) executes all test projects as they are added.
-- `dotnet maui-check` is a one-time tooling sanity check per developer machine.
-- Always invoke the .NET CLI as `dotnet` (without an explicit path) to ensure the shim on the PATH is used.
+- `./gradlew assembleDebug` builds the Android debug app from the repo root.
+- `./gradlew :shared:desktopTest` runs the shared test suite used in CI.
+- `./gradlew :shared:koverXmlReport` generates the XML coverage report consumed by Codecov.
+- `./gradlew :shared:koverHtmlReport` generates a browsable local coverage report.
+- `./gradlew check` runs the broader Gradle verification tasks when you need a full pre-PR validation pass.
 
 ## Coding Style & Naming Conventions
-- Follow standard .NET conventions: 4-space indentation, PascalCase for types and public members, camelCase for locals and private fields (use `_` prefixes only for property backing fields).
-- Match each page (`FooPage.xaml`) with `FooPageModel.cs`, keeping file-scoped namespaces aligned with directory structure.
-- Run `dotnet format` before publishing changes to satisfy analyzers and nullable warnings.
+- Follow Kotlin conventions: 4-space indentation, PascalCase for types, camelCase for functions/properties, and package names matching the directory structure.
+- Keep shared business logic in `shared/` and shared UI in `composeApp/`; platform-specific code should stay in the appropriate source set instead of leaking conditionals into common code.
+- Run the relevant Gradle formatting or verification tasks already configured in the module you touch before publishing changes.
 
 ## Testing Guidelines
-- Place unit tests in the `WellnessWingman.Tests/` project, mirroring production namespaces.
-- Name test classes `<TypeUnderTest>Tests` and methods with scenario-driven verbs (e.g., `GeneratePlan_SortsTasksByUrgency`).
-- Mock AI integrations so `dotnet test` remains deterministic and offline-friendly.
+- Place shared tests under `shared/src/commonTest/`, mirroring production packages.
+- Name test classes `<TypeUnderTest>Test` unless the surrounding package already uses a different convention.
+- Mock AI integrations so Gradle test runs remain deterministic and offline-friendly.
 
 ### Code Coverage
-- Run tests with code coverage using: `dotnet test WellnessWingman.Tests/WellnessWingman.Tests.csproj /p:CollectCoverage=true /p:CoverletOutputFormat=cobertura /p:CoverletOutput=./TestResults/ /p:IncludeTestAssembly=true`
-- This generates a coverage report at `WellnessWingman.Tests/TestResults/coverage.cobertura.xml`
-- Note: The test project uses linked source files rather than project references, requiring `/p:IncludeTestAssembly=true` to measure coverage properly.
-- Generate human-readable HTML reports with ReportGenerator:
+- Run coverage with `./gradlew :shared:desktopTest :shared:koverXmlReport :shared:koverHtmlReport`.
+- This generates machine-readable XML at `shared/build/reports/kover/report.xml` and browsable HTML under `shared/build/reports/kover/html/`.
+- Generate additional summaries with your preferred reporting tooling if needed; Codecov consumes the XML report directly in CI.
+- Example local report workflow:
   ```bash
-  dotnet tool install --global dotnet-reportgenerator-globaltool
-  reportgenerator -reports:"WellnessWingman.Tests/TestResults/coverage.cobertura.xml" -targetdir:"WellnessWingman.Tests/TestResults/coverage-report" -reporttypes:"Html;TextSummary"
+  ./gradlew :shared:desktopTest :shared:koverHtmlReport
   ```
-- View the text summary at `WellnessWingman.Tests/TestResults/coverage-report/Summary.txt` or open the HTML report in a browser.
+- Open `shared/build/reports/kover/html/index.html` in a browser to inspect coverage locally.
 - Target minimum coverage thresholds: 80% line coverage, 70% branch coverage for production code.
 
 ## Security & Configuration
-- Store user-provided LLM keys with `SecureStorage` or platform keystores—never in plaintext files.
+- Store user-provided LLM keys with platform keystores or secure platform storage abstractions, never in plaintext files.
 - Keep inference and prompting on-device, opt out of telemetry, and document any third-party SDK data handling.
 - When adding caching or logs, redact prompts and health data by default and guard debugging hooks behind compilation symbols.
 
