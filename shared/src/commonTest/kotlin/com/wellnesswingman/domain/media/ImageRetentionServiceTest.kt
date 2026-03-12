@@ -57,19 +57,17 @@ class ImageRetentionServiceTest {
 
     @Test
     fun `downsizeOldImages downsizes eligible entries and updates DB`() = runTest {
-        // Arrange
+        // Arrange: blobPath is stored as an absolute path in the DB
         val thresholdDays = 30
         every { appSettingsRepository.getImageRetentionThresholdDays() } returns thresholdDays
-        every { fileSystem.getAppDataDirectory() } returns "/appData"
-        
-        val oldEntry = createEntry(id = 1, status = ProcessingStatus.COMPLETED, blobPath = "Entries/Meal/old.jpg", daysOld = 31)
-        val newEntry = createEntry(id = 2, status = ProcessingStatus.COMPLETED, blobPath = "Entries/Meal/new.jpg", daysOld = 5)
-        
-        coEvery { trackedEntryRepository.getEntriesByStatus(ProcessingStatus.COMPLETED) } returns listOf(oldEntry, newEntry)
 
         val originalPath = "/appData/Entries/Meal/old.jpg"
         val previewPath = "/appData/Entries/Meal/old_preview.jpg"
-        
+
+        val oldEntry = createEntry(id = 1, status = ProcessingStatus.COMPLETED, blobPath = originalPath, daysOld = 31)
+        val newEntry = createEntry(id = 2, status = ProcessingStatus.COMPLETED, blobPath = "/appData/Entries/Meal/new.jpg", daysOld = 5)
+
+        coEvery { trackedEntryRepository.getEntriesByStatus(ProcessingStatus.COMPLETED) } returns listOf(oldEntry, newEntry)
         every { fileSystem.exists(originalPath) } returns true
         every { fileSystem.exists(previewPath) } returns true
         coEvery { fileSystem.delete(originalPath) } returns true
@@ -79,13 +77,10 @@ class ImageRetentionServiceTest {
 
         // Assert
         assertEquals(1, downgradedCount)
-        
-        // Verify delete was called for the old image
         coVerify(exactly = 1) { fileSystem.delete(originalPath) }
-        
-        // Verify upsert was called with the updated blobPath pointing to preview
-        coVerify(exactly = 1) { 
-            trackedEntryRepository.upsertEntry(match { it.entryId == 1L && it.blobPath == "Entries/Meal/old_preview.jpg" }) 
+        // DB update uses the absolute preview path
+        coVerify(exactly = 1) {
+            trackedEntryRepository.upsertEntry(match { it.entryId == 1L && it.blobPath == previewPath })
         }
     }
 
@@ -93,14 +88,13 @@ class ImageRetentionServiceTest {
     fun `downsizeOldImages generates preview if missing`() = runTest {
         // Arrange
         every { appSettingsRepository.getImageRetentionThresholdDays() } returns 30
-        every { fileSystem.getAppDataDirectory() } returns "/appData"
-        
-        val oldEntry = createEntry(id = 1, status = ProcessingStatus.COMPLETED, blobPath = "Entries/Meal/old.jpg", daysOld = 31)
-        coEvery { trackedEntryRepository.getEntriesByStatus(ProcessingStatus.COMPLETED) } returns listOf(oldEntry)
 
         val originalPath = "/appData/Entries/Meal/old.jpg"
         val previewPath = "/appData/Entries/Meal/old_preview.jpg"
-        
+
+        val oldEntry = createEntry(id = 1, status = ProcessingStatus.COMPLETED, blobPath = originalPath, daysOld = 31)
+        coEvery { trackedEntryRepository.getEntriesByStatus(ProcessingStatus.COMPLETED) } returns listOf(oldEntry)
+
         every { fileSystem.exists(originalPath) } returns true
         every { fileSystem.exists(previewPath) } returns false // Missing preview
         coEvery { fileSystem.readBytes(originalPath) } returns byteArrayOf(1, 2, 3)
@@ -118,12 +112,15 @@ class ImageRetentionServiceTest {
 
     @Test
     fun `downsizeOldImages is idempotent and skips already downgraded entries`() = runTest {
-        // Arrange
+        // Arrange: entry already points to the preview file
         every { appSettingsRepository.getImageRetentionThresholdDays() } returns 30
-        every { fileSystem.getAppDataDirectory() } returns "/appData"
-        
-        // This entry's blobPath already points to a preview file
-        val downgradedEntry = createEntry(id = 1, status = ProcessingStatus.COMPLETED, blobPath = "Entries/Meal/old_preview.jpg", daysOld = 31)
+
+        val downgradedEntry = createEntry(
+            id = 1,
+            status = ProcessingStatus.COMPLETED,
+            blobPath = "/appData/Entries/Meal/old_preview.jpg",
+            daysOld = 31
+        )
         coEvery { trackedEntryRepository.getEntriesByStatus(ProcessingStatus.COMPLETED) } returns listOf(downgradedEntry)
 
         // Act
@@ -132,6 +129,29 @@ class ImageRetentionServiceTest {
         // Assert
         assertEquals(0, downgradedCount)
         coVerify(exactly = 0) { fileSystem.delete(any()) }
+        coVerify(exactly = 0) { trackedEntryRepository.upsertEntry(any()) }
+    }
+
+    @Test
+    fun `downsizeOldImages does not update DB if file deletion fails`() = runTest {
+        // Arrange: deletion fails — DB must remain unchanged so the entry is retried next run
+        every { appSettingsRepository.getImageRetentionThresholdDays() } returns 30
+
+        val originalPath = "/appData/Entries/Meal/old.jpg"
+        val previewPath = "/appData/Entries/Meal/old_preview.jpg"
+
+        val oldEntry = createEntry(id = 1, status = ProcessingStatus.COMPLETED, blobPath = originalPath, daysOld = 31)
+        coEvery { trackedEntryRepository.getEntriesByStatus(ProcessingStatus.COMPLETED) } returns listOf(oldEntry)
+
+        every { fileSystem.exists(originalPath) } returns true
+        every { fileSystem.exists(previewPath) } returns true
+        coEvery { fileSystem.delete(originalPath) } returns false
+
+        // Act
+        val downgradedCount = service.downsizeOldImages()
+
+        // Assert
+        assertEquals(0, downgradedCount)
         coVerify(exactly = 0) { trackedEntryRepository.upsertEntry(any()) }
     }
 }

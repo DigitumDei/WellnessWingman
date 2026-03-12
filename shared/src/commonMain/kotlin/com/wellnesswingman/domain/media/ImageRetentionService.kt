@@ -31,24 +31,26 @@ class ImageRetentionService(
         var downgradedCount = 0
 
         for (entry in entries) {
-            val originalRelativePath = entry.blobPath ?: continue
-            
-            // Skip if already downgraded (pointing to preview)
-            if (originalRelativePath.contains("_preview")) {
-                continue
+            // blobPath is stored as an absolute path
+            val originalAbsolutePath = entry.blobPath ?: continue
+
+            // Skip if already downgraded: check that _preview appears immediately before the extension
+            val extensionIdx = originalAbsolutePath.lastIndexOf('.')
+            val isPreview = if (extensionIdx > 0) {
+                originalAbsolutePath.substring(0, extensionIdx).endsWith("_preview")
+            } else {
+                originalAbsolutePath.endsWith("_preview")
             }
+            if (isPreview) continue
 
             if (entry.capturedAt < thresholdTime) {
                 try {
-                    val originalAbsolutePath = "${fileSystem.getAppDataDirectory()}/$originalRelativePath"
-                    
                     if (!fileSystem.exists(originalAbsolutePath)) {
                         Napier.w("Original blob not found for entry ${entry.entryId}: $originalAbsolutePath")
                         continue
                     }
 
-                    val previewRelativePath = getPreviewPath(originalRelativePath)
-                    val previewAbsolutePath = "${fileSystem.getAppDataDirectory()}/$previewRelativePath"
+                    val previewAbsolutePath = getPreviewPath(originalAbsolutePath)
 
                     // Ensure preview exists, regenerate if missing
                     if (!fileSystem.exists(previewAbsolutePath)) {
@@ -63,18 +65,18 @@ class ImageRetentionService(
                         fileSystem.writeBytes(previewAbsolutePath, previewBytes)
                     }
 
-                    // Update the DB to point to the preview path FIRST
-                    trackedEntryRepository.upsertEntry(
-                        entry.copy(blobPath = previewRelativePath)
-                    )
-                    
-                    // Then delete the original full-size blob
+                    // Delete the original full-size blob first, then update the DB.
+                    // This order ensures that if deletion fails the entry keeps its original
+                    // path and will be retried on the next run.
                     val deleted = fileSystem.delete(originalAbsolutePath)
                     if (deleted) {
+                        trackedEntryRepository.upsertEntry(
+                            entry.copy(blobPath = previewAbsolutePath)
+                        )
                         downgradedCount++
                         Napier.i("Successfully downgraded image for entry ${entry.entryId}")
                     } else {
-                        Napier.e("Failed to delete original blob for entry ${entry.entryId} after DB update")
+                        Napier.e("Failed to delete original blob for entry ${entry.entryId}")
                     }
                 } catch (e: Exception) {
                     Napier.e("Error downsizing image for entry ${entry.entryId}", e)
