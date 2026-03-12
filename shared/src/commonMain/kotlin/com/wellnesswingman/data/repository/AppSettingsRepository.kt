@@ -39,4 +39,8 @@ interface AppSettingsRepository {
     fun clearHeight()
     fun clearCurrentWeight()
     fun clearProfileData()
+
+    // Image Retention
+    fun getImageRetentionThresholdDays(): Int
+    fun setImageRetentionThresholdDays(days: Int)
 }
