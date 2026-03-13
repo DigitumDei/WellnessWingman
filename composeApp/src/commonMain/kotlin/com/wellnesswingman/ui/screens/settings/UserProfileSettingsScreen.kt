@@ -125,7 +125,9 @@ class UserProfileSettingsScreen : Screen {
                     label = { Text("Date of Birth") },
                     placeholder = { Text("YYYY-MM-DD") },
                     isError = !dobIsValid,
-                    supportingText = if (!dobIsValid) {{ Text("Use YYYY-MM-DD format") }} else null,
+                    supportingText = if (!dobIsValid) {
+                        { Text("Use YYYY-MM-DD format") }
+                    } else null,
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
                 )
