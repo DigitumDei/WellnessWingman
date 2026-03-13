@@ -25,12 +25,14 @@ fun UnitToggleButton(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SexDropdown(
+private fun SettingsDropdown(
+    label: String,
     value: String,
+    options: List<String>,
     onValueChange: (String) -> Unit
 ) {
-    val options = listOf("Male", "Female", "Other", "Prefer not to say")
     var expanded by remember { mutableStateOf(false) }
 
     ExposedDropdownMenuBox(
@@ -41,7 +43,7 @@ fun SexDropdown(
             value = value,
             onValueChange = {},
             readOnly = true,
-            label = { Text("Sex") },
+            label = { Text(label) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
             modifier = Modifier.fillMaxWidth().menuAnchor()
         )
@@ -63,46 +65,35 @@ fun SexDropdown(
 }
 
 @Composable
+fun SexDropdown(
+    value: String,
+    onValueChange: (String) -> Unit
+) {
+    SettingsDropdown(
+        label = "Sex",
+        value = value,
+        options = listOf("Male", "Female", "Other", "Prefer not to say"),
+        onValueChange = onValueChange
+    )
+}
+
+@Composable
 fun ActivityLevelDropdown(
     value: String,
     onValueChange: (String) -> Unit
 ) {
-    val options = listOf(
-        "Sedentary",
-        "Lightly Active",
-        "Moderately Active",
-        "Very Active",
-        "Extremely Active"
+    SettingsDropdown(
+        label = "Activity Level",
+        value = value,
+        options = listOf(
+            "Sedentary",
+            "Lightly Active",
+            "Moderately Active",
+            "Very Active",
+            "Extremely Active"
+        ),
+        onValueChange = onValueChange
     )
-    var expanded by remember { mutableStateOf(false) }
-
-    ExposedDropdownMenuBox(
-        expanded = expanded,
-        onExpandedChange = { expanded = it }
-    ) {
-        OutlinedTextField(
-            value = value,
-            onValueChange = {},
-            readOnly = true,
-            label = { Text("Activity Level") },
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            modifier = Modifier.fillMaxWidth().menuAnchor()
-        )
-        ExposedDropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false }
-        ) {
-            options.forEach { option ->
-                DropdownMenuItem(
-                    text = { Text(option) },
-                    onClick = {
-                        onValueChange(option)
-                        expanded = false
-                    }
-                )
-            }
-        }
-    }
 }
 
 @Composable
