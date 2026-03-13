@@ -126,87 +126,111 @@ class SettingsViewModel(
         screenModelScope.launch {
             try {
                 val state = _uiState.value
-
-                // Save API keys
-                if (state.openAiApiKey.isNotBlank()) {
-                    appSettingsRepository.setApiKey(LlmProvider.OPENAI, state.openAiApiKey)
-                }
-                if (state.geminiApiKey.isNotBlank()) {
-                    appSettingsRepository.setApiKey(LlmProvider.GEMINI, state.geminiApiKey)
-                }
-
-                // Save models
-                appSettingsRepository.setModel(LlmProvider.OPENAI, state.openAiModel)
-                appSettingsRepository.setModel(LlmProvider.GEMINI, state.geminiModel)
-
-                // Save selected provider
-                appSettingsRepository.setSelectedProvider(state.selectedProvider)
-
-                // Save profile fields
-                val previousWeight = appSettingsRepository.getCurrentWeight()
-                val heightValue = state.height.toDoubleOrNull()
-                if (heightValue != null && heightValue > 0) {
-                    appSettingsRepository.setHeight(heightValue)
-                } else if (state.height.isEmpty()) {
-                    appSettingsRepository.clearHeight()
-                }
-                appSettingsRepository.setHeightUnit(state.heightUnit)
-
-                if (state.sex.isNotBlank()) {
-                    appSettingsRepository.setSex(state.sex)
-                }
-
-                val weightValue = state.currentWeight.toDoubleOrNull()
-                if (weightValue != null && weightValue > 0) {
-                    appSettingsRepository.setCurrentWeight(weightValue)
-                    appSettingsRepository.setWeightUnit(state.weightUnit)
-
-                    // Log a manual weight record if the value changed
-                    if (previousWeight == null || abs(weightValue - previousWeight) > 0.01) {
-                        try {
-                            weightHistoryRepository.addWeightRecord(
-                                WeightRecord(
-                                    recordedAt = Clock.System.now(),
-                                    weightValue = weightValue,
-                                    weightUnit = state.weightUnit,
-                                    source = WeightSource.MANUAL.value
-                                )
-                            )
-                        } catch (e: Exception) {
-                            Napier.w("Failed to log manual weight record: ${e.message}")
-                        }
-                    }
-                } else if (state.currentWeight.isEmpty()) {
-                    appSettingsRepository.clearCurrentWeight()
-                }
-
-                if (state.dateOfBirth.isNotBlank()) {
-                    // Validate ISO date format before saving
-                    try {
-                        kotlinx.datetime.LocalDate.parse(state.dateOfBirth)
-                        appSettingsRepository.setDateOfBirth(state.dateOfBirth)
-                    } catch (e: Exception) {
-                        Napier.w("Invalid date of birth format: ${state.dateOfBirth}")
-                        _uiState.value = state.copy(error = "Invalid date of birth format. Use YYYY-MM-DD.")
-                        return@launch
-                    }
-                } else {
-                    appSettingsRepository.setDateOfBirth("")
-                }
-
-                if (state.activityLevel.isNotBlank()) {
-                    appSettingsRepository.setActivityLevel(state.activityLevel)
-                } else {
-                    appSettingsRepository.setActivityLevel("")
-                }
-
-                _uiState.value = state.copy(saveSuccess = true)
-
+                saveLlmSettingsInternal(state)
+                saveProfileSettingsInternal(state)
+                _uiState.value = _uiState.value.copy(saveSuccess = true)
                 Napier.i("Settings saved successfully")
             } catch (e: Exception) {
                 Napier.e("Failed to save settings", e)
                 _uiState.value = _uiState.value.copy(error = e.message)
             }
+        }
+    }
+
+    fun saveProfileSettings() {
+        screenModelScope.launch {
+            try {
+                val state = _uiState.value
+                saveProfileSettingsInternal(state)
+                _uiState.value = _uiState.value.copy(saveSuccess = true)
+                Napier.i("Profile settings saved successfully")
+            } catch (e: Exception) {
+                Napier.e("Failed to save profile settings", e)
+                _uiState.value = _uiState.value.copy(error = e.message)
+            }
+        }
+    }
+
+    fun saveLlmSettings() {
+        screenModelScope.launch {
+            try {
+                val state = _uiState.value
+                saveLlmSettingsInternal(state)
+                _uiState.value = _uiState.value.copy(saveSuccess = true)
+                Napier.i("LLM settings saved successfully")
+            } catch (e: Exception) {
+                Napier.e("Failed to save LLM settings", e)
+                _uiState.value = _uiState.value.copy(error = e.message)
+            }
+        }
+    }
+
+    private suspend fun saveLlmSettingsInternal(state: SettingsUiState) {
+        if (state.openAiApiKey.isNotBlank()) {
+            appSettingsRepository.setApiKey(LlmProvider.OPENAI, state.openAiApiKey)
+        }
+        if (state.geminiApiKey.isNotBlank()) {
+            appSettingsRepository.setApiKey(LlmProvider.GEMINI, state.geminiApiKey)
+        }
+        appSettingsRepository.setModel(LlmProvider.OPENAI, state.openAiModel)
+        appSettingsRepository.setModel(LlmProvider.GEMINI, state.geminiModel)
+        appSettingsRepository.setSelectedProvider(state.selectedProvider)
+    }
+
+    private suspend fun saveProfileSettingsInternal(state: SettingsUiState) {
+        val previousWeight = appSettingsRepository.getCurrentWeight()
+        val heightValue = state.height.toDoubleOrNull()
+        if (heightValue != null && heightValue > 0) {
+            appSettingsRepository.setHeight(heightValue)
+        } else if (state.height.isEmpty()) {
+            appSettingsRepository.clearHeight()
+        }
+        appSettingsRepository.setHeightUnit(state.heightUnit)
+
+        if (state.sex.isNotBlank()) {
+            appSettingsRepository.setSex(state.sex)
+        }
+
+        val weightValue = state.currentWeight.toDoubleOrNull()
+        if (weightValue != null && weightValue > 0) {
+            appSettingsRepository.setCurrentWeight(weightValue)
+            appSettingsRepository.setWeightUnit(state.weightUnit)
+
+            // Log a manual weight record if the value changed
+            if (previousWeight == null || abs(weightValue - previousWeight) > 0.01) {
+                try {
+                    weightHistoryRepository.addWeightRecord(
+                        WeightRecord(
+                            recordedAt = Clock.System.now(),
+                            weightValue = weightValue,
+                            weightUnit = state.weightUnit,
+                            source = WeightSource.MANUAL.value
+                        )
+                    )
+                } catch (e: Exception) {
+                    Napier.w("Failed to log manual weight record: ${e.message}")
+                }
+            }
+        } else if (state.currentWeight.isEmpty()) {
+            appSettingsRepository.clearCurrentWeight()
+        }
+
+        if (state.dateOfBirth.isNotBlank()) {
+            try {
+                kotlinx.datetime.LocalDate.parse(state.dateOfBirth)
+                appSettingsRepository.setDateOfBirth(state.dateOfBirth)
+            } catch (e: Exception) {
+                Napier.w("Invalid date of birth format: ${state.dateOfBirth}")
+                throw IllegalArgumentException("Invalid date of birth format. Use YYYY-MM-DD.")
+            }
+        } else {
+            appSettingsRepository.setDateOfBirth("")
+        }
+
+        if (state.activityLevel.isNotBlank()) {
+            appSettingsRepository.setActivityLevel(state.activityLevel)
+        } else {
+            appSettingsRepository.setActivityLevel("")
         }
     }
 
