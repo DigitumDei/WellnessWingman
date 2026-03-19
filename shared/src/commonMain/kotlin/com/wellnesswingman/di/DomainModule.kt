@@ -16,6 +16,7 @@ import com.wellnesswingman.domain.migration.DataMigrationService
 import com.wellnesswingman.domain.migration.DefaultDataMigrationService
 import com.wellnesswingman.domain.navigation.CalendarNavigationService
 import com.wellnesswingman.domain.navigation.HistoricalNavigationContext
+import com.wellnesswingman.domain.oauth.PendingOAuthResultStore
 import org.koin.core.module.dsl.singleOf
 import org.koin.dsl.module
 
@@ -28,6 +29,9 @@ val domainModule = module {
 
     // Capture recovery
     singleOf(::PendingCaptureStore)
+
+    // OAuth
+    singleOf(::PendingOAuthResultStore)
 
     // LLM
     singleOf(::LlmClientFactory)

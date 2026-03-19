@@ -2,6 +2,7 @@ package com.wellnesswingman.di
 
 import com.russhwolf.settings.Settings
 import com.wellnesswingman.data.db.DriverFactory
+import com.wellnesswingman.data.model.PolarOAuthConfig
 import com.wellnesswingman.data.repository.*
 import com.wellnesswingman.db.WellnessWingmanDatabase
 import org.koin.core.module.dsl.singleOf
@@ -41,6 +42,9 @@ val dataModule = module {
     single<WeightHistoryRepository> {
         SqlDelightWeightHistoryRepository(get())
     }
+
+    // Polar OAuth
+    single { PolarOAuthRepository(get(), get()) }
 
     // Settings - platform-specific implementation will be provided
     // via platformModule in each platform's source set

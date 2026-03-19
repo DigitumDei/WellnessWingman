@@ -5,6 +5,7 @@ import androidx.work.Constraints
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
+import com.wellnesswingman.data.model.PolarOAuthConfig
 import com.wellnesswingman.di.getSharedModules
 import com.wellnesswingman.di.platformModule
 import com.wellnesswingman.domain.analysis.StaleEntryRecoveryService
@@ -19,6 +20,7 @@ import org.koin.android.ext.koin.androidContext
 import org.koin.android.ext.koin.androidLogger
 import org.koin.core.context.startKoin
 import org.koin.core.logger.Level
+import org.koin.dsl.module
 import java.util.concurrent.TimeUnit
 
 class WellnessWingmanApp : Application() {
@@ -38,7 +40,15 @@ class WellnessWingmanApp : Application() {
             modules(
                 getSharedModules() +
                 platformModule +
-                viewModelModule
+                viewModelModule +
+                module {
+                    single {
+                        PolarOAuthConfig(
+                            clientId = BuildConfig.POLAR_CLIENT_ID,
+                            brokerBaseUrl = BuildConfig.POLAR_BROKER_BASE_URL
+                        )
+                    }
+                }
             )
         }
 

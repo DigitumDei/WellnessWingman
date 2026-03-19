@@ -16,6 +16,23 @@ android {
         versionName = "1.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // Polar OAuth config — read from local.properties
+        val localProps = rootProject.file("local.properties")
+        val props = java.util.Properties()
+        if (localProps.exists()) {
+            props.load(localProps.inputStream())
+        }
+        buildConfigField(
+            "String",
+            "POLAR_CLIENT_ID",
+            "\"${props.getProperty("polar.client.id", "")}\""
+        )
+        buildConfigField(
+            "String",
+            "POLAR_BROKER_BASE_URL",
+            "\"${props.getProperty("polar.broker.base.url", "")}\""
+        )
     }
 
     buildTypes {

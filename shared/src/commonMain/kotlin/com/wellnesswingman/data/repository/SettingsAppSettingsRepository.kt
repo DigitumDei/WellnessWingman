@@ -34,6 +34,13 @@ class SettingsAppSettingsRepository(
 
         private const val KEY_IMAGE_RETENTION_DAYS = "image_retention_days"
 
+        // Polar Integration keys
+        private const val KEY_POLAR_ACCESS_TOKEN = "polar_access_token"
+        private const val KEY_POLAR_REFRESH_TOKEN = "polar_refresh_token"
+        private const val KEY_POLAR_TOKEN_EXPIRES_AT = "polar_token_expires_at"
+        private const val KEY_POLAR_USER_ID = "polar_user_id"
+        private const val KEY_PENDING_OAUTH_STATE = "polar_pending_oauth_state"
+
         private const val DEFAULT_HEIGHT_UNIT = "cm"
         private const val DEFAULT_WEIGHT_UNIT = "kg"
         private const val DEFAULT_IMAGE_RETENTION_DAYS = 30
@@ -165,4 +172,52 @@ class SettingsAppSettingsRepository(
     override fun setImageRetentionThresholdDays(days: Int) {
         settings[KEY_IMAGE_RETENTION_DAYS] = days
     }
+
+    // Polar Integration
+
+    override fun getPolarAccessToken(): String? =
+        settings.getStringOrNull(KEY_POLAR_ACCESS_TOKEN)
+
+    override fun setPolarAccessToken(token: String) {
+        settings[KEY_POLAR_ACCESS_TOKEN] = token
+    }
+
+    override fun getPolarRefreshToken(): String? =
+        settings.getStringOrNull(KEY_POLAR_REFRESH_TOKEN)
+
+    override fun setPolarRefreshToken(token: String) {
+        settings[KEY_POLAR_REFRESH_TOKEN] = token
+    }
+
+    override fun getPolarTokenExpiresAt(): Long =
+        settings.getLong(KEY_POLAR_TOKEN_EXPIRES_AT, 0L)
+
+    override fun setPolarTokenExpiresAt(expiresAt: Long) {
+        settings[KEY_POLAR_TOKEN_EXPIRES_AT] = expiresAt
+    }
+
+    override fun getPolarUserId(): String? =
+        settings.getStringOrNull(KEY_POLAR_USER_ID)
+
+    override fun setPolarUserId(userId: String) {
+        settings[KEY_POLAR_USER_ID] = userId
+    }
+
+    override fun getPendingOAuthState(): String? =
+        settings.getStringOrNull(KEY_PENDING_OAUTH_STATE)
+
+    override fun setPendingOAuthState(state: String) {
+        settings[KEY_PENDING_OAUTH_STATE] = state
+    }
+
+    override fun clearPolarTokens() {
+        settings.remove(KEY_POLAR_ACCESS_TOKEN)
+        settings.remove(KEY_POLAR_REFRESH_TOKEN)
+        settings.remove(KEY_POLAR_TOKEN_EXPIRES_AT)
+        settings.remove(KEY_POLAR_USER_ID)
+        settings.remove(KEY_PENDING_OAUTH_STATE)
+    }
+
+    override fun isPolarConnected(): Boolean =
+        getPolarAccessToken() != null
 }

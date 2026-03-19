@@ -82,6 +82,7 @@ kotlin {
                 implementation(libs.ktor.client.cio)
                 implementation(libs.androidx.core.ktx)
                 implementation(libs.androidx.work.runtime)
+                implementation(libs.androidx.security.crypto)
             }
         }
 
