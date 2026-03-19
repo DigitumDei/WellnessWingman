@@ -86,7 +86,7 @@ def _oauth_callback(request: Request):
     tokens = token_response.json()
 
     # Encrypt token JSON with session key
-    session_key = _get_secret("polar-oauth-session-key").encode("utf-8")[:32]
+    session_key = bytes.fromhex(_get_secret("polar-oauth-session-key").strip())
     encrypted = crypto.encrypt(json.dumps(tokens).encode("utf-8"), session_key)
 
     # Store in Firestore with TTL
@@ -139,7 +139,7 @@ def _oauth_redeem(request: Request):
         return jsonify({"error": "Session already redeemed"}), 410
 
     # Decrypt tokens
-    session_key = _get_secret("polar-oauth-session-key").encode("utf-8")[:32]
+    session_key = bytes.fromhex(_get_secret("polar-oauth-session-key").strip())
     try:
         plaintext = crypto.decrypt(
             data["ciphertext"], data["nonce"], data["tag"], session_key

@@ -73,18 +73,27 @@ resource "google_secret_manager_secret_version" "polar_session_key_v1" {
 }
 
 # ---------------------------------------------------------------------------
-# Firestore TTL policy
+# Firestore database + TTL policy
 # ---------------------------------------------------------------------------
+
+resource "google_firestore_database" "default" {
+  project     = var.project_id
+  name        = "(default)"
+  location_id = var.region
+  type        = "FIRESTORE_NATIVE"
+}
 
 resource "google_firestore_field" "oauth_sessions_ttl" {
   project    = var.project_id
-  database   = "(default)"
+  database   = google_firestore_database.default.name
   collection = "oauth_sessions"
   field      = "created_at"
 
   ttl_config {}
 
   index_config {}
+
+  depends_on = [google_firestore_database.default]
 }
 
 # ---------------------------------------------------------------------------
@@ -96,7 +105,7 @@ data "archive_file" "source" {
   type        = "zip"
   source_dir  = "${path.module}/.."
   output_path = "${path.module}/tmp/source.zip"
-  excludes    = ["terraform", ".git", "__pycache__", "*.pyc"]
+  excludes    = ["infra", ".git", "__pycache__", "*.pyc"]
 }
 
 resource "google_storage_bucket" "source" {
