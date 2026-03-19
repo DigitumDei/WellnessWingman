@@ -54,10 +54,12 @@ class PolarOAuthRepository(
         settings.setPendingOAuthState(state)
 
         val callbackUrl = "${config.brokerBaseUrl}/oauth/callback"
+        val scope = "activity:read training_sessions:read profile:read"
         return "$POLAR_AUTH_URL" +
             "?response_type=code" +
             "&client_id=${config.clientId}" +
             "&redirect_uri=${callbackUrl}" +
+            "&scope=${scope}" +
             "&state=$state"
     }
 
