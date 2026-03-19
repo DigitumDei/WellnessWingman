@@ -30,7 +30,7 @@ class PolarOAuthRepository(
     private val httpClient: HttpClient = createDefaultHttpClient()
 ) {
     companion object {
-        private const val POLAR_AUTH_URL = "https://flow.polar.com/oauth2/authorization"
+        private const val POLAR_AUTH_URL = "https://auth.polar.com/oauth/authorize"
 
         fun createDefaultHttpClient(): HttpClient {
             return HttpClient {

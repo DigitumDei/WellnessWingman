@@ -5,12 +5,16 @@ never touches the mobile device.
 """
 
 import json
+import logging
 import os
 import uuid
 from datetime import datetime
 
 import functions_framework
 import requests as http_requests
+
+logging.basicConfig(level=logging.INFO)
+log = logging.getLogger(__name__)
 from flask import Request, jsonify, redirect
 from google.cloud import firestore, secretmanager
 
@@ -66,24 +70,43 @@ def _oauth_callback(request: Request):
     # Exchange authorization code for tokens (Polar v4 uses Basic auth)
     client_id = os.environ["POLAR_CLIENT_ID"]
     client_secret = _get_secret("polar-client-secret")
+    # Cloud Functions sit behind a TLS-terminating load balancer,
+    # so request.url_root reports http:// — force https://
+    callback_url = request.url_root.rstrip("/").replace("http://", "https://") + "/oauth/callback"
+
+    log.warning(
+        "DEBUG: callback_url=%s, client_id=%s, secret_len=%d, secret_prefix=%s",
+        callback_url, client_id, len(client_secret), client_secret[:4],
+    )
 
     token_response = http_requests.post(
         POLAR_TOKEN_URL,
         data={
             "grant_type": "authorization_code",
             "code": code,
+            "redirect_uri": callback_url,
         },
         auth=(client_id, client_secret),
-        headers={"Accept": "application/json"},
+        headers={
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Accept": "application/json",
+        },
         timeout=15,
     )
 
     if not token_response.ok:
+        log.warning(
+            "Token exchange failed: status=%s headers=%s body=%s",
+            token_response.status_code,
+            dict(token_response.headers),
+            token_response.text,
+        )
         return redirect(
             f"{REDIRECT_SCHEME}://oauth/result?error=token_exchange_failed&state={state}"
         )
 
     tokens = token_response.json()
+    log.info("Token exchange successful")
 
     # Encrypt token JSON with session key
     session_key = bytes.fromhex(_get_secret("polar-oauth-session-key").strip())
