@@ -46,7 +46,7 @@ A Python Cloud Function (Google Cloud Functions gen2) with four routes:
 | `/oauth/refresh` | POST | Stateless proxy: app sends `{refresh_token}`, broker forwards to Polar with client credentials, returns new tokens. No Firestore involved. |
 | `/.well-known/assetlinks.json` | GET | Placeholder for future App Links verification. |
 
-**Infrastructure** is managed with Terraform (`polar-oauth-broker/terraform/`):
+**Infrastructure** is managed with Terraform (`polar-oauth-broker/infra/`):
 - Cloud Function gen2 (Python 3.12, 256MB, min-instances=0)
 - Firestore with TTL policy on `oauth_sessions` (10-minute expiry)
 - Secret Manager for `polar-client-secret` and `polar-oauth-session-key`
@@ -81,7 +81,7 @@ These become `BuildConfig.POLAR_CLIENT_ID` and `BuildConfig.POLAR_BROKER_BASE_UR
 ### Backend deployment
 
 ```bash
-cd polar-oauth-broker/terraform
+cd polar-oauth-broker/infra
 cp terraform.tfvars.example terraform.tfvars
 # Edit terraform.tfvars with real values
 terraform init
