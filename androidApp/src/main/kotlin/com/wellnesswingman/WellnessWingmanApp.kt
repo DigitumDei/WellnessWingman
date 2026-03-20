@@ -70,13 +70,15 @@ class WellnessWingmanApp : Application() {
             val pendingStore = koinApp.koin.get<PendingOAuthResultStore>()
             CoroutineScope(Dispatchers.IO).launch {
                 val result = polarOAuthRepo.redeemSession(pendingSessionId, pendingState)
-                appSettings.clearPendingOAuthSession()
                 result.fold(
                     onSuccess = { userId ->
+                        appSettings.clearPendingOAuthSession()
                         Napier.i("OAuth session recovered successfully (userId=$userId)")
                         pendingStore.deliver(pendingSessionId, pendingState)
                     },
                     onFailure = { e ->
+                        // Don't clear pending session on transient failures —
+                        // it can be retried on next launch while the broker TTL is valid
                         Napier.e("OAuth session recovery failed", e)
                         pendingStore.deliverError(e.message ?: "Session recovery failed")
                     }

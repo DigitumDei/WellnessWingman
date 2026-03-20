@@ -53,7 +53,9 @@ class PolarSettingsViewModel(
                         isLoading = false,
                         error = result.error
                     )
-                } else if (result.sessionId != null && result.state != null) {
+                } else {
+                    val sessionId = result.sessionId ?: return@collect
+                    val state = result.state ?: return@collect
                     if (appSettingsRepository.isPolarConnected()) {
                         // Already redeemed (process-death recovery path) — just refresh
                         appSettingsRepository.clearPendingOAuthSession()
@@ -61,7 +63,7 @@ class PolarSettingsViewModel(
                         _uiState.value = _uiState.value.copy(isLoading = false)
                     } else {
                         // Normal flow — redeem now
-                        redeemSession(result.sessionId, result.state)
+                        redeemSession(sessionId, state)
                     }
                 }
             }
@@ -72,9 +74,9 @@ class PolarSettingsViewModel(
         _uiState.value = _uiState.value.copy(isLoading = true, error = null)
         screenModelScope.launch {
             val result = polarOAuthRepository.redeemSession(sessionId, state)
-            appSettingsRepository.clearPendingOAuthSession()
             result.fold(
                 onSuccess = { userId ->
+                    appSettingsRepository.clearPendingOAuthSession()
                     _uiState.value = _uiState.value.copy(
                         isConnected = true,
                         polarUserId = userId,
@@ -83,6 +85,9 @@ class PolarSettingsViewModel(
                     )
                 },
                 onFailure = { e ->
+                    // Only clear pending session on permanent failures (state mismatch, 410).
+                    // Transient errors (network, 5xx) should leave the session so it can
+                    // be retried on next app launch.
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
                         error = e.message ?: "Failed to connect"
@@ -93,6 +98,9 @@ class PolarSettingsViewModel(
     }
 
     fun onConnectClicked() {
+        // Guard against double-taps: each call generates a new state, which would
+        // invalidate the state from a previously-opened authorization URL.
+        if (_uiState.value.authUrl != null || _uiState.value.isLoading) return
         if (!config.isConfigured) {
             _uiState.value = _uiState.value.copy(
                 error = "Polar OAuth is not configured. Set polar.client.id and polar.broker.base.url in local.properties."
