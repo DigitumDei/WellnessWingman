@@ -74,10 +74,7 @@ def _oauth_callback(request: Request):
     # so request.url_root reports http:// — force https://
     callback_url = request.url_root.rstrip("/").replace("http://", "https://") + "/oauth/callback"
 
-    log.warning(
-        "DEBUG: callback_url=%s, client_id=%s, secret_len=%d, secret_prefix=%s",
-        callback_url, client_id, len(client_secret), client_secret[:4],
-    )
+    log.info("Exchanging code for tokens (callback_url=%s)", callback_url)
 
     token_response = http_requests.post(
         POLAR_TOKEN_URL,
@@ -95,10 +92,9 @@ def _oauth_callback(request: Request):
     )
 
     if not token_response.ok:
-        log.warning(
-            "Token exchange failed: status=%s headers=%s body=%s",
+        log.error(
+            "Token exchange failed: status=%s body=%s",
             token_response.status_code,
-            dict(token_response.headers),
             token_response.text,
         )
         return redirect(

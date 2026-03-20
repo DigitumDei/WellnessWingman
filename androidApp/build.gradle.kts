@@ -1,7 +1,14 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose.compiler)
+}
+
+val localProps = Properties().apply {
+    val f = rootProject.file("local.properties")
+    if (f.exists()) load(f.inputStream())
 }
 
 android {
@@ -18,20 +25,15 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         // Polar OAuth config — read from local.properties
-        val localProps = rootProject.file("local.properties")
-        val props = java.util.Properties()
-        if (localProps.exists()) {
-            props.load(localProps.inputStream())
-        }
         buildConfigField(
             "String",
             "POLAR_CLIENT_ID",
-            "\"${props.getProperty("polar.client.id", "")}\""
+            "\"${localProps.getProperty("polar.client.id", "")}\""
         )
         buildConfigField(
             "String",
             "POLAR_BROKER_BASE_URL",
-            "\"${props.getProperty("polar.broker.base.url", "")}\""
+            "\"${localProps.getProperty("polar.broker.base.url", "")}\""
         )
     }
 
