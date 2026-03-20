@@ -152,6 +152,23 @@ private class FakeAppSettingsRepository : AppSettingsRepository {
     override fun clearProfileData() { settings.clear() }
     override fun getImageRetentionThresholdDays(): Int = (settings["imageRetentionDays"] as? Int) ?: 30
     override fun setImageRetentionThresholdDays(days: Int) { settings["imageRetentionDays"] = days }
+
+    // Polar Integration stubs
+    override fun getPolarAccessToken(): String? = null
+    override fun setPolarAccessToken(token: String) {}
+    override fun getPolarRefreshToken(): String? = null
+    override fun setPolarRefreshToken(token: String) {}
+    override fun getPolarTokenExpiresAt(): Long = 0L
+    override fun setPolarTokenExpiresAt(expiresAt: Long) {}
+    override fun getPolarUserId(): String? = null
+    override fun setPolarUserId(userId: String) {}
+    override fun getPendingOAuthState(): String? = null
+    override fun setPendingOAuthState(state: String) {}
+    override fun getPendingOAuthSessionId(): String? = null
+    override fun setPendingOAuthSessionId(sessionId: String) {}
+    override fun clearPendingOAuthSession() {}
+    override fun clearPolarTokens() {}
+    override fun isPolarConnected(): Boolean = false
 }
 
 private class FakeWeightHistoryRepository : WeightHistoryRepository {
