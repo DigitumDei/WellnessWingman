@@ -5,11 +5,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /**
- * In-memory bridge between Activity (deep link receiver) and ViewModel (token redeemer).
+ * In-memory bridge between Activity (deep link receiver) and the redemption layer.
  *
  * Works like a condition variable: MainActivity delivers the OAuth result
- * from the deep link, and PolarSettingsViewModel consumes it to trigger
- * session redemption.
+ * from the deep link, and WellnessWingmanApp / PolarSettingsViewModel
+ * consume it to trigger session redemption or display errors.
  */
 class PendingOAuthResultStore {
 
@@ -17,14 +17,21 @@ class PendingOAuthResultStore {
     val result: StateFlow<OAuthDeepLinkResult?> = _result.asStateFlow()
 
     /**
-     * Called from MainActivity when a deep link arrives.
+     * Called from MainActivity when a deep link arrives with a successful result.
      */
     fun deliver(sessionId: String, state: String) {
         _result.value = OAuthDeepLinkResult(sessionId = sessionId, state = state)
     }
 
     /**
-     * Called from ViewModel after processing the result.
+     * Called from MainActivity when the deep link carries an error.
+     */
+    fun deliverError(error: String) {
+        _result.value = OAuthDeepLinkResult(error = error)
+    }
+
+    /**
+     * Called after processing the result.
      * Returns the result and clears it so it's not processed twice.
      */
     fun consume(): OAuthDeepLinkResult? {
@@ -35,6 +42,7 @@ class PendingOAuthResultStore {
 }
 
 data class OAuthDeepLinkResult(
-    val sessionId: String,
-    val state: String
+    val sessionId: String? = null,
+    val state: String? = null,
+    val error: String? = null
 )

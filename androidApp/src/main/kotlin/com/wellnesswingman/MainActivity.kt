@@ -10,6 +10,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import com.wellnesswingman.data.repository.AppSettingsRepository
 import com.wellnesswingman.domain.capture.PendingCapture
 import com.wellnesswingman.domain.capture.PendingCaptureStore
 import com.wellnesswingman.domain.oauth.PendingOAuthResultStore
@@ -27,6 +28,7 @@ class MainActivity : ComponentActivity(), KoinComponent {
     private val pendingCaptureStore: PendingCaptureStore by inject()
     private val fileSystem: FileSystem by inject()
     private val pendingOAuthResultStore: PendingOAuthResultStore by inject()
+    private val appSettingsRepository: AppSettingsRepository by inject()
 
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -66,11 +68,15 @@ class MainActivity : ComponentActivity(), KoinComponent {
 
         if (error != null) {
             Napier.e("OAuth deep link error: $error")
+            pendingOAuthResultStore.deliverError(error)
             return true
         }
 
         if (sessionId != null && state != null) {
             Napier.d("OAuth deep link received: session=$sessionId")
+            // Persist to Settings so the result survives process death
+            appSettingsRepository.setPendingOAuthSessionId(sessionId)
+            appSettingsRepository.setPendingOAuthState(state)
             pendingOAuthResultStore.deliver(sessionId, state)
         }
         return true

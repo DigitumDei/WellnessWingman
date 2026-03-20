@@ -40,6 +40,7 @@ class SettingsAppSettingsRepository(
         private const val KEY_POLAR_TOKEN_EXPIRES_AT = "polar_token_expires_at"
         private const val KEY_POLAR_USER_ID = "polar_user_id"
         private const val KEY_PENDING_OAUTH_STATE = "polar_pending_oauth_state"
+        private const val KEY_PENDING_OAUTH_SESSION_ID = "polar_pending_oauth_session_id"
 
         private const val DEFAULT_HEIGHT_UNIT = "cm"
         private const val DEFAULT_WEIGHT_UNIT = "kg"
@@ -210,12 +211,25 @@ class SettingsAppSettingsRepository(
         settings[KEY_PENDING_OAUTH_STATE] = state
     }
 
+    override fun getPendingOAuthSessionId(): String? =
+        settings.getStringOrNull(KEY_PENDING_OAUTH_SESSION_ID)
+
+    override fun setPendingOAuthSessionId(sessionId: String) {
+        settings[KEY_PENDING_OAUTH_SESSION_ID] = sessionId
+    }
+
+    override fun clearPendingOAuthSession() {
+        settings.remove(KEY_PENDING_OAUTH_SESSION_ID)
+        settings.remove(KEY_PENDING_OAUTH_STATE)
+    }
+
     override fun clearPolarTokens() {
         settings.remove(KEY_POLAR_ACCESS_TOKEN)
         settings.remove(KEY_POLAR_REFRESH_TOKEN)
         settings.remove(KEY_POLAR_TOKEN_EXPIRES_AT)
         settings.remove(KEY_POLAR_USER_ID)
         settings.remove(KEY_PENDING_OAUTH_STATE)
+        settings.remove(KEY_PENDING_OAUTH_SESSION_ID)
     }
 
     override fun isPolarConnected(): Boolean =

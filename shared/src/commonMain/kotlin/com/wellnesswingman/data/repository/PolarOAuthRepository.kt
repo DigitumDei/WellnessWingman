@@ -55,12 +55,13 @@ class PolarOAuthRepository(
 
         val callbackUrl = "${config.brokerBaseUrl}/oauth/callback"
         val scope = "activity:read training_sessions:read profile:read"
-        return "$POLAR_AUTH_URL" +
-            "?response_type=code" +
-            "&client_id=${config.clientId}" +
-            "&redirect_uri=${callbackUrl}" +
-            "&scope=${scope}" +
-            "&state=$state"
+        return io.ktor.http.URLBuilder(POLAR_AUTH_URL).apply {
+            parameters.append("response_type", "code")
+            parameters.append("client_id", config.clientId)
+            parameters.append("redirect_uri", callbackUrl)
+            parameters.append("scope", scope)
+            parameters.append("state", state)
+        }.buildString()
     }
 
     /**

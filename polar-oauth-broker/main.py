@@ -8,14 +8,14 @@ import json
 import logging
 import os
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import functions_framework
 import requests as http_requests
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
-from flask import Request, jsonify, redirect
+from flask import Request, jsonify, make_response, redirect
 from google.cloud import firestore, secretmanager
 
 import crypto
@@ -117,7 +117,7 @@ def _oauth_callback(request: Request):
             "nonce": encrypted["nonce"],
             "tag": encrypted["tag"],
             "state": state,
-            "created_at": datetime.utcnow(),
+            "expires_at": datetime.utcnow() + timedelta(minutes=10),
             "redeemed": False,
         }
     )
@@ -145,6 +145,8 @@ def _oauth_redeem(request: Request):
             return None, 404
         data = snapshot.to_dict()
         if data.get("redeemed"):
+            return None, 410
+        if data.get("expires_at") and data["expires_at"] < datetime.utcnow():
             return None, 410
         transaction.update(doc_ref, {"redeemed": True})
         return data, 200
@@ -239,16 +241,6 @@ def handler(request: Request):
     if request.method != expected_method:
         return jsonify({"error": "Method not allowed"}), 405
 
-    response = handler_fn(request)
-
-    # Add CORS headers to all responses
-    if isinstance(response, tuple):
-        body, status = response[0], response[1]
-        headers = response[2] if len(response) > 2 else {}
-        if isinstance(headers, dict):
-            headers["Access-Control-Allow-Origin"] = "*"
-            return body, status, headers
-        return body, status
-    else:
-        # redirect or Response object
-        return response
+    response = make_response(handler_fn(request))
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    return response

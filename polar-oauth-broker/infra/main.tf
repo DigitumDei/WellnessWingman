@@ -87,7 +87,7 @@ resource "google_firestore_field" "oauth_sessions_ttl" {
   project    = var.project_id
   database   = google_firestore_database.default.name
   collection = "oauth_sessions"
-  field      = "created_at"
+  field      = "expires_at"
 
   ttl_config {}
 

@@ -55,6 +55,9 @@ interface AppSettingsRepository {
     fun setPolarUserId(userId: String)
     fun getPendingOAuthState(): String?
     fun setPendingOAuthState(state: String)
+    fun getPendingOAuthSessionId(): String?
+    fun setPendingOAuthSessionId(sessionId: String)
+    fun clearPendingOAuthSession()
     fun clearPolarTokens()
     fun isPolarConnected(): Boolean
 }

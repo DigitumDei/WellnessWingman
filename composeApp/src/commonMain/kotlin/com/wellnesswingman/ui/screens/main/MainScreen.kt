@@ -24,6 +24,7 @@ import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.koin.getScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import com.wellnesswingman.domain.oauth.PendingOAuthResultStore
 import com.wellnesswingman.data.model.EntryType
 import com.wellnesswingman.data.model.NutritionTotals
 import com.wellnesswingman.data.model.ProcessingStatus
@@ -34,8 +35,10 @@ import com.wellnesswingman.ui.components.LoadingIndicator
 import com.wellnesswingman.ui.screens.calendar.WeekViewScreen
 import com.wellnesswingman.ui.screens.detail.EntryDetailScreen
 import com.wellnesswingman.ui.screens.photo.createPhotoReviewScreen
+import com.wellnesswingman.ui.screens.settings.PolarSettingsScreen
 import com.wellnesswingman.ui.screens.settings.SettingsScreen
 import com.wellnesswingman.ui.screens.summary.DailySummaryScreen
+import org.koin.compose.koinInject
 import com.wellnesswingman.util.DateTimeUtil
 import kotlinx.datetime.Clock
 import kotlinx.datetime.TimeZone
@@ -54,6 +57,15 @@ class MainScreen : Screen {
         val summaryCardState by viewModel.summaryCardState.collectAsState()
         val isGeneratingSummary by viewModel.isGeneratingSummary.collectAsState()
         val hasPendingCapture by viewModel.hasPendingCapture.collectAsState()
+
+        // Recovery: auto-navigate to Polar settings when an OAuth result arrives
+        val pendingOAuthResultStore = koinInject<PendingOAuthResultStore>()
+        val oauthResult by pendingOAuthResultStore.result.collectAsState()
+        LaunchedEffect(oauthResult) {
+            if (oauthResult != null) {
+                navigator.push(listOf(SettingsScreen(), PolarSettingsScreen()))
+            }
+        }
 
         // Recovery: navigate to PhotoReviewScreen if a pending capture exists after process death
         LaunchedEffect(hasPendingCapture) {

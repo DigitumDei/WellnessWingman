@@ -35,12 +35,60 @@ class PolarSettingsViewModel(
         )
     }
 
+    /**
+     * Observes the in-memory result store for OAuth completions.
+     *
+     * Two flows land here:
+     * 1. Normal flow — user returns from Custom Tab while app is alive.
+     *    MainActivity delivers sessionId+state; we must redeem.
+     * 2. Process-death recovery — WellnessWingmanApp already redeemed on startup
+     *    and then delivers the result. If tokens are already stored, we just refresh UI.
+     */
     private fun observeOAuthResults() {
         screenModelScope.launch {
             pendingOAuthResultStore.result.filterNotNull().collect { result ->
-                val consumed = pendingOAuthResultStore.consume() ?: return@collect
-                redeemSession(consumed.sessionId, consumed.state)
+                pendingOAuthResultStore.consume()
+                if (result.error != null) {
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        error = result.error
+                    )
+                } else if (result.sessionId != null && result.state != null) {
+                    if (appSettingsRepository.isPolarConnected()) {
+                        // Already redeemed (process-death recovery path) — just refresh
+                        appSettingsRepository.clearPendingOAuthSession()
+                        loadCurrentState()
+                        _uiState.value = _uiState.value.copy(isLoading = false)
+                    } else {
+                        // Normal flow — redeem now
+                        redeemSession(result.sessionId, result.state)
+                    }
+                }
             }
+        }
+    }
+
+    private fun redeemSession(sessionId: String, state: String) {
+        _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+        screenModelScope.launch {
+            val result = polarOAuthRepository.redeemSession(sessionId, state)
+            appSettingsRepository.clearPendingOAuthSession()
+            result.fold(
+                onSuccess = { userId ->
+                    _uiState.value = _uiState.value.copy(
+                        isConnected = true,
+                        polarUserId = userId,
+                        isLoading = false,
+                        error = null
+                    )
+                },
+                onFailure = { e ->
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        error = e.message ?: "Failed to connect"
+                    )
+                }
+            )
         }
     }
 
@@ -70,29 +118,6 @@ class PolarSettingsViewModel(
 
     fun clearError() {
         _uiState.value = _uiState.value.copy(error = null)
-    }
-
-    private fun redeemSession(sessionId: String, state: String) {
-        _uiState.value = _uiState.value.copy(isLoading = true, error = null)
-        screenModelScope.launch {
-            val result = polarOAuthRepository.redeemSession(sessionId, state)
-            result.fold(
-                onSuccess = { userId ->
-                    _uiState.value = _uiState.value.copy(
-                        isConnected = true,
-                        polarUserId = userId,
-                        isLoading = false,
-                        error = null
-                    )
-                },
-                onFailure = { e ->
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        error = e.message ?: "Failed to connect"
-                    )
-                }
-            )
-        }
     }
 }
 
