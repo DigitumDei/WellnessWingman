@@ -17,6 +17,8 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 
@@ -29,6 +31,9 @@ class PolarOAuthRepository(
     private val config: PolarOAuthConfig,
     private val httpClient: HttpClient = createDefaultHttpClient()
 ) {
+    private val redemptionMutex = Mutex()
+    private var activeRedemptionSessionId: String? = null
+
     companion object {
         private const val POLAR_AUTH_URL = "https://auth.polar.com/oauth/authorize"
 
@@ -69,9 +74,21 @@ class PolarOAuthRepository(
      * Validates that the returned state matches what we generated.
      */
     suspend fun redeemSession(sessionId: String, returnedState: String): Result<String> {
+        // Guard against concurrent redemption of the same session.
+        // Both WellnessWingmanApp (process-death recovery) and PolarSettingsViewModel
+        // (normal flow) may call this; the broker rejects the second attempt with 410.
+        redemptionMutex.withLock {
+            if (activeRedemptionSessionId == sessionId) {
+                Napier.w("Redemption already in progress for session $sessionId")
+                return Result.failure(IllegalStateException("Redemption already in progress"))
+            }
+            activeRedemptionSessionId = sessionId
+        }
+
         // Validate state
         val expectedState = settings.getPendingOAuthState()
         if (expectedState == null || expectedState != returnedState) {
+            activeRedemptionSessionId = null
             return Result.failure(IllegalStateException("OAuth state mismatch"))
         }
 
@@ -111,6 +128,8 @@ class PolarOAuthRepository(
         } catch (e: Exception) {
             Napier.e("Failed to redeem OAuth session", e)
             Result.failure(e)
+        } finally {
+            activeRedemptionSessionId = null
         }
     }
 
