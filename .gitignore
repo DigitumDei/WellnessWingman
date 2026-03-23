@@ -51,6 +51,12 @@ gha-creds-*.json
 *.pfx
 *.keystore
 
+# Terraform
+*.tfvars
+!*.tfvars.example
+*.tfstate*
+.terraform/
+
 # IDE
 .vs/
 /.claude/settings.local.json

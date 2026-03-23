@@ -10,8 +10,10 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import com.wellnesswingman.data.repository.AppSettingsRepository
 import com.wellnesswingman.domain.capture.PendingCapture
 import com.wellnesswingman.domain.capture.PendingCaptureStore
+import com.wellnesswingman.domain.oauth.PendingOAuthResultStore
 import com.wellnesswingman.platform.FileSystem
 import com.wellnesswingman.ui.App
 import io.github.aakira.napier.Napier
@@ -25,6 +27,8 @@ class MainActivity : ComponentActivity(), KoinComponent {
 
     private val pendingCaptureStore: PendingCaptureStore by inject()
     private val fileSystem: FileSystem by inject()
+    private val pendingOAuthResultStore: PendingOAuthResultStore by inject()
+    private val appSettingsRepository: AppSettingsRepository by inject()
 
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -36,6 +40,7 @@ class MainActivity : ComponentActivity(), KoinComponent {
         super.onCreate(savedInstanceState)
 
         requestNotificationPermissionIfNeeded()
+        handleOAuthDeepLink(intent)
         handleShareIntent(intent)
 
         setContent {
@@ -46,9 +51,35 @@ class MainActivity : ComponentActivity(), KoinComponent {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        if (handleOAuthDeepLink(intent)) return
         if (handleShareIntent(intent)) {
             recreate()
         }
+    }
+
+    private fun handleOAuthDeepLink(intent: Intent?): Boolean {
+        if (intent?.action != Intent.ACTION_VIEW) return false
+        val uri = intent.data ?: return false
+        if (uri.scheme != "wellnesswingman" || uri.host != "oauth") return false
+
+        val sessionId = uri.getQueryParameter("session")
+        val state = uri.getQueryParameter("state")
+        val error = uri.getQueryParameter("error")
+
+        if (error != null) {
+            Napier.e("OAuth deep link error: $error")
+            pendingOAuthResultStore.deliverError(error)
+            return true
+        }
+
+        if (sessionId != null && state != null) {
+            Napier.d("OAuth deep link received: session=$sessionId")
+            // Persist to Settings so the result survives process death
+            appSettingsRepository.setPendingOAuthSessionId(sessionId)
+            appSettingsRepository.setPendingOAuthState(state)
+            pendingOAuthResultStore.deliver(sessionId, state)
+        }
+        return true
     }
 
     private fun handleShareIntent(intent: Intent?): Boolean {

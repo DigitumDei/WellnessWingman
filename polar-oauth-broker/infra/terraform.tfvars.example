@@ -1,0 +1,4 @@
+project_id              = "your-gcp-project-id"
+region                  = "us-central1"
+polar_client_id         = "your-polar-client-id"
+android_app_fingerprint = "AA:BB:CC:DD:..."

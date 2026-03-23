@@ -73,6 +73,9 @@ kotlin {
                 implementation(libs.mockk)
                 implementation(libs.turbine)
                 implementation(libs.sqldelight.driver.jdbc)
+                implementation(libs.ktor.client.mock)
+                implementation(libs.ktor.client.content.negotiation)
+                implementation(libs.ktor.serialization.json)
             }
         }
 
@@ -82,6 +85,7 @@ kotlin {
                 implementation(libs.ktor.client.cio)
                 implementation(libs.androidx.core.ktx)
                 implementation(libs.androidx.work.runtime)
+                implementation(libs.androidx.security.crypto)
             }
         }
 

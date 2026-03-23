@@ -6,6 +6,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
@@ -53,6 +54,13 @@ class SettingsScreen : Screen {
                     title = "LLM Provider",
                     subtitle = "Provider selection, API keys, models",
                     onClick = { navigator.push(LlmProviderSettingsScreen()) }
+                )
+                HorizontalDivider()
+                SettingsMenuItem(
+                    icon = Icons.Default.FavoriteBorder,
+                    title = "Polar Integration",
+                    subtitle = "Connect your Polar fitness account",
+                    onClick = { navigator.push(PolarSettingsScreen()) }
                 )
                 HorizontalDivider()
                 SettingsMenuItem(

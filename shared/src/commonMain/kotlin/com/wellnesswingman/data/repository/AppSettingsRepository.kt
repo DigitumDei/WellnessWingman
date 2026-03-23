@@ -43,4 +43,21 @@ interface AppSettingsRepository {
     // Image Retention
     fun getImageRetentionThresholdDays(): Int
     fun setImageRetentionThresholdDays(days: Int)
+
+    // Polar Integration
+    fun getPolarAccessToken(): String?
+    fun setPolarAccessToken(token: String)
+    fun getPolarRefreshToken(): String?
+    fun setPolarRefreshToken(token: String)
+    fun getPolarTokenExpiresAt(): Long
+    fun setPolarTokenExpiresAt(expiresAt: Long)
+    fun getPolarUserId(): String?
+    fun setPolarUserId(userId: String)
+    fun getPendingOAuthState(): String?
+    fun setPendingOAuthState(state: String)
+    fun getPendingOAuthSessionId(): String?
+    fun setPendingOAuthSessionId(sessionId: String)
+    fun clearPendingOAuthSession()
+    fun clearPolarTokens()
+    fun isPolarConnected(): Boolean
 }
