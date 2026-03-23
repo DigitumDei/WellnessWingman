@@ -115,8 +115,8 @@ class PolarApiClientTest {
         val http = createClient {
             respond(
                 content = """{
-                    "sleeps": [{
-                        "sleepResultDate": "2025-03-15",
+                    "nightSleeps": [{
+                        "sleepDate": "2025-03-15",
                         "duration": "PT8H30M",
                         "deepSleep": "PT1H45M",
                         "remSleep": "PT2H",
@@ -149,14 +149,15 @@ class PolarApiClientTest {
             respond(
                 content = """{
                     "trainingSessions": [{
-                        "id": "sess-1",
-                        "startTime": "2025-03-15T08:00:00.000",
-                        "duration": "PT1H15M30S",
-                        "sport": "RUNNING",
-                        "calories": 650,
-                        "distance": 10500.5,
-                        "heartRate": {"average": 145, "maximum": 178},
-                        "trainingLoad": 120.5
+                        "identifier": {"id": "sess-1"},
+                        "startTime": "2025-03-15T08:01:03",
+                        "durationMillis": 2294836,
+                        "sport": {"id": "27"},
+                        "calories": 472,
+                        "distanceMeters": 4972.0,
+                        "hrAvg": 160,
+                        "hrMax": 183,
+                        "trainingBenefit": "TRAINING_BENEFIT_TEMPO_AND_MAXIMUM_TRAINING"
                     }]
                 }""",
                 status = HttpStatusCode.OK,
@@ -164,32 +165,32 @@ class PolarApiClientTest {
             )
         }
 
-        val result = PolarApiClient(http).getTrainingSessions("token", "2025-03-15", "2025-03-16")
+        val result = PolarApiClient(http).getTrainingSessions("token", "2025-03-15T00:00:00", "2025-03-16T00:00:00")
         assertTrue(result.isSuccess)
         val session = result.getOrThrow()[0]
 
         assertEquals("sess-1", session.id)
-        assertEquals("2025-03-15T08:00:00.000", session.startTime)
-        assertEquals(4530L, session.durationSeconds) // 1h15m30s
-        assertEquals("RUNNING", session.sport)
-        assertEquals(650, session.calories)
-        assertEquals(10500.5, session.distanceMeters)
-        assertEquals(145, session.averageHeartRate)
-        assertEquals(178, session.maxHeartRate)
-        assertEquals(120.5, session.trainingLoad)
+        assertEquals("2025-03-15T08:01:03", session.startTime)
+        assertEquals(2294L, session.durationSeconds) // 2294836ms / 1000
+        assertEquals("27", session.sportId)
+        assertEquals(472, session.calories)
+        assertEquals(4972.0, session.distanceMeters)
+        assertEquals(160, session.averageHeartRate)
+        assertEquals(183, session.maxHeartRate)
+        assertEquals("TRAINING_BENEFIT_TEMPO_AND_MAXIMUM_TRAINING", session.trainingBenefit)
     }
 
     @Test
-    fun `getTrainingSessions skips entries with null id`() = runTest {
+    fun `getTrainingSessions skips entries with null identifier`() = runTest {
         val http = createClient {
             respond(
-                content = """{"trainingSessions": [{"sport": "RUNNING"}]}""",
+                content = """{"trainingSessions": [{"calories": 100}]}""",
                 status = HttpStatusCode.OK,
                 headers = jsonHeaders
             )
         }
 
-        val result = PolarApiClient(http).getTrainingSessions("token", "2025-01-01", "2025-01-02")
+        val result = PolarApiClient(http).getTrainingSessions("token", "2025-01-01T00:00:00", "2025-01-02T00:00:00")
         assertTrue(result.isSuccess)
         assertEquals(0, result.getOrThrow().size)
     }
@@ -203,10 +204,10 @@ class PolarApiClientTest {
                 content = """{
                     "nightlyRechargeResults": [{
                         "sleepResultDate": "2025-03-15",
-                        "ansStatus": "GOOD",
-                        "ansRate": 18.5,
-                        "recoveryIndicator": "COMPROMISED",
-                        "recoveryIndicatorSubLevel": "MODERATELY_COMPROMISED"
+                        "ansStatus": -4.49,
+                        "ansRate": 2,
+                        "recoveryIndicator": 3,
+                        "recoveryIndicatorSubLevel": 37
                     }]
                 }""",
                 status = HttpStatusCode.OK,
@@ -219,10 +220,10 @@ class PolarApiClientTest {
         val recharge = result.getOrThrow()[0]
 
         assertEquals("2025-03-15", recharge.date)
-        assertEquals("GOOD", recharge.ansStatus)
-        assertEquals(18.5, recharge.ansRate)
-        assertEquals("COMPROMISED", recharge.recoveryIndicator)
-        assertEquals("MODERATELY_COMPROMISED", recharge.recoveryIndicatorSubLevel)
+        assertEquals(-4.49, recharge.ansStatus)
+        assertEquals(2, recharge.ansRate)
+        assertEquals(3, recharge.recoveryIndicator)
+        assertEquals(37, recharge.recoveryIndicatorSubLevel)
     }
 
     // --- Error mapping ---
@@ -263,6 +264,17 @@ class PolarApiClientTest {
     }
 
     @Test
+    fun `404 response returns empty list instead of error`() = runTest {
+        val http = createClient {
+            respond("", HttpStatusCode.NotFound)
+        }
+
+        val result = PolarApiClient(http).getTrainingSessions("token", "2025-01-01", "2025-01-02")
+        assertTrue(result.isSuccess)
+        assertEquals(0, result.getOrThrow().size)
+    }
+
+    @Test
     fun `network exception returns NetworkError`() = runTest {
         val http = createClient {
             throw RuntimeException("Connection refused")
@@ -290,7 +302,7 @@ class PolarApiClientTest {
     fun `partial sleep response defaults missing durations to zero`() = runTest {
         val http = createClient {
             respond(
-                content = """{"sleeps": [{"sleepResultDate": "2025-03-15"}]}""",
+                content = """{"nightSleeps": [{"sleepDate": "2025-03-15"}]}""",
                 status = HttpStatusCode.OK,
                 headers = jsonHeaders
             )
@@ -310,23 +322,23 @@ class PolarApiClientTest {
     fun `training session with missing optional fields uses defaults`() = runTest {
         val http = createClient {
             respond(
-                content = """{"trainingSessions": [{"id": "s1"}]}""",
+                content = """{"trainingSessions": [{"identifier": {"id": "s1"}}]}""",
                 status = HttpStatusCode.OK,
                 headers = jsonHeaders
             )
         }
 
-        val result = PolarApiClient(http).getTrainingSessions("token", "2025-01-01", "2025-01-02")
+        val result = PolarApiClient(http).getTrainingSessions("token", "2025-01-01T00:00:00", "2025-01-02T00:00:00")
         assertTrue(result.isSuccess)
         val session = result.getOrThrow()[0]
         assertEquals("s1", session.id)
         assertEquals("", session.startTime)
         assertEquals(0L, session.durationSeconds)
-        assertEquals("", session.sport)
+        assertEquals("", session.sportId)
         assertEquals(0, session.calories)
         assertEquals(0.0, session.distanceMeters)
         assertEquals(0, session.averageHeartRate)
         assertEquals(0, session.maxHeartRate)
-        assertEquals(0.0, session.trainingLoad)
+        assertEquals("", session.trainingBenefit)
     }
 }

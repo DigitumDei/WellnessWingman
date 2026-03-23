@@ -22,7 +22,8 @@ import kotlin.time.Duration
  * Each method takes an [accessToken] directly — the caller (typically the sync
  * orchestrator) is responsible for obtaining and refreshing tokens.
  *
- * All date parameters use ISO 8601 `YYYY-MM-DD` format.
+ * Most endpoints use ISO 8601 `YYYY-MM-DD` date params.
+ * Training sessions requires full datetime `YYYY-MM-DDTHH:MM:SS`.
  * `from` is inclusive, `to` is exclusive.
  */
 class PolarApiClient(
@@ -51,7 +52,7 @@ class PolarApiClient(
         accessToken: String,
         from: String,
         to: String
-    ): Result<List<PolarDailyActivity>> = executeApiCall("activity/list", accessToken, from, to) { response ->
+    ): Result<List<PolarDailyActivity>> = executeApiCall("activity/list", accessToken, from, to, emptyList()) { response ->
         val dto: PolarActivityListResponse = response.body()
         dto.activityDays.mapNotNull { it.toDomain() }
     }
@@ -64,19 +65,20 @@ class PolarApiClient(
         accessToken: String,
         from: String,
         to: String
-    ): Result<List<PolarSleepResult>> = executeApiCall("sleeps", accessToken, from, to) { response ->
+    ): Result<List<PolarSleepResult>> = executeApiCall("sleeps", accessToken, from, to, emptyList()) { response ->
         val dto: PolarSleepListResponse = response.body()
-        dto.sleeps.mapNotNull { it.toDomain() }
+        dto.nightSleeps.mapNotNull { it.toDomain() }
     }
 
     /**
      * Fetches training sessions for the given date range.
+     * Note: this endpoint requires full datetime params (e.g. `2025-03-21T00:00:00`).
      */
     suspend fun getTrainingSessions(
         accessToken: String,
         from: String,
         to: String
-    ): Result<List<PolarTrainingSession>> = executeApiCall("training-sessions", accessToken, from, to) { response ->
+    ): Result<List<PolarTrainingSession>> = executeApiCall("training-sessions/list", accessToken, from, to, emptyList()) { response ->
         val dto: PolarTrainingListResponse = response.body()
         dto.trainingSessions.mapNotNull { it.toDomain() }
     }
@@ -89,7 +91,7 @@ class PolarApiClient(
         accessToken: String,
         from: String,
         to: String
-    ): Result<List<PolarNightlyRecharge>> = executeApiCall("nightly-recharge-results", accessToken, from, to) { response ->
+    ): Result<List<PolarNightlyRecharge>> = executeApiCall("nightly-recharge-results", accessToken, from, to, emptyList()) { response ->
         val dto: PolarNightlyRechargeListResponse = response.body()
         dto.nightlyRechargeResults.mapNotNull { it.toDomain() }
     }
@@ -101,6 +103,7 @@ class PolarApiClient(
         accessToken: String,
         from: String,
         to: String,
+        emptyResult: T,
         transform: suspend (HttpResponse) -> T
     ): Result<T> {
         return try {
@@ -122,6 +125,10 @@ class PolarApiClient(
                     val body = response.bodyAsText()
                     Napier.w("Polar API 429 on $path: $body")
                     Result.failure(PolarApiError.RateLimited(body))
+                }
+                response.status == HttpStatusCode.NotFound -> {
+                    Napier.d("Polar API 404 on $path — no data for range")
+                    Result.success(emptyResult)
                 }
                 response.status.value in 500..599 -> {
                     val body = response.bodyAsText()
@@ -166,7 +173,7 @@ private fun PolarActivityDayDto.toDomain(): PolarDailyActivity? {
 }
 
 private fun PolarSleepDto.toDomain(): PolarSleepResult? {
-    val d = sleepResultDate ?: return null
+    val d = sleepDate ?: return null
     return PolarSleepResult(
         date = d,
         durationSeconds = parseIso8601DurationToSeconds(duration),
@@ -178,17 +185,17 @@ private fun PolarSleepDto.toDomain(): PolarSleepResult? {
 }
 
 private fun PolarTrainingSessionDto.toDomain(): PolarTrainingSession? {
-    val sessionId = id ?: return null
+    val sessionId = identifier?.id ?: return null
     return PolarTrainingSession(
         id = sessionId,
         startTime = startTime ?: "",
-        durationSeconds = parseIso8601DurationToSeconds(duration),
-        sport = sport ?: "",
+        durationSeconds = (durationMillis ?: 0L) / 1000L,
+        sportId = sport?.id ?: "",
         calories = calories ?: 0,
-        distanceMeters = distance ?: 0.0,
-        averageHeartRate = heartRate?.average ?: 0,
-        maxHeartRate = heartRate?.maximum ?: 0,
-        trainingLoad = trainingLoad ?: 0.0
+        distanceMeters = distanceMeters ?: 0.0,
+        averageHeartRate = hrAvg ?: 0,
+        maxHeartRate = hrMax ?: 0,
+        trainingBenefit = trainingBenefit ?: ""
     )
 }
 
@@ -196,10 +203,10 @@ private fun PolarNightlyRechargeDto.toDomain(): PolarNightlyRecharge? {
     val d = sleepResultDate ?: return null
     return PolarNightlyRecharge(
         date = d,
-        ansStatus = ansStatus ?: "",
-        ansRate = ansRate ?: 0.0,
-        recoveryIndicator = recoveryIndicator ?: "",
-        recoveryIndicatorSubLevel = recoveryIndicatorSubLevel ?: ""
+        ansStatus = ansStatus ?: 0.0,
+        ansRate = ansRate ?: 0,
+        recoveryIndicator = recoveryIndicator ?: 0,
+        recoveryIndicatorSubLevel = recoveryIndicatorSubLevel ?: 0
     )
 }
 

@@ -35,12 +35,12 @@ data class PolarTrainingSession(
     val id: String,
     val startTime: String,
     val durationSeconds: Long,
-    val sport: String,
+    val sportId: String,
     val calories: Int,
     val distanceMeters: Double,
     val averageHeartRate: Int,
     val maxHeartRate: Int,
-    val trainingLoad: Double
+    val trainingBenefit: String
 )
 
 /**
@@ -48,10 +48,10 @@ data class PolarTrainingSession(
  */
 data class PolarNightlyRecharge(
     val date: String,
-    val ansStatus: String,
-    val ansRate: Double,
-    val recoveryIndicator: String,
-    val recoveryIndicatorSubLevel: String
+    val ansStatus: Double,
+    val ansRate: Int,
+    val recoveryIndicator: Int,
+    val recoveryIndicatorSubLevel: Int
 )
 
 /**

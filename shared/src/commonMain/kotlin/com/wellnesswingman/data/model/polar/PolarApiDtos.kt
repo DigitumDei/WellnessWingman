@@ -38,12 +38,12 @@ internal data class PolarStepSampleDto(
 
 @Serializable
 internal data class PolarSleepListResponse(
-    @SerialName("sleeps") val sleeps: List<PolarSleepDto> = emptyList()
+    @SerialName("nightSleeps") val nightSleeps: List<PolarSleepDto> = emptyList()
 )
 
 @Serializable
 internal data class PolarSleepDto(
-    @SerialName("sleepResultDate") val sleepResultDate: String? = null,
+    @SerialName("sleepDate") val sleepDate: String? = null,
     @SerialName("duration") val duration: String? = null,
     @SerialName("deepSleep") val deepSleep: String? = null,
     @SerialName("remSleep") val remSleep: String? = null,
@@ -60,20 +60,25 @@ internal data class PolarTrainingListResponse(
 
 @Serializable
 internal data class PolarTrainingSessionDto(
-    @SerialName("id") val id: String? = null,
+    @SerialName("identifier") val identifier: PolarIdentifierDto? = null,
     @SerialName("startTime") val startTime: String? = null,
-    @SerialName("duration") val duration: String? = null,
-    @SerialName("sport") val sport: String? = null,
+    @SerialName("durationMillis") val durationMillis: Long? = null,
+    @SerialName("sport") val sport: PolarSportDto? = null,
     @SerialName("calories") val calories: Int? = null,
-    @SerialName("distance") val distance: Double? = null,
-    @SerialName("heartRate") val heartRate: PolarHeartRateDto? = null,
-    @SerialName("trainingLoad") val trainingLoad: Double? = null
+    @SerialName("distanceMeters") val distanceMeters: Double? = null,
+    @SerialName("hrAvg") val hrAvg: Int? = null,
+    @SerialName("hrMax") val hrMax: Int? = null,
+    @SerialName("trainingBenefit") val trainingBenefit: String? = null
 )
 
 @Serializable
-internal data class PolarHeartRateDto(
-    @SerialName("average") val average: Int? = null,
-    @SerialName("maximum") val maximum: Int? = null
+internal data class PolarIdentifierDto(
+    @SerialName("id") val id: String? = null
+)
+
+@Serializable
+internal data class PolarSportDto(
+    @SerialName("id") val id: String? = null
 )
 
 // --- Nightly Recharge ---
@@ -86,8 +91,8 @@ internal data class PolarNightlyRechargeListResponse(
 @Serializable
 internal data class PolarNightlyRechargeDto(
     @SerialName("sleepResultDate") val sleepResultDate: String? = null,
-    @SerialName("ansStatus") val ansStatus: String? = null,
-    @SerialName("ansRate") val ansRate: Double? = null,
-    @SerialName("recoveryIndicator") val recoveryIndicator: String? = null,
-    @SerialName("recoveryIndicatorSubLevel") val recoveryIndicatorSubLevel: String? = null
+    @SerialName("ansStatus") val ansStatus: Double? = null,
+    @SerialName("ansRate") val ansRate: Int? = null,
+    @SerialName("recoveryIndicator") val recoveryIndicator: Int? = null,
+    @SerialName("recoveryIndicatorSubLevel") val recoveryIndicatorSubLevel: Int? = null
 )
