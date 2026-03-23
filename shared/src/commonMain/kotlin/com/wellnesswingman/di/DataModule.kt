@@ -46,6 +46,9 @@ val dataModule = module {
     // Polar OAuth
     single { PolarOAuthRepository(get(), get()) }
 
+    // Polar API
+    single { PolarApiClient() }
+
     // Settings - platform-specific implementation will be provided
     // via platformModule in each platform's source set
 }

@@ -59,7 +59,7 @@ class PolarOAuthRepositoryTest {
         assertTrue(url.contains("response_type=code"))
         assertTrue(url.contains("client_id=test-client-id"))
         assertTrue(url.contains("redirect_uri=https%3A%2F%2Fbroker.example.com%2Foauth%2Fcallback"))
-        assertTrue(url.contains("scope=activity%3Aread+training_sessions%3Aread+profile%3Aread") ||
+        assertTrue(url.contains("scope=activity%3Aread+training_sessions%3Aread+profile%3Aread+sleep%3Aread+nightly_recharge%3Aread") ||
             url.contains("scope=activity:read") // URLBuilder may encode differently
         )
         // State was persisted
