@@ -111,17 +111,20 @@ class PolarApiClientTest {
     // --- Sleep endpoint ---
 
     @Test
-    fun `getSleep maps ISO 8601 durations to seconds`() = runTest {
+    fun `getSleep maps phase durations from sleepEvaluation`() = runTest {
         val http = createClient {
             respond(
                 content = """{
                     "nightSleeps": [{
                         "sleepDate": "2025-03-15",
-                        "duration": "PT8H30M",
-                        "deepSleep": "PT1H45M",
-                        "remSleep": "PT2H",
-                        "lowLightSleep": "PT3H15M",
-                        "awakeTime": "PT30M"
+                        "sleepEvaluation": {
+                            "phaseDurations": {
+                                "wake": "1800s",
+                                "rem": "7200s",
+                                "light": "11700s",
+                                "deep": "6300s"
+                            }
+                        }
                     }]
                 }""",
                 status = HttpStatusCode.OK,
@@ -134,11 +137,11 @@ class PolarApiClientTest {
         val sleep = result.getOrThrow()[0]
 
         assertEquals("2025-03-15", sleep.date)
-        assertEquals(30600L, sleep.durationSeconds)       // 8h30m
-        assertEquals(6300L, sleep.deepSleepSeconds)        // 1h45m
-        assertEquals(7200L, sleep.remSleepSeconds)          // 2h
-        assertEquals(11700L, sleep.lightSleepSeconds)       // 3h15m
-        assertEquals(1800L, sleep.awakeSeconds)              // 30m
+        assertEquals(27000L, sleep.durationSeconds)        // sum of all phases
+        assertEquals(6300L, sleep.deepSleepSeconds)
+        assertEquals(7200L, sleep.remSleepSeconds)
+        assertEquals(11700L, sleep.lightSleepSeconds)
+        assertEquals(1800L, sleep.awakeSeconds)
     }
 
     // --- Training sessions endpoint ---
@@ -299,7 +302,7 @@ class PolarApiClientTest {
     }
 
     @Test
-    fun `partial sleep response defaults missing durations to zero`() = runTest {
+    fun `sleep without sleepEvaluation defaults all durations to zero`() = runTest {
         val http = createClient {
             respond(
                 content = """{"nightSleeps": [{"sleepDate": "2025-03-15"}]}""",

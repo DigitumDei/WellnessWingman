@@ -174,13 +174,20 @@ private fun PolarActivityDayDto.toDomain(): PolarDailyActivity? {
 
 private fun PolarSleepDto.toDomain(): PolarSleepResult? {
     val d = sleepDate ?: return null
+    val phases = sleepEvaluation?.phaseDurations
+    val deepSec = parsePolarDurationToSeconds(phases?.deep)
+    val remSec = parsePolarDurationToSeconds(phases?.rem)
+    val lightSec = parsePolarDurationToSeconds(phases?.light)
+    val awakeSec = parsePolarDurationToSeconds(phases?.wake)
+    val totalSec = deepSec + remSec + lightSec + awakeSec
+
     return PolarSleepResult(
         date = d,
-        durationSeconds = parseIso8601DurationToSeconds(duration),
-        deepSleepSeconds = parseIso8601DurationToSeconds(deepSleep),
-        remSleepSeconds = parseIso8601DurationToSeconds(remSleep),
-        lightSleepSeconds = parseIso8601DurationToSeconds(lowLightSleep),
-        awakeSeconds = parseIso8601DurationToSeconds(awakeTime)
+        durationSeconds = totalSec,
+        deepSleepSeconds = deepSec,
+        remSleepSeconds = remSec,
+        lightSleepSeconds = lightSec,
+        awakeSeconds = awakeSec
     )
 }
 
@@ -219,6 +226,19 @@ private fun parseIso8601DurationToSeconds(iso: String?): Long {
     if (iso.isNullOrBlank()) return 0L
     return try {
         Duration.parseIsoString(iso).inWholeSeconds
+    } catch (_: Exception) {
+        0L
+    }
+}
+
+/**
+ * Parses a Polar-style duration string (e.g. "220s", "3.5s") to whole seconds.
+ * Returns 0 if the input is null or unparseable.
+ */
+private fun parsePolarDurationToSeconds(duration: String?): Long {
+    if (duration.isNullOrBlank()) return 0L
+    return try {
+        duration.removeSuffix("s").toDouble().toLong()
     } catch (_: Exception) {
         0L
     }

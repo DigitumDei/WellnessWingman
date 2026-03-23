@@ -44,11 +44,27 @@ internal data class PolarSleepListResponse(
 @Serializable
 internal data class PolarSleepDto(
     @SerialName("sleepDate") val sleepDate: String? = null,
-    @SerialName("duration") val duration: String? = null,
-    @SerialName("deepSleep") val deepSleep: String? = null,
-    @SerialName("remSleep") val remSleep: String? = null,
-    @SerialName("lowLightSleep") val lowLightSleep: String? = null,
-    @SerialName("awakeTime") val awakeTime: String? = null
+    @SerialName("sleepResult") val sleepResult: PolarSleepResultDto? = null,
+    @SerialName("sleepEvaluation") val sleepEvaluation: PolarSleepEvaluationDto? = null
+)
+
+@Serializable
+internal data class PolarSleepResultDto(
+    @SerialName("sleepStart") val sleepStart: String? = null,
+    @SerialName("sleepEnd") val sleepEnd: String? = null
+)
+
+@Serializable
+internal data class PolarSleepEvaluationDto(
+    @SerialName("phaseDurations") val phaseDurations: PolarSleepPhaseDurationsDto? = null
+)
+
+@Serializable
+internal data class PolarSleepPhaseDurationsDto(
+    @SerialName("wake") val wake: String? = null,
+    @SerialName("rem") val rem: String? = null,
+    @SerialName("light") val light: String? = null,
+    @SerialName("deep") val deep: String? = null
 )
 
 // --- Training Sessions ---
