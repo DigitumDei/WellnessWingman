@@ -13,8 +13,7 @@ internal data class PolarActivityListResponse(
 @Serializable
 internal data class PolarActivityDayDto(
     @SerialName("date") val date: String? = null,
-    @SerialName("activitiesPerDevice") val activitiesPerDevice: List<PolarDeviceActivityDto> = emptyList(),
-    @SerialName("target") val target: PolarActivityTargetDto? = null
+    @SerialName("activitiesPerDevice") val activitiesPerDevice: List<PolarDeviceActivityDto> = emptyList()
 )
 
 @Serializable
@@ -24,8 +23,7 @@ internal data class PolarDeviceActivityDto(
 
 @Serializable
 internal data class PolarActivitySampleDto(
-    @SerialName("stepSamples") val stepSamples: PolarStepSamplesDto? = null,
-    @SerialName("metSamples") val metSamples: PolarMetSamplesDto? = null
+    @SerialName("stepSamples") val stepSamples: PolarStepSamplesDto? = null
 )
 
 @Serializable
@@ -33,18 +31,6 @@ internal data class PolarStepSamplesDto(
     @SerialName("startTime") val startTime: String? = null,
     @SerialName("interval") val interval: Long? = null,
     @SerialName("steps") val steps: List<Int> = emptyList()
-)
-
-@Serializable
-internal data class PolarMetSamplesDto(
-    @SerialName("startTime") val startTime: String? = null,
-    @SerialName("interval") val interval: Long? = null,
-    @SerialName("mets") val mets: List<Double> = emptyList()
-)
-
-@Serializable
-internal data class PolarActivityTargetDto(
-    @SerialName("minDailyMetGoal") val minDailyMetGoal: Int? = null
 )
 
 // --- Sleep ---
