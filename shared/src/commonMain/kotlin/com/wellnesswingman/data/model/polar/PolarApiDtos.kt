@@ -112,6 +112,27 @@ internal data class PolarSleepScoreDto(
     @SerialName("scoreRate") val scoreRate: Int? = null
 )
 
+// --- User Profile ---
+
+@Serializable
+internal data class PolarAccountDataResponse(
+    @SerialName("physicalInformation") val physicalInformation: PolarPhysicalInfoDto? = null
+)
+
+@Serializable
+internal data class PolarPhysicalInfoDto(
+    @SerialName("birthday") val birthday: String? = null,
+    @SerialName("sex") val sex: String? = null,
+    @SerialName("height") val height: Double? = null,
+    @SerialName("weight") val weight: Double? = null,
+    @SerialName("restingHeartRate") val restingHeartRate: Int? = null,
+    @SerialName("maximumHeartRate") val maximumHeartRate: Int? = null,
+    @SerialName("vo2Max") val vo2Max: Int? = null,
+    @SerialName("trainingBackground") val trainingBackground: String? = null,
+    @SerialName("sleepGoal") val sleepGoal: String? = null,
+    @SerialName("weeklyRecoveryTimeSum") val weeklyRecoveryTimeSum: Double? = null
+)
+
 // --- Training Sessions ---
 
 @Serializable

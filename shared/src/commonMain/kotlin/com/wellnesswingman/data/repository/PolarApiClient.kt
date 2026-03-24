@@ -102,6 +102,57 @@ class PolarApiClient(
     }
 
     /**
+     * Fetches the user's physical profile (height, weight, resting HR, VO2max, etc.).
+     * No date range required — returns the current profile state.
+     */
+    suspend fun getUserProfile(
+        accessToken: String
+    ): Result<PolarUserProfile> {
+        return try {
+            val response = httpClient.get("$BASE_URL/user/account-data") {
+                header(HttpHeaders.Authorization, "Bearer $accessToken")
+            }
+
+            when {
+                response.status == HttpStatusCode.Unauthorized -> {
+                    val body = response.bodyAsText()
+                    Napier.w("Polar API 401 on user/account-data: $body")
+                    Result.failure(PolarApiError.Unauthorized(body))
+                }
+                response.status == HttpStatusCode.TooManyRequests -> {
+                    val body = response.bodyAsText()
+                    Napier.w("Polar API 429 on user/account-data: $body")
+                    Result.failure(PolarApiError.RateLimited(body))
+                }
+                response.status.value in 500..599 -> {
+                    val body = response.bodyAsText()
+                    Napier.e("Polar API ${response.status.value} on user/account-data: $body")
+                    Result.failure(PolarApiError.ServerError(response.status.value, body))
+                }
+                response.status.isSuccess() -> {
+                    val dto: PolarAccountDataResponse = response.body()
+                    val profile = dto.physicalInformation?.toDomain()
+                    if (profile != null) {
+                        Result.success(profile)
+                    } else {
+                        Result.failure(PolarApiError.ServerError(200, "Missing physicalInformation"))
+                    }
+                }
+                else -> {
+                    val body = response.bodyAsText()
+                    Napier.e("Polar API unexpected ${response.status.value} on user/account-data: $body")
+                    Result.failure(PolarApiError.ServerError(response.status.value, body))
+                }
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Napier.e("Polar API network error on user/account-data", e)
+            Result.failure(PolarApiError.NetworkError(e))
+        }
+    }
+
+    /**
      * Fetches nightly recharge results for the given date range.
      * Maximum range: 28 days.
      */
@@ -254,6 +305,21 @@ private fun PolarNightlyRechargeDto.toDomain(): PolarNightlyRecharge? {
         baselineRmssdSd = sdBaselineRmssd ?: 0,
         baselineRri = meanBaselineRri ?: 0,
         baselineRriSd = sdBaselineRri ?: 0
+    )
+}
+
+private fun PolarPhysicalInfoDto.toDomain(): PolarUserProfile {
+    return PolarUserProfile(
+        birthday = birthday ?: "",
+        sex = sex ?: "",
+        heightCm = height ?: 0.0,
+        weightKg = weight ?: 0.0,
+        restingHeartRate = restingHeartRate ?: 0,
+        maxHeartRate = maximumHeartRate ?: 0,
+        vo2Max = vo2Max ?: 0,
+        trainingBackground = trainingBackground ?: "",
+        sleepGoalSeconds = sleepGoal?.toLongOrNull() ?: 0L,
+        weeklyRecoveryTimeHours = weeklyRecoveryTimeSum ?: 0.0
     )
 }
 

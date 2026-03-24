@@ -88,6 +88,25 @@ data class PolarNightlyRecharge(
 )
 
 /**
+ * User physical profile from the Polar API.
+ * Fetched once via [PolarApiClient.getUserProfile] — does not require date params.
+ */
+data class PolarUserProfile(
+    val birthday: String,
+    val sex: String,
+    val heightCm: Double,
+    val weightKg: Double,
+    val restingHeartRate: Int,
+    val maxHeartRate: Int,
+    val vo2Max: Int,
+    val trainingBackground: String,
+    /** Sleep goal in seconds (e.g. 25200 = 7 hours). */
+    val sleepGoalSeconds: Long,
+    /** Weekly recovery time sum in hours. */
+    val weeklyRecoveryTimeHours: Double
+)
+
+/**
  * Sealed error hierarchy for Polar API failures.
  * Works with [Result.failure] for structured error handling.
  */

@@ -301,6 +301,61 @@ class PolarApiClientTest {
         assertEquals(51, recharge.baselineRriSd)
     }
 
+    // --- User profile endpoint ---
+
+    @Test
+    fun `getUserProfile maps response to domain model`() = runTest {
+        val http = createClient {
+            respond(
+                content = """{
+                    "physicalInformation": {
+                        "birthday": "1976-02-20",
+                        "sex": "SEX_MALE",
+                        "height": 182.0,
+                        "weight": 96.3,
+                        "restingHeartRate": 65,
+                        "maximumHeartRate": 184,
+                        "vo2Max": 35,
+                        "trainingBackground": "TRAINING_BACKGROUND_FREQUENT",
+                        "sleepGoal": "25200",
+                        "weeklyRecoveryTimeSum": 45.29
+                    }
+                }""",
+                status = HttpStatusCode.OK,
+                headers = jsonHeaders
+            )
+        }
+
+        val result = PolarApiClient(http).getUserProfile("token")
+        assertTrue(result.isSuccess)
+        val profile = result.getOrThrow()
+
+        assertEquals("1976-02-20", profile.birthday)
+        assertEquals("SEX_MALE", profile.sex)
+        assertEquals(182.0, profile.heightCm)
+        assertEquals(96.3, profile.weightKg)
+        assertEquals(65, profile.restingHeartRate)
+        assertEquals(184, profile.maxHeartRate)
+        assertEquals(35, profile.vo2Max)
+        assertEquals("TRAINING_BACKGROUND_FREQUENT", profile.trainingBackground)
+        assertEquals(25200L, profile.sleepGoalSeconds)
+        assertEquals(45.29, profile.weeklyRecoveryTimeHours)
+    }
+
+    @Test
+    fun `getUserProfile returns error when physicalInformation is missing`() = runTest {
+        val http = createClient {
+            respond(
+                content = """{}""",
+                status = HttpStatusCode.OK,
+                headers = jsonHeaders
+            )
+        }
+
+        val result = PolarApiClient(http).getUserProfile("token")
+        assertTrue(result.isFailure)
+    }
+
     // --- Error mapping ---
 
     @Test
