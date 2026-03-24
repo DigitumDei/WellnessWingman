@@ -32,6 +32,7 @@ class PolarApiClient(
     companion object {
         private const val BASE_URL = "https://www.polaraccesslink.com/v4/data"
 
+        private val ACTIVITY_FEATURES = listOf("samples")
         private val SLEEP_FEATURES = listOf("sleep-result", "sleep-evaluation", "sleep-score")
 
         fun createDefaultHttpClient(): HttpClient {
@@ -48,13 +49,20 @@ class PolarApiClient(
 
     /**
      * Fetches daily activity summaries for the given date range.
-     * Maximum range: 90 days.
+     * Maximum range: 28 days.
      */
     suspend fun getActivities(
         accessToken: String,
         from: String,
         to: String
-    ): Result<List<PolarDailyActivity>> = executeApiCall("activity/list", accessToken, from, to, emptyList()) { response ->
+    ): Result<List<PolarDailyActivity>> = executeApiCall(
+        path = "activity/list",
+        accessToken = accessToken,
+        from = from,
+        to = to,
+        emptyResult = emptyList(),
+        extraParams = mapOf("features" to ACTIVITY_FEATURES)
+    ) { response ->
         val dto: PolarActivityListResponse = response.body()
         dto.activityDays.mapNotNull { it.toDomain() }
     }
@@ -171,18 +179,19 @@ class PolarApiClient(
 
 private fun PolarActivityDayDto.toDomain(): PolarDailyActivity? {
     val d = date ?: return null
-    val totalSteps = activitiesPerDevice.sumOf { it.activeSteps ?: 0 }
-    val totalCalories = activitiesPerDevice.sumOf { it.activeCalories ?: 0 }
-    val samples = activitySamples?.stepSamples?.mapNotNull { sample ->
-        val time = sample.time ?: return@mapNotNull null
-        PolarStepSample(time = time, steps = sample.steps ?: 0)
-    } ?: emptyList()
+    // Merge step samples across all devices (typically just one)
+    val allStepSamples = activitiesPerDevice
+        .flatMap { it.activitySamples }
+        .mapNotNull { it.stepSamples }
+    val firstSamples = allStepSamples.firstOrNull()
+    val steps = firstSamples?.steps ?: emptyList()
 
     return PolarDailyActivity(
         date = d,
-        totalSteps = totalSteps,
-        activeCalories = totalCalories,
-        stepSamples = samples
+        totalSteps = steps.sum(),
+        stepSampleStartTime = firstSamples?.startTime ?: "00:00:00",
+        stepSampleIntervalMs = firstSamples?.interval ?: 60000L,
+        stepSamples = steps
     )
 }
 

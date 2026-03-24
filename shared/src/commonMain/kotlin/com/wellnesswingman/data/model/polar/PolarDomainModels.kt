@@ -2,17 +2,18 @@ package com.wellnesswingman.data.model.polar
 
 /**
  * Normalized daily activity summary from the Polar API.
+ *
+ * Requires the `features` query param: samples.
+ * Step samples are a dense time-series: one value per [stepSampleIntervalMs]
+ * starting at [stepSampleStartTime].
  */
 data class PolarDailyActivity(
     val date: String,
     val totalSteps: Int,
-    val activeCalories: Int,
-    val stepSamples: List<PolarStepSample>
-)
-
-data class PolarStepSample(
-    val time: String,
-    val steps: Int
+    // Dense step time-series
+    val stepSampleStartTime: String,
+    val stepSampleIntervalMs: Long,
+    val stepSamples: List<Int>
 )
 
 /**

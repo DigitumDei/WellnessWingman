@@ -57,22 +57,35 @@ class PolarApiClientTest {
     // --- Activity endpoint ---
 
     @Test
+    fun `getActivities includes features query params`() = runTest {
+        var capturedRequest: HttpRequestData? = null
+        val http = createClient { request ->
+            capturedRequest = request
+            respond("""{"activityDays":[]}""", HttpStatusCode.OK, jsonHeaders)
+        }
+
+        PolarApiClient(http).getActivities("token", "2025-03-15", "2025-03-16")
+
+        val url = capturedRequest!!.url.toString()
+        assertTrue(url.contains("features=samples"), "Missing samples feature")
+    }
+
+    @Test
     fun `getActivities maps response to domain models`() = runTest {
         val http = createClient {
             respond(
                 content = """{
                     "activityDays": [{
-                        "date": "2025-03-15",
-                        "activitiesPerDevice": [
-                            {"activeSteps": 5000, "activeCalories": 200},
-                            {"activeSteps": 3000, "activeCalories": 150}
-                        ],
-                        "activitySamples": {
-                            "stepSamples": [
-                                {"time": "10:00:00", "steps": 120},
-                                {"time": "11:00:00", "steps": 340}
-                            ]
-                        }
+                        "date": "2025-03-22",
+                        "activitiesPerDevice": [{
+                            "activitySamples": [{
+                                "stepSamples": {
+                                    "startTime": "00:00:00",
+                                    "interval": 60000,
+                                    "steps": [0, 0, 0, 8, 6, 20, 14, 44]
+                                }
+                            }]
+                        }]
                     }]
                 }""",
                 status = HttpStatusCode.OK,
@@ -80,24 +93,25 @@ class PolarApiClientTest {
             )
         }
 
-        val result = PolarApiClient(http).getActivities("token", "2025-03-15", "2025-03-16")
+        val result = PolarApiClient(http).getActivities("token", "2025-03-22", "2025-03-23")
         assertTrue(result.isSuccess)
         val activities = result.getOrThrow()
         assertEquals(1, activities.size)
 
         val day = activities[0]
-        assertEquals("2025-03-15", day.date)
-        assertEquals(8000, day.totalSteps)
-        assertEquals(350, day.activeCalories)
-        assertEquals(2, day.stepSamples.size)
-        assertEquals(120, day.stepSamples[0].steps)
+        assertEquals("2025-03-22", day.date)
+        assertEquals(92, day.totalSteps)
+        assertEquals("00:00:00", day.stepSampleStartTime)
+        assertEquals(60000L, day.stepSampleIntervalMs)
+        assertEquals(8, day.stepSamples.size)
+        assertEquals(8, day.stepSamples[3])
     }
 
     @Test
     fun `getActivities skips days with null date`() = runTest {
         val http = createClient {
             respond(
-                content = """{"activityDays": [{"activitiesPerDevice": [{"activeSteps": 100}]}]}""",
+                content = """{"activityDays": [{"activitiesPerDevice": []}]}""",
                 status = HttpStatusCode.OK,
                 headers = jsonHeaders
             )
