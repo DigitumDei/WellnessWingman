@@ -18,14 +18,31 @@ data class PolarStepSample(
 /**
  * Normalized sleep result from the Polar API.
  * All durations are in seconds.
+ *
+ * Requires the `features` query param: sleep-result, sleep-evaluation, sleep-score.
+ * With features enabled, the API limits date range to 1 day per request.
  */
 data class PolarSleepResult(
     val date: String,
+    // Timing
+    val sleepStart: String,
+    val sleepEnd: String,
+    // Phase durations (seconds)
     val durationSeconds: Long,
     val deepSleepSeconds: Long,
     val remSleepSeconds: Long,
     val lightSleepSeconds: Long,
-    val awakeSeconds: Long
+    val awakeSeconds: Long,
+    // Quality metrics
+    val efficiencyPercent: Double,
+    val continuityIndex: Double,
+    val interruptionCount: Int,
+    val longInterruptionCount: Int,
+    // Polar sleep scores (0–100 scale, scoreRate is 1–5)
+    val sleepScore: Double,
+    val remScore: Double,
+    val deepSleepScore: Double,
+    val scoreRate: Int
 )
 
 /**
@@ -45,13 +62,28 @@ data class PolarTrainingSession(
 
 /**
  * Normalized nightly recharge result from the Polar API.
+ *
+ * HRV values are measured during the first hours of sleep (recovery window).
+ * Baseline values require ~28 days of continuous data to establish.
  */
 data class PolarNightlyRecharge(
     val date: String,
     val ansStatus: Double,
     val ansRate: Int,
     val recoveryIndicator: Int,
-    val recoveryIndicatorSubLevel: Int
+    val recoveryIndicatorSubLevel: Int,
+    /** RMSSD during the recovery window, in milliseconds. Primary HRV metric. */
+    val hrvRmssd: Int,
+    /** Mean R-R interval during recovery, in milliseconds. */
+    val hrvMeanRri: Int,
+    /** Personal RMSSD baseline (0 until ~28 days of data). */
+    val baselineRmssd: Int,
+    /** Standard deviation of personal RMSSD baseline. */
+    val baselineRmssdSd: Int,
+    /** Personal R-R interval baseline (0 until ~28 days of data). */
+    val baselineRri: Int,
+    /** Standard deviation of personal R-R interval baseline. */
+    val baselineRriSd: Int
 )
 
 /**

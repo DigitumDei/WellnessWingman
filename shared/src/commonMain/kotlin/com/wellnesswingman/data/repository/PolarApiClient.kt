@@ -32,6 +32,8 @@ class PolarApiClient(
     companion object {
         private const val BASE_URL = "https://www.polaraccesslink.com/v4/data"
 
+        private val SLEEP_FEATURES = listOf("sleep-result", "sleep-evaluation", "sleep-score")
+
         fun createDefaultHttpClient(): HttpClient {
             return HttpClient {
                 install(ContentNegotiation) {
@@ -59,13 +61,21 @@ class PolarApiClient(
 
     /**
      * Fetches sleep results for the given date range.
-     * Maximum range: 30 days.
+     * Maximum range: 1 day (API constraint when features are requested).
+     * The caller must paginate day-by-day for multi-day ranges.
      */
     suspend fun getSleep(
         accessToken: String,
         from: String,
         to: String
-    ): Result<List<PolarSleepResult>> = executeApiCall("sleeps", accessToken, from, to, emptyList()) { response ->
+    ): Result<List<PolarSleepResult>> = executeApiCall(
+        path = "sleeps",
+        accessToken = accessToken,
+        from = from,
+        to = to,
+        emptyResult = emptyList(),
+        extraParams = mapOf("features" to SLEEP_FEATURES)
+    ) { response ->
         val dto: PolarSleepListResponse = response.body()
         dto.nightSleeps.mapNotNull { it.toDomain() }
     }
@@ -104,6 +114,7 @@ class PolarApiClient(
         from: String,
         to: String,
         emptyResult: T,
+        extraParams: Map<String, List<String>> = emptyMap(),
         transform: suspend (HttpResponse) -> T
     ): Result<T> {
         return try {
@@ -112,6 +123,9 @@ class PolarApiClient(
                 url {
                     parameters.append("from", from)
                     parameters.append("to", to)
+                    extraParams.forEach { (key, values) ->
+                        values.forEach { parameters.append(key, it) }
+                    }
                 }
             }
 
@@ -174,7 +188,8 @@ private fun PolarActivityDayDto.toDomain(): PolarDailyActivity? {
 
 private fun PolarSleepDto.toDomain(): PolarSleepResult? {
     val d = sleepDate ?: return null
-    val phases = sleepEvaluation?.phaseDurations ?: return null
+    val eval = sleepEvaluation ?: return null
+    val phases = eval.phaseDurations ?: return null
     val deepSec = parsePolarDurationToSeconds(phases.deep)
     val remSec = parsePolarDurationToSeconds(phases.rem)
     val lightSec = parsePolarDurationToSeconds(phases.light)
@@ -183,11 +198,21 @@ private fun PolarSleepDto.toDomain(): PolarSleepResult? {
 
     return PolarSleepResult(
         date = d,
+        sleepStart = sleepResult?.hypnogram?.sleepStart ?: "",
+        sleepEnd = sleepResult?.hypnogram?.sleepEnd ?: "",
         durationSeconds = totalSec,
         deepSleepSeconds = deepSec,
         remSleepSeconds = remSec,
         lightSleepSeconds = lightSec,
-        awakeSeconds = awakeSec
+        awakeSeconds = awakeSec,
+        efficiencyPercent = eval.analysis?.efficiencyPercent ?: 0.0,
+        continuityIndex = eval.analysis?.continuityIndex ?: 0.0,
+        interruptionCount = eval.interruptions?.totalCount ?: 0,
+        longInterruptionCount = eval.interruptions?.longCount ?: 0,
+        sleepScore = sleepScore?.sleepScore ?: 0.0,
+        remScore = sleepScore?.remScore ?: 0.0,
+        deepSleepScore = sleepScore?.n3Score ?: 0.0,
+        scoreRate = sleepScore?.scoreRate ?: 0
     )
 }
 
@@ -213,7 +238,13 @@ private fun PolarNightlyRechargeDto.toDomain(): PolarNightlyRecharge? {
         ansStatus = ansStatus ?: 0.0,
         ansRate = ansRate ?: 0,
         recoveryIndicator = recoveryIndicator ?: 0,
-        recoveryIndicatorSubLevel = recoveryIndicatorSubLevel ?: 0
+        recoveryIndicatorSubLevel = recoveryIndicatorSubLevel ?: 0,
+        hrvRmssd = meanNightlyRecoveryRmssd ?: 0,
+        hrvMeanRri = meanNightlyRecoveryRri ?: 0,
+        baselineRmssd = meanBaselineRmssd ?: 0,
+        baselineRmssdSd = sdBaselineRmssd ?: 0,
+        baselineRri = meanBaselineRri ?: 0,
+        baselineRriSd = sdBaselineRri ?: 0
     )
 }
 

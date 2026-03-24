@@ -111,19 +111,55 @@ class PolarApiClientTest {
     // --- Sleep endpoint ---
 
     @Test
-    fun `getSleep maps phase durations from sleepEvaluation`() = runTest {
+    fun `getSleep includes features query params`() = runTest {
+        var capturedRequest: HttpRequestData? = null
+        val http = createClient { request ->
+            capturedRequest = request
+            respond("""{"nightSleeps":[]}""", HttpStatusCode.OK, jsonHeaders)
+        }
+
+        PolarApiClient(http).getSleep("token", "2025-03-15", "2025-03-16")
+
+        val url = capturedRequest!!.url.toString()
+        assertTrue(url.contains("features=sleep-result"), "Missing sleep-result feature")
+        assertTrue(url.contains("features=sleep-evaluation"), "Missing sleep-evaluation feature")
+        assertTrue(url.contains("features=sleep-score"), "Missing sleep-score feature")
+    }
+
+    @Test
+    fun `getSleep maps full response to domain models`() = runTest {
         val http = createClient {
             respond(
                 content = """{
                     "nightSleeps": [{
-                        "sleepDate": "2025-03-15",
+                        "sleepDate": "2025-03-22",
+                        "sleepResult": {
+                            "hypnogram": {
+                                "sleepStart": "2025-03-21T21:42:19.418+02:00",
+                                "sleepEnd": "2025-03-22T06:29:19.418+02:00"
+                            }
+                        },
                         "sleepEvaluation": {
                             "phaseDurations": {
-                                "wake": "1800s",
-                                "rem": "7200s",
-                                "light": "11700s",
-                                "deep": "6300s"
+                                "wake": "1020s",
+                                "rem": "5970s",
+                                "light": "18210s",
+                                "deep": "6420s"
+                            },
+                            "interruptions": {
+                                "totalCount": 22,
+                                "longCount": 2
+                            },
+                            "analysis": {
+                                "efficiencyPercent": 96.77,
+                                "continuityIndex": 4.8
                             }
+                        },
+                        "sleepScore": {
+                            "sleepScore": 90.84,
+                            "remScore": 77.97,
+                            "n3Score": 85.58,
+                            "scoreRate": 5
                         }
                     }]
                 }""",
@@ -132,16 +168,26 @@ class PolarApiClientTest {
             )
         }
 
-        val result = PolarApiClient(http).getSleep("token", "2025-03-15", "2025-03-16")
+        val result = PolarApiClient(http).getSleep("token", "2025-03-22", "2025-03-23")
         assertTrue(result.isSuccess)
         val sleep = result.getOrThrow()[0]
 
-        assertEquals("2025-03-15", sleep.date)
-        assertEquals(27000L, sleep.durationSeconds)        // sum of all phases
-        assertEquals(6300L, sleep.deepSleepSeconds)
-        assertEquals(7200L, sleep.remSleepSeconds)
-        assertEquals(11700L, sleep.lightSleepSeconds)
-        assertEquals(1800L, sleep.awakeSeconds)
+        assertEquals("2025-03-22", sleep.date)
+        assertEquals("2025-03-21T21:42:19.418+02:00", sleep.sleepStart)
+        assertEquals("2025-03-22T06:29:19.418+02:00", sleep.sleepEnd)
+        assertEquals(31620L, sleep.durationSeconds)
+        assertEquals(6420L, sleep.deepSleepSeconds)
+        assertEquals(5970L, sleep.remSleepSeconds)
+        assertEquals(18210L, sleep.lightSleepSeconds)
+        assertEquals(1020L, sleep.awakeSeconds)
+        assertEquals(96.77, sleep.efficiencyPercent)
+        assertEquals(4.8, sleep.continuityIndex)
+        assertEquals(22, sleep.interruptionCount)
+        assertEquals(2, sleep.longInterruptionCount)
+        assertEquals(90.84, sleep.sleepScore)
+        assertEquals(77.97, sleep.remScore)
+        assertEquals(85.58, sleep.deepSleepScore)
+        assertEquals(5, sleep.scoreRate)
     }
 
     // --- Training sessions endpoint ---
@@ -210,7 +256,13 @@ class PolarApiClientTest {
                         "ansStatus": -4.49,
                         "ansRate": 2,
                         "recoveryIndicator": 3,
-                        "recoveryIndicatorSubLevel": 37
+                        "recoveryIndicatorSubLevel": 37,
+                        "meanNightlyRecoveryRmssd": 30,
+                        "meanNightlyRecoveryRri": 758,
+                        "meanBaselineRmssd": 0,
+                        "sdBaselineRmssd": 4,
+                        "meanBaselineRri": 0,
+                        "sdBaselineRri": 51
                     }]
                 }""",
                 status = HttpStatusCode.OK,
@@ -227,6 +279,12 @@ class PolarApiClientTest {
         assertEquals(2, recharge.ansRate)
         assertEquals(3, recharge.recoveryIndicator)
         assertEquals(37, recharge.recoveryIndicatorSubLevel)
+        assertEquals(30, recharge.hrvRmssd)
+        assertEquals(758, recharge.hrvMeanRri)
+        assertEquals(0, recharge.baselineRmssd)
+        assertEquals(4, recharge.baselineRmssdSd)
+        assertEquals(0, recharge.baselineRri)
+        assertEquals(51, recharge.baselineRriSd)
     }
 
     // --- Error mapping ---
