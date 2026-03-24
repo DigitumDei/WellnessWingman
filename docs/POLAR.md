@@ -103,6 +103,67 @@ python3 -c "import os; print(os.urandom(32).hex())" | gcloud secrets versions ad
 4. **End-to-end:** Tap Connect → Chrome Custom Tab → Polar consent → redirect → app shows "Connected" with user ID
 5. **Disconnect:** Tap Disconnect → tokens cleared → UI shows "Connect" button
 
+## AccessLink API v4 — Endpoint Features
+
+The Polar AccessLink v4 data endpoints support an optional `features` query parameter
+that controls which data is included in the response. Without `features`, most endpoints
+return empty or minimal stubs. This has significant implications for the sync orchestrator.
+
+### Currently implemented
+
+| Endpoint | Features requested | Max range | Notes |
+|----------|-------------------|-----------|-------|
+| `activity/list` | `samples` | 28 days | Step samples as dense time-series (1-min intervals). Without `samples`, `activitiesPerDevice` is empty. |
+| `sleeps` | `sleep-result`, `sleep-evaluation`, `sleep-score` | **1 day** | Returns hypnogram timing, phase durations, quality metrics, and Polar sleep scores. Without features, returns bare `{sleepDate}` stubs with no data. |
+| `training-sessions/list` | _(none)_ | 90 days | Base response already includes HR, calories, distance, duration, recovery time, sport ID. No features needed for the core wellness data. |
+| `nightly-recharge-results` | _(none — no features param)_ | 28 days | Returns HRV (RMSSD, R-R interval), ANS status, baselines, and recovery indicators. |
+| `user/account-data` | _(none — no features param)_ | N/A | Profile endpoint, no date range. Returns physical info (resting HR, VO2max, weight, height, sleep goal). |
+
+### Training sessions — deferred features
+
+The training-sessions endpoint supports 12 optional features. When any features are
+requested, the max date range drops to **1 day**, forcing day-by-day pagination. The base
+response (no features) is already rich enough for the wellness dashboard, so we defer
+these features to avoid the pagination complexity during initial sync.
+
+| Feature | What it adds | Wellness value | Why deferred |
+|---------|-------------|----------------|--------------|
+| `training-load-report` | `cardioLoad`, `muscleLoad`, interpretations, `perceivedLoad`, `sessionRpe` | **High** — recovery/strain tracking, like Whoop strain score | 1-day limit. Best added when sync orchestrator supports day-by-day pagination. |
+| `zones` | HR/power/speed zone distribution with `inZone` time (ms) per zone | **High** — shows training intensity distribution | 1-day limit. Large payload per session. |
+| `statistics` | min/avg/max for altitude, cadence, HR, power, speed | Medium — summary stats already partially available in base response (`hrAvg`, `hrMax`) | 1-day limit. Partially redundant with base fields. |
+| `samples` | Dense time-series (HR, speed, altitude, etc.) | Low for dashboard — useful for detailed session replay | 1-day limit. Very large payload. |
+| `laps` | Lap splits with per-lap stats | Low | Niche use case. |
+| `hill-splits` | Uphill/downhill segment analysis | Low | Niche use case. |
+| `routes` | GPS track data | Low for wellness | Large payload, niche. |
+| `test-results` | Fitness test results (orthostatic, etc.) | Medium | Rare — only present on test sessions. |
+| `pause-times` | Pause/resume timestamps | Low | |
+| `strength-training-results` | Sets, reps, weights per exercise | Medium for strength athletes | Niche. |
+| `comments` | User notes on sessions | Low | |
+| `physical-info` | Profile info per session | Low — available via `user/account-data` | Redundant. |
+
+**Recommendation:** When the sync orchestrator is built, add `training-load-report` and
+`zones` as a priority. The cardio/muscle load data combined with HR zone distribution
+gives a complete training strain picture. The sync orchestrator will already need
+day-by-day pagination for sleep, so extending it to training sessions is incremental.
+
+### Activity — deferred features
+
+| Feature | What it adds | Why deferred |
+|---------|-------------|--------------|
+| `activity-target` | Daily MET goal (`minDailyMetGoal`) | Low priority — can be derived from profile. |
+| `physical-information` | Profile data repeated per day | Redundant — use `user/account-data` instead. |
+
+### Sync orchestrator implications
+
+The `features` parameter creates a two-tier pagination model:
+
+- **Bulk sync** (activity, training, nightly recharge): multi-day ranges, fewer API calls
+- **Detail sync** (sleep, future training features): 1-day max, requires day-by-day loop
+
+The sync orchestrator should handle this transparently, batching bulk endpoints and
+iterating daily for detail endpoints. Rate limiting (Polar enforces 429) should use
+exponential backoff.
+
 ## Scope Boundaries (Milestone 1)
 
 Not included in the initial implementation:

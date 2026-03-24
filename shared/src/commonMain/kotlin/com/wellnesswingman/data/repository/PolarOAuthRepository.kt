@@ -59,7 +59,7 @@ class PolarOAuthRepository(
         settings.setPendingOAuthState(state)
 
         val callbackUrl = "${config.brokerBaseUrl}/oauth/callback"
-        val scope = "activity:read training_sessions:read profile:read"
+        val scope = "activity:read training_sessions:read profile:read sleep:read nightly_recharge:read"
         return io.ktor.http.URLBuilder(POLAR_AUTH_URL).apply {
             parameters.append("response_type", "code")
             parameters.append("client_id", config.clientId)
