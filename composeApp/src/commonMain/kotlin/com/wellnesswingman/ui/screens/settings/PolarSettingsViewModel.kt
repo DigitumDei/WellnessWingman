@@ -6,9 +6,12 @@ import com.wellnesswingman.data.model.PolarOAuthConfig
 import com.wellnesswingman.data.repository.AppSettingsRepository
 import com.wellnesswingman.data.repository.PolarOAuthRepository
 import com.wellnesswingman.domain.oauth.PendingOAuthResultStore
+import com.wellnesswingman.domain.polar.PolarSyncOrchestrator
+import com.wellnesswingman.domain.polar.PolarSyncTrigger
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
 
@@ -16,7 +19,8 @@ class PolarSettingsViewModel(
     private val appSettingsRepository: AppSettingsRepository,
     private val polarOAuthRepository: PolarOAuthRepository,
     private val pendingOAuthResultStore: PendingOAuthResultStore,
-    private val config: PolarOAuthConfig
+    private val config: PolarOAuthConfig,
+    private val polarSyncOrchestrator: PolarSyncOrchestrator
 ) : ScreenModel {
 
     private val _uiState = MutableStateFlow(PolarSettingsUiState())
@@ -25,6 +29,7 @@ class PolarSettingsViewModel(
     init {
         loadCurrentState()
         observeOAuthResults()
+        observeSyncStatus()
     }
 
     private fun loadCurrentState() {
@@ -83,6 +88,7 @@ class PolarSettingsViewModel(
                         isLoading = false,
                         error = null
                     )
+                    triggerSync(PolarSyncTrigger.INITIAL_LINK)
                 },
                 onFailure = { e ->
                     // Only clear pending session on permanent failures (state mismatch, 410).
@@ -94,6 +100,27 @@ class PolarSettingsViewModel(
                     )
                 }
             )
+        }
+    }
+
+    private fun observeSyncStatus() {
+        screenModelScope.launch {
+            polarSyncOrchestrator.status.collectLatest { status ->
+                val lastResult = status.lastResult
+                val failureSummary = lastResult?.metricResults
+                    ?.filter { it.failureMessage != null }
+                    ?.joinToString(separator = "\n") { "${it.metricFamily.name}: ${it.failureMessage}" }
+
+                _uiState.value = _uiState.value.copy(
+                    isSyncing = status.isRunning,
+                    syncSummary = lastResult?.message,
+                    syncFailureSummary = failureSummary,
+                    lastSyncedAt = lastResult
+                        ?.takeIf { it.outcome != com.wellnesswingman.domain.polar.PolarSyncOutcome.SKIPPED }
+                        ?.completedAt
+                        ?.toString()
+                )
+            }
         }
     }
 
@@ -120,8 +147,20 @@ class PolarSettingsViewModel(
         _uiState.value = _uiState.value.copy(
             isConnected = false,
             polarUserId = "",
-            error = null
+            error = null,
+            isSyncing = false
         )
+    }
+
+    fun onManualSyncClicked() {
+        if (!_uiState.value.isConnected || _uiState.value.isSyncing) return
+        triggerSync(PolarSyncTrigger.MANUAL_REFRESH)
+    }
+
+    private fun triggerSync(trigger: PolarSyncTrigger) {
+        screenModelScope.launch {
+            polarSyncOrchestrator.sync(trigger)
+        }
     }
 
     fun clearError() {
@@ -135,5 +174,9 @@ data class PolarSettingsUiState(
     val isLoading: Boolean = false,
     val error: String? = null,
     val authUrl: String? = null,
-    val isConfigured: Boolean = false
+    val isConfigured: Boolean = false,
+    val isSyncing: Boolean = false,
+    val syncSummary: String? = null,
+    val syncFailureSummary: String? = null,
+    val lastSyncedAt: String? = null
 )

@@ -15,6 +15,8 @@ import com.wellnesswingman.data.repository.TrackedEntryRepository
 import com.wellnesswingman.domain.analysis.DailySummaryService
 import com.wellnesswingman.domain.analysis.DailyTotalsCalculator
 import com.wellnesswingman.domain.capture.PendingCaptureStore
+import com.wellnesswingman.domain.polar.PolarSyncOrchestrator
+import com.wellnesswingman.domain.polar.PolarSyncTrigger
 import com.wellnesswingman.platform.FileSystem
 import com.wellnesswingman.ui.screens.photo.PhotoReviewViewModel
 import io.github.aakira.napier.Napier
@@ -35,7 +37,8 @@ class MainViewModel(
     private val dailySummaryService: DailySummaryService,
     private val dailyTotalsCalculator: DailyTotalsCalculator,
     private val fileSystem: FileSystem,
-    private val pendingCaptureStore: PendingCaptureStore
+    private val pendingCaptureStore: PendingCaptureStore,
+    private val polarSyncOrchestrator: PolarSyncOrchestrator
 ) : ScreenModel {
 
     private val _uiState = MutableStateFlow<MainUiState>(MainUiState.Loading)
@@ -61,6 +64,17 @@ class MainViewModel(
     init {
         observeEntries()
         checkPendingCapture()
+        refreshPolarDataIfNeeded()
+    }
+
+    private fun refreshPolarDataIfNeeded() {
+        screenModelScope.launch {
+            runCatching {
+                polarSyncOrchestrator.syncIfStale(PolarSyncTrigger.APP_ENTRY)
+            }.onFailure { error ->
+                Napier.w("Automatic Polar sync failed on app entry: ${error.message}")
+            }
+        }
     }
 
     fun checkPendingCapture() {

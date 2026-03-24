@@ -110,10 +110,60 @@ class PolarSettingsScreen : Screen {
                                     color = MaterialTheme.colorScheme.onPrimaryContainer
                                 )
                             }
+                            uiState.lastSyncedAt?.let { lastSyncedAt ->
+                                Text(
+                                    text = "Last sync: $lastSyncedAt",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            }
+                        }
+                    }
+
+                    uiState.syncSummary?.let { summary ->
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant
+                            )
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text(
+                                    text = "Sync Status",
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                                Text(
+                                    text = summary,
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                                uiState.syncFailureSummary?.let { failureSummary ->
+                                    Text(
+                                        text = failureSummary,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.error
+                                    )
+                                }
+                                Text(
+                                    text = "Android can refresh in the background. Other platforms currently refresh while the app is open.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                     }
 
                     Spacer(modifier = Modifier.weight(1f))
+
+                    Button(
+                        onClick = { viewModel.onManualSyncClicked() },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !uiState.isSyncing
+                    ) {
+                        Text(if (uiState.isSyncing) "Syncing Polar Data..." else "Sync Polar Data")
+                    }
 
                     OutlinedButton(
                         onClick = { viewModel.onDisconnectClicked() },
