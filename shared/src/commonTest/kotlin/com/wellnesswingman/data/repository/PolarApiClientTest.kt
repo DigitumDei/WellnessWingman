@@ -302,7 +302,7 @@ class PolarApiClientTest {
     }
 
     @Test
-    fun `sleep without sleepEvaluation defaults all durations to zero`() = runTest {
+    fun `sleep without sleepEvaluation is skipped as unscored`() = runTest {
         val http = createClient {
             respond(
                 content = """{"nightSleeps": [{"sleepDate": "2025-03-15"}]}""",
@@ -313,12 +313,7 @@ class PolarApiClientTest {
 
         val result = PolarApiClient(http).getSleep("token", "2025-03-15", "2025-03-16")
         assertTrue(result.isSuccess)
-        val sleep = result.getOrThrow()[0]
-        assertEquals(0L, sleep.durationSeconds)
-        assertEquals(0L, sleep.deepSleepSeconds)
-        assertEquals(0L, sleep.remSleepSeconds)
-        assertEquals(0L, sleep.lightSleepSeconds)
-        assertEquals(0L, sleep.awakeSeconds)
+        assertEquals(0, result.getOrThrow().size)
     }
 
     @Test

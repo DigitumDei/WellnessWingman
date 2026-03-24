@@ -3,6 +3,7 @@ package com.wellnesswingman.data.repository
 import com.wellnesswingman.data.model.polar.*
 import io.github.aakira.napier.Napier
 import io.ktor.client.HttpClient
+import kotlin.coroutines.cancellation.CancellationException
 import io.ktor.client.call.body
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.get
@@ -14,7 +15,6 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.isSuccess
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
-import kotlin.time.Duration
 
 /**
  * Stateless client for the Polar AccessLink v4 data endpoints.
@@ -144,8 +144,8 @@ class PolarApiClient(
                     Result.failure(PolarApiError.ServerError(response.status.value, body))
                 }
             }
-        } catch (e: PolarApiError) {
-            Result.failure(e)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Napier.e("Polar API network error on $path", e)
             Result.failure(PolarApiError.NetworkError(e))
@@ -174,11 +174,11 @@ private fun PolarActivityDayDto.toDomain(): PolarDailyActivity? {
 
 private fun PolarSleepDto.toDomain(): PolarSleepResult? {
     val d = sleepDate ?: return null
-    val phases = sleepEvaluation?.phaseDurations
-    val deepSec = parsePolarDurationToSeconds(phases?.deep)
-    val remSec = parsePolarDurationToSeconds(phases?.rem)
-    val lightSec = parsePolarDurationToSeconds(phases?.light)
-    val awakeSec = parsePolarDurationToSeconds(phases?.wake)
+    val phases = sleepEvaluation?.phaseDurations ?: return null
+    val deepSec = parsePolarDurationToSeconds(phases.deep)
+    val remSec = parsePolarDurationToSeconds(phases.rem)
+    val lightSec = parsePolarDurationToSeconds(phases.light)
+    val awakeSec = parsePolarDurationToSeconds(phases.wake)
     val totalSec = deepSec + remSec + lightSec + awakeSec
 
     return PolarSleepResult(
@@ -215,20 +215,6 @@ private fun PolarNightlyRechargeDto.toDomain(): PolarNightlyRecharge? {
         recoveryIndicator = recoveryIndicator ?: 0,
         recoveryIndicatorSubLevel = recoveryIndicatorSubLevel ?: 0
     )
-}
-
-/**
- * Parses an ISO 8601 duration string (e.g. "PT8H30M") to total seconds.
- * Returns 0 if the input is null or unparseable.
- */
-@OptIn(kotlin.time.ExperimentalTime::class)
-private fun parseIso8601DurationToSeconds(iso: String?): Long {
-    if (iso.isNullOrBlank()) return 0L
-    return try {
-        Duration.parseIsoString(iso).inWholeSeconds
-    } catch (_: Exception) {
-        0L
-    }
 }
 
 /**
