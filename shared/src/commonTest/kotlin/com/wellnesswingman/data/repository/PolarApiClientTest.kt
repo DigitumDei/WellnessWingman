@@ -354,6 +354,7 @@ class PolarApiClientTest {
 
         val result = PolarApiClient(http).getUserProfile("token")
         assertTrue(result.isFailure)
+        assertIs<PolarApiError.InvalidResponse>(result.exceptionOrNull())
     }
 
     // --- Error mapping ---

@@ -12,6 +12,7 @@ import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.URLBuilder
 import io.ktor.http.isSuccess
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
@@ -107,49 +108,10 @@ class PolarApiClient(
      */
     suspend fun getUserProfile(
         accessToken: String
-    ): Result<PolarUserProfile> {
-        return try {
-            val response = httpClient.get("$BASE_URL/user/account-data") {
-                header(HttpHeaders.Authorization, "Bearer $accessToken")
-            }
-
-            when {
-                response.status == HttpStatusCode.Unauthorized -> {
-                    val body = response.bodyAsText()
-                    Napier.w("Polar API 401 on user/account-data: $body")
-                    Result.failure(PolarApiError.Unauthorized(body))
-                }
-                response.status == HttpStatusCode.TooManyRequests -> {
-                    val body = response.bodyAsText()
-                    Napier.w("Polar API 429 on user/account-data: $body")
-                    Result.failure(PolarApiError.RateLimited(body))
-                }
-                response.status.value in 500..599 -> {
-                    val body = response.bodyAsText()
-                    Napier.e("Polar API ${response.status.value} on user/account-data: $body")
-                    Result.failure(PolarApiError.ServerError(response.status.value, body))
-                }
-                response.status.isSuccess() -> {
-                    val dto: PolarAccountDataResponse = response.body()
-                    val profile = dto.physicalInformation?.toDomain()
-                    if (profile != null) {
-                        Result.success(profile)
-                    } else {
-                        Result.failure(PolarApiError.ServerError(200, "Missing physicalInformation"))
-                    }
-                }
-                else -> {
-                    val body = response.bodyAsText()
-                    Napier.e("Polar API unexpected ${response.status.value} on user/account-data: $body")
-                    Result.failure(PolarApiError.ServerError(response.status.value, body))
-                }
-            }
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            Napier.e("Polar API network error on user/account-data", e)
-            Result.failure(PolarApiError.NetworkError(e))
-        }
+    ): Result<PolarUserProfile> = executeRequest("user/account-data", accessToken) { response ->
+        val dto: PolarAccountDataResponse = response.body()
+        dto.physicalInformation?.toDomain()?.let { Result.success(it) }
+            ?: Result.failure(PolarApiError.InvalidResponse("physicalInformation missing from account-data response"))
     }
 
     /**
@@ -175,19 +137,41 @@ class PolarApiClient(
         emptyResult: T,
         extraParams: Map<String, List<String>> = emptyMap(),
         transform: suspend (HttpResponse) -> T
+    ): Result<T> = executeRequest(path, accessToken, {
+        parameters.append("from", from)
+        parameters.append("to", to)
+        extraParams.forEach { (key, values) -> values.forEach { parameters.append(key, it) } }
+    }) { response ->
+        when {
+            response.status == HttpStatusCode.NotFound -> {
+                Napier.d("Polar API 404 on $path — no data for range")
+                Result.success(emptyResult)
+            }
+            response.status.isSuccess() -> Result.success(transform(response))
+            else -> {
+                val body = response.bodyAsText()
+                Napier.e("Polar API unexpected ${response.status.value} on $path: $body")
+                Result.failure(PolarApiError.ServerError(response.status.value, body))
+            }
+        }
+    }
+
+    /**
+     * Makes a GET request to [path], handles all error status codes, and calls
+     * [transform] only on 2xx responses. The [transform] returns [Result] so callers
+     * can inject their own success-path failures (e.g. missing required fields).
+     */
+    private suspend fun <T> executeRequest(
+        path: String,
+        accessToken: String,
+        buildParams: URLBuilder.() -> Unit = {},
+        transform: suspend (HttpResponse) -> Result<T>
     ): Result<T> {
         return try {
             val response = httpClient.get("$BASE_URL/$path") {
                 header(HttpHeaders.Authorization, "Bearer $accessToken")
-                url {
-                    parameters.append("from", from)
-                    parameters.append("to", to)
-                    extraParams.forEach { (key, values) ->
-                        values.forEach { parameters.append(key, it) }
-                    }
-                }
+                url { buildParams() }
             }
-
             when {
                 response.status == HttpStatusCode.Unauthorized -> {
                     val body = response.bodyAsText()
@@ -199,23 +183,12 @@ class PolarApiClient(
                     Napier.w("Polar API 429 on $path: $body")
                     Result.failure(PolarApiError.RateLimited(body))
                 }
-                response.status == HttpStatusCode.NotFound -> {
-                    Napier.d("Polar API 404 on $path — no data for range")
-                    Result.success(emptyResult)
-                }
                 response.status.value in 500..599 -> {
                     val body = response.bodyAsText()
                     Napier.e("Polar API ${response.status.value} on $path: $body")
                     Result.failure(PolarApiError.ServerError(response.status.value, body))
                 }
-                response.status.isSuccess() -> {
-                    Result.success(transform(response))
-                }
-                else -> {
-                    val body = response.bodyAsText()
-                    Napier.e("Polar API unexpected ${response.status.value} on $path: $body")
-                    Result.failure(PolarApiError.ServerError(response.status.value, body))
-                }
+                else -> transform(response)
             }
         } catch (e: CancellationException) {
             throw e

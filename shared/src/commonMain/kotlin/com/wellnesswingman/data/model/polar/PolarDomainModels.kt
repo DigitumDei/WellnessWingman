@@ -122,4 +122,7 @@ sealed class PolarApiError(message: String, cause: Throwable? = null) : Exceptio
 
     /** Network-level failure (DNS, timeout, connection reset, etc.). */
     data class NetworkError(override val cause: Throwable) : PolarApiError("Polar API network error: ${cause.message}", cause)
+
+    /** Response was 2xx but the body was missing required fields or was unparseable. */
+    data class InvalidResponse(val detail: String) : PolarApiError("Polar API invalid response: $detail")
 }
