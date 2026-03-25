@@ -1,6 +1,7 @@
 package com.wellnesswingman.data.repository
 
 import com.wellnesswingman.data.model.polar.*
+import com.wellnesswingman.domain.polar.PolarSyncDiagnostics
 import io.github.aakira.napier.Napier
 import io.ktor.client.HttpClient
 import kotlin.coroutines.cancellation.CancellationException
@@ -150,7 +151,7 @@ class PolarApiClient(
             response.status.isSuccess() -> Result.success(transform(response))
             else -> {
                 val body = response.bodyAsText()
-                Napier.e("Polar API unexpected ${response.status.value} on $path: $body")
+                Napier.e("Polar API unexpected ${response.status.value} on $path: ${PolarSyncDiagnostics.sanitizeForLogs(body)}")
                 Result.failure(PolarApiError.ServerError(response.status.value, body))
             }
         }
@@ -175,17 +176,17 @@ class PolarApiClient(
             when {
                 response.status == HttpStatusCode.Unauthorized -> {
                     val body = response.bodyAsText()
-                    Napier.w("Polar API 401 on $path: $body")
+                    Napier.w("Polar API 401 on $path: ${PolarSyncDiagnostics.sanitizeForLogs(body)}")
                     Result.failure(PolarApiError.Unauthorized(body))
                 }
                 response.status == HttpStatusCode.TooManyRequests -> {
                     val body = response.bodyAsText()
-                    Napier.w("Polar API 429 on $path: $body")
+                    Napier.w("Polar API 429 on $path: ${PolarSyncDiagnostics.sanitizeForLogs(body)}")
                     Result.failure(PolarApiError.RateLimited(body))
                 }
                 response.status.value in 500..599 -> {
                     val body = response.bodyAsText()
-                    Napier.e("Polar API ${response.status.value} on $path: $body")
+                    Napier.e("Polar API ${response.status.value} on $path: ${PolarSyncDiagnostics.sanitizeForLogs(body)}")
                     Result.failure(PolarApiError.ServerError(response.status.value, body))
                 }
                 else -> transform(response)

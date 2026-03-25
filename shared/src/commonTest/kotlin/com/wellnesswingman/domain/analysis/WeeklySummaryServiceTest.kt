@@ -10,7 +10,20 @@ import com.wellnesswingman.data.model.WeeklySummary
 import com.wellnesswingman.data.model.WeeklySummaryResult
 import com.wellnesswingman.data.model.WeightChangeSummary
 import com.wellnesswingman.data.model.WeightRecord
+import com.wellnesswingman.data.model.polar.PolarDailyActivity
+import com.wellnesswingman.data.model.polar.PolarMetricFamily
+import com.wellnesswingman.data.model.polar.PolarNightlyRecharge
+import com.wellnesswingman.data.model.polar.PolarSleepResult
+import com.wellnesswingman.data.model.polar.PolarSyncCheckpoint
+import com.wellnesswingman.data.model.polar.PolarTrainingSession
+import com.wellnesswingman.data.model.polar.PolarUserProfile
+import com.wellnesswingman.data.model.polar.StoredPolarActivity
+import com.wellnesswingman.data.model.polar.StoredPolarNightlyRecharge
+import com.wellnesswingman.data.model.polar.StoredPolarSleepResult
+import com.wellnesswingman.data.model.polar.StoredPolarTrainingSession
+import com.wellnesswingman.data.model.polar.StoredPolarUserProfile
 import com.wellnesswingman.data.repository.DailySummaryRepository
+import com.wellnesswingman.data.repository.PolarSyncRepository
 import com.wellnesswingman.data.repository.TrackedEntryRepository
 import com.wellnesswingman.data.repository.WeightHistoryRepository
 import com.wellnesswingman.data.repository.WeeklySummaryRepository
@@ -18,6 +31,7 @@ import com.wellnesswingman.domain.llm.LlmAnalysisResult
 import com.wellnesswingman.domain.llm.LlmClient
 import com.wellnesswingman.domain.llm.LlmClientFactory
 import com.wellnesswingman.domain.llm.LlmDiagnostics
+import com.wellnesswingman.domain.polar.PolarInsightService
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.flow.Flow
@@ -120,6 +134,33 @@ class WeeklySummaryServiceTest {
         override suspend fun upsertWeightRecord(record: WeightRecord) {}
     }
 
+    private class FakePolarSyncRepository(
+        private val activities: List<StoredPolarActivity> = emptyList(),
+        private val sleepResults: List<StoredPolarSleepResult> = emptyList(),
+        private val trainingSessions: List<StoredPolarTrainingSession> = emptyList(),
+        private val nightlyRecharge: List<StoredPolarNightlyRecharge> = emptyList()
+    ) : PolarSyncRepository {
+        override suspend fun upsertActivities(activities: List<PolarDailyActivity>, syncedAt: Instant) = 0
+        override suspend fun getActivities(startDate: LocalDate, endDateExclusive: LocalDate) =
+            activities.filter { it.localDate >= startDate && it.localDate < endDateExclusive }
+        override suspend fun upsertSleepResults(results: List<PolarSleepResult>, syncedAt: Instant) = 0
+        override suspend fun getSleepResults(startDate: LocalDate, endDateExclusive: LocalDate) =
+            sleepResults.filter { it.localDate >= startDate && it.localDate < endDateExclusive }
+        override suspend fun upsertTrainingSessions(sessions: List<PolarTrainingSession>, syncedAt: Instant) = 0
+        override suspend fun getTrainingSessions(startDate: LocalDate, endDateExclusive: LocalDate) =
+            trainingSessions.filter { it.localDate >= startDate && it.localDate < endDateExclusive }
+        override suspend fun upsertNightlyRecharge(results: List<PolarNightlyRecharge>, syncedAt: Instant) = 0
+        override suspend fun getNightlyRecharge(startDate: LocalDate, endDateExclusive: LocalDate) =
+            nightlyRecharge.filter { it.localDate >= startDate && it.localDate < endDateExclusive }
+        override suspend fun upsertUserProfile(userId: String, profile: PolarUserProfile, syncedAt: Instant) = Unit
+        override suspend fun getUserProfile(userId: String): StoredPolarUserProfile? = null
+        override suspend fun getCheckpoint(metricFamily: PolarMetricFamily): PolarSyncCheckpoint? = null
+        override suspend fun getAllCheckpoints(): List<PolarSyncCheckpoint> = emptyList()
+        override suspend fun updateCheckpoint(checkpoint: PolarSyncCheckpoint) = Unit
+        override suspend fun clearCheckpoint(metricFamily: PolarMetricFamily) = Unit
+        override suspend fun clearAll() = Unit
+    }
+
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
 
     private fun makeLlmClientFactory(hasKey: Boolean, response: String = VALID_WEEKLY_JSON): LlmClientFactory {
@@ -164,6 +205,20 @@ class WeeklySummaryServiceTest {
         entryType = entryType,
         capturedAt = Clock.System.now(),
         processingStatus = ProcessingStatus.COMPLETED
+    )
+
+    private fun polarInsightService(
+        activities: List<StoredPolarActivity> = emptyList(),
+        sleepResults: List<StoredPolarSleepResult> = emptyList(),
+        trainingSessions: List<StoredPolarTrainingSession> = emptyList(),
+        nightlyRecharge: List<StoredPolarNightlyRecharge> = emptyList()
+    ) = PolarInsightService(
+        FakePolarSyncRepository(
+            activities = activities,
+            sleepResults = sleepResults,
+            trainingSessions = trainingSessions,
+            nightlyRecharge = nightlyRecharge
+        )
     )
 
     companion object {
@@ -258,6 +313,34 @@ class WeeklySummaryServiceTest {
 
         assertIs<WeeklySummaryResult.Error>(result)
         assertTrue((result as WeeklySummaryResult.Error).message.contains("API key", ignoreCase = true))
+    }
+
+    @Test
+    fun `generateSummary succeeds for a Polar-only week and includes Polar context in prompt`() = runTest {
+        val prompts = mutableListOf<String>()
+        val weekStart = LocalDate(2025, 3, 1)
+        val service = WeeklySummaryService(
+            trackedEntryRepository = FakeTrackedEntryRepository(),
+            weeklySummaryRepository = FakeWeeklySummaryRepository(),
+            dailySummaryRepository = FakeDailySummaryRepository(),
+            llmClientFactory = makeCapturingLlmClientFactory(capturedPrompts = prompts),
+            weightHistoryRepository = FakeWeightHistoryRepository(),
+            polarInsightService = polarInsightService(
+                activities = listOf(
+                    StoredPolarActivity(1, "activity:2025-03-01", "Polar", weekStart, null, Clock.System.now(), PolarDailyActivity("2025-03-01", 9200, "00:00:00", 60000, listOf(9200)))
+                ),
+                trainingSessions = listOf(
+                    StoredPolarTrainingSession(2, "session-1", "Polar", weekStart, "2025-03-01T08:00:00", Clock.System.now(), PolarTrainingSession("session-1", "2025-03-01T08:00:00", 3600, "1", 430, 5000.0, 148, 172, "Tempo run")))
+                )
+            )
+        )
+
+        val result = service.generateSummary(weekStart)
+
+        assertIs<WeeklySummaryResult.Success>(result)
+        assertTrue(prompts.single().contains("Polar Sync Context"))
+        assertTrue(prompts.single().contains("Steps (Polar): 9200"))
+        assertTrue(prompts.single().contains("Exercise (Polar): 60.0 min"))
     }
 
     @Test

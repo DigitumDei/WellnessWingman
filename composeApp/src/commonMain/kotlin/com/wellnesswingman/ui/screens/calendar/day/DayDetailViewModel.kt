@@ -14,6 +14,8 @@ import com.wellnesswingman.data.repository.EntryAnalysisRepository
 import com.wellnesswingman.data.repository.TrackedEntryRepository
 import com.wellnesswingman.domain.analysis.DailySummaryService
 import com.wellnesswingman.domain.analysis.DailyTotalsCalculator
+import com.wellnesswingman.domain.polar.PolarDayContext
+import com.wellnesswingman.domain.polar.PolarInsightService
 import com.wellnesswingman.platform.FileSystem
 import com.wellnesswingman.ui.screens.main.SummaryCardState
 import com.wellnesswingman.ui.screens.photo.PhotoReviewViewModel
@@ -31,6 +33,7 @@ class DayDetailViewModel(
     private val dailySummaryRepository: DailySummaryRepository,
     private val dailySummaryService: DailySummaryService,
     private val dailyTotalsCalculator: DailyTotalsCalculator,
+    private val polarInsightService: PolarInsightService,
     private val fileSystem: FileSystem
 ) : ScreenModel {
 
@@ -71,8 +74,9 @@ class DayDetailViewModel(
 
                 // Filter out daily summary entries from the list
                 val filteredEntries = entries.filter { it.entryType != EntryType.DAILY_SUMMARY }
+                val polarContext = polarInsightService.getDayContext(date)
 
-                if (filteredEntries.isEmpty()) {
+                if (filteredEntries.isEmpty() && !polarContext.hasData) {
                     _uiState.value = DayDetailUiState.Empty
                     _summaryCardState.value = SummaryCardState.Hidden
                 } else {
@@ -86,10 +90,11 @@ class DayDetailViewModel(
                         entries = filteredEntries,
                         nutritionTotals = nutritionTotals,
                         hasCompletedMeals = hasCompletedMeals,
+                        polarContext = polarContext,
                         thumbnails = thumbnails
                     )
 
-                    updateSummaryCardState(date, hasCompletedMeals)
+                    updateSummaryCardState(date, hasCompletedMeals || polarContext.hasData)
                 }
             } catch (e: Exception) {
                 Napier.e("Failed to load day $date", e)
@@ -140,8 +145,8 @@ class DayDetailViewModel(
         }
     }
 
-    private suspend fun updateSummaryCardState(date: LocalDate, hasCompletedMeals: Boolean) {
-        if (!hasCompletedMeals) {
+    private suspend fun updateSummaryCardState(date: LocalDate, hasSummaryInputs: Boolean) {
+        if (!hasSummaryInputs) {
             _summaryCardState.value = SummaryCardState.Hidden
             return
         }
@@ -207,6 +212,7 @@ sealed class DayDetailUiState {
         val entries: List<TrackedEntry>,
         val nutritionTotals: NutritionTotals = NutritionTotals(),
         val hasCompletedMeals: Boolean = false,
+        val polarContext: PolarDayContext = PolarDayContext(LocalDate(1970, 1, 1)),
         val thumbnails: Map<Long, ByteArray> = emptyMap()
     ) : DayDetailUiState()
     object Empty : DayDetailUiState()

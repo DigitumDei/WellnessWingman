@@ -360,18 +360,19 @@ class PolarSyncOrchestrator(
         family: PolarMetricFamily,
         error: Throwable
     ): PolarMetricSyncResult {
-        Napier.e("Polar sync failed for ${family.storageValue}", error)
+        val diagnosticsMessage = PolarSyncDiagnostics.summarizeError(error)
+        Napier.e("Polar sync failed for ${family.storageValue}: $diagnosticsMessage")
         val existingCheckpoint = polarSyncRepository.getCheckpoint(family)
         if (existingCheckpoint != null) {
             polarSyncRepository.updateCheckpoint(
-                existingCheckpoint.copy(lastFailureMessage = error.message ?: "Unknown Polar sync error")
+                existingCheckpoint.copy(lastFailureMessage = diagnosticsMessage)
             )
         }
         return PolarMetricSyncResult(
             metricFamily = family,
             importedCount = 0,
             checkpointCursor = existingCheckpoint?.lastSyncCursor,
-            failureMessage = error.message ?: "Unknown Polar sync error"
+            failureMessage = diagnosticsMessage
         )
     }
 

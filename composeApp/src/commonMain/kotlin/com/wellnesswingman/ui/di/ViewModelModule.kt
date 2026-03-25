@@ -54,6 +54,7 @@ val viewModelModule = module {
             dailySummaryRepository = get(),
             dailySummaryService = get(),
             dailyTotalsCalculator = get(),
+            polarInsightService = get(),
             fileSystem = get()
         )
     }
