@@ -1,0 +1,81 @@
+CREATE TABLE PolarMetricRecord (
+    polarMetricRecordId INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    metricFamily TEXT NOT NULL,
+    externalId TEXT NOT NULL,
+    source TEXT NOT NULL,
+    localDate TEXT NOT NULL,
+    startedAt TEXT,
+    endedAt TEXT,
+    payloadJson TEXT NOT NULL,
+    syncedAt INTEGER NOT NULL
+);
+
+CREATE UNIQUE INDEX idx_polar_metric_record_family_external
+ON PolarMetricRecord(metricFamily, externalId);
+
+CREATE INDEX idx_polar_metric_record_family_date
+ON PolarMetricRecord(metricFamily, localDate);
+
+CREATE TABLE PolarSyncCheckpoint (
+    metricFamily TEXT NOT NULL PRIMARY KEY,
+    lastSyncCursor TEXT NOT NULL,
+    lastSuccessfulSyncAt INTEGER NOT NULL,
+    lastFailureMessage TEXT
+);
+
+getRecordsForFamilyInDateRange:
+SELECT * FROM PolarMetricRecord
+WHERE metricFamily = ? AND localDate >= ? AND localDate < ?
+ORDER BY localDate ASC, startedAt ASC, polarMetricRecordId ASC;
+
+getLatestRecordForFamily:
+SELECT * FROM PolarMetricRecord
+WHERE metricFamily = ?
+ORDER BY localDate DESC, startedAt DESC, polarMetricRecordId DESC
+LIMIT 1;
+
+getRecordForFamilyAndExternalId:
+SELECT * FROM PolarMetricRecord
+WHERE metricFamily = ? AND externalId = ?;
+
+upsertMetricRecord:
+INSERT OR REPLACE INTO PolarMetricRecord(
+    metricFamily,
+    externalId,
+    source,
+    localDate,
+    startedAt,
+    endedAt,
+    payloadJson,
+    syncedAt
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+
+deleteRecordsForFamily:
+DELETE FROM PolarMetricRecord
+WHERE metricFamily = ?;
+
+getCheckpoint:
+SELECT * FROM PolarSyncCheckpoint
+WHERE metricFamily = ?;
+
+getAllCheckpoints:
+SELECT * FROM PolarSyncCheckpoint
+ORDER BY metricFamily ASC;
+
+upsertCheckpoint:
+INSERT OR REPLACE INTO PolarSyncCheckpoint(
+    metricFamily,
+    lastSyncCursor,
+    lastSuccessfulSyncAt,
+    lastFailureMessage
+) VALUES (?, ?, ?, ?);
+
+deleteCheckpoint:
+DELETE FROM PolarSyncCheckpoint
+WHERE metricFamily = ?;
+
+clearPolarSyncData:
+DELETE FROM PolarMetricRecord;
+
+clearPolarSyncCheckpoints:
+DELETE FROM PolarSyncCheckpoint;

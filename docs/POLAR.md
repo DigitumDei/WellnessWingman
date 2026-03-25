@@ -172,3 +172,11 @@ Not included in the initial implementation:
 - No iOS support
 - No Cloud Armor / rate limiting
 - No `/start` endpoint (state generated on-device)
+
+## Current Sync Policy
+
+- Polar API data is persisted in dedicated SQLDelight tables (`PolarMetricRecord`, `PolarSyncCheckpoint`) instead of `TrackedEntry`.
+- Sync checkpoints are tracked independently for `ACTIVITY`, `SLEEP`, `TRAINING`, `NIGHTLY_RECHARGE`, and `USER_PROFILE`.
+- The app performs an automatic foreground refresh on app entry when the latest successful sync is older than 6 hours.
+- Android also schedules a periodic WorkManager refresh every 12 hours when network is available.
+- Non-Android platforms currently refresh only while the app is open; no background scheduler ships there yet.

@@ -17,6 +17,7 @@ import com.wellnesswingman.domain.migration.DefaultDataMigrationService
 import com.wellnesswingman.domain.navigation.CalendarNavigationService
 import com.wellnesswingman.domain.navigation.HistoricalNavigationContext
 import com.wellnesswingman.domain.oauth.PendingOAuthResultStore
+import com.wellnesswingman.domain.polar.PolarSyncOrchestrator
 import org.koin.core.module.dsl.singleOf
 import org.koin.dsl.module
 
@@ -32,6 +33,7 @@ val domainModule = module {
 
     // OAuth
     singleOf(::PendingOAuthResultStore)
+    singleOf(::PolarSyncOrchestrator)
 
     // LLM
     singleOf(::LlmClientFactory)

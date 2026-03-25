@@ -15,6 +15,7 @@ import com.wellnesswingman.domain.oauth.PendingOAuthResultStore
 import com.wellnesswingman.platform.LogBuffer
 import com.wellnesswingman.ui.di.viewModelModule
 import com.wellnesswingman.workers.ImageRetentionWorker
+import com.wellnesswingman.workers.PolarSyncWorker
 import io.github.aakira.napier.Napier
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -92,18 +93,33 @@ class WellnessWingmanApp : Application() {
     }
 
     private fun setupBackgroundJobs() {
-        val constraints = Constraints.Builder()
+        val retentionConstraints = Constraints.Builder()
             .setRequiresBatteryNotLow(true)
             .build()
 
         val retentionWorkRequest = PeriodicWorkRequestBuilder<ImageRetentionWorker>(1, TimeUnit.DAYS)
-            .setConstraints(constraints)
+            .setConstraints(retentionConstraints)
             .build()
 
         WorkManager.getInstance(this).enqueueUniquePeriodicWork(
             ImageRetentionWorker.WORK_NAME,
             ExistingPeriodicWorkPolicy.KEEP,
             retentionWorkRequest
+        )
+
+        val polarSyncConstraints = Constraints.Builder()
+            .setRequiresBatteryNotLow(true)
+            .setRequiredNetworkType(androidx.work.NetworkType.CONNECTED)
+            .build()
+
+        val polarSyncRequest = PeriodicWorkRequestBuilder<PolarSyncWorker>(12, TimeUnit.HOURS)
+            .setConstraints(polarSyncConstraints)
+            .build()
+
+        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+            PolarSyncWorker.WORK_NAME,
+            ExistingPeriodicWorkPolicy.KEEP,
+            polarSyncRequest
         )
     }
 }

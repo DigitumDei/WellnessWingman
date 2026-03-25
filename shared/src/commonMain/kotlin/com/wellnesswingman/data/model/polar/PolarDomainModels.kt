@@ -1,5 +1,7 @@
 package com.wellnesswingman.data.model.polar
 
+import kotlinx.serialization.Serializable
+
 /**
  * Normalized daily activity summary from the Polar API.
  *
@@ -7,6 +9,7 @@ package com.wellnesswingman.data.model.polar
  * Step samples are a dense time-series: one value per [stepSampleIntervalMs]
  * starting at [stepSampleStartTime].
  */
+@Serializable
 data class PolarDailyActivity(
     val date: String,
     val totalSteps: Int,
@@ -23,6 +26,7 @@ data class PolarDailyActivity(
  * Requires the `features` query param: sleep-result, sleep-evaluation, sleep-score.
  * With features enabled, the API limits date range to 1 day per request.
  */
+@Serializable
 data class PolarSleepResult(
     val date: String,
     // Timing
@@ -49,6 +53,7 @@ data class PolarSleepResult(
 /**
  * Normalized training session from the Polar API.
  */
+@Serializable
 data class PolarTrainingSession(
     val id: String,
     val startTime: String,
@@ -67,6 +72,7 @@ data class PolarTrainingSession(
  * HRV values are measured during the first hours of sleep (recovery window).
  * Baseline values require ~28 days of continuous data to establish.
  */
+@Serializable
 data class PolarNightlyRecharge(
     val date: String,
     val ansStatus: Double,
@@ -91,6 +97,7 @@ data class PolarNightlyRecharge(
  * User physical profile from the Polar API.
  * Fetched once via [PolarApiClient.getUserProfile] — does not require date params.
  */
+@Serializable
 data class PolarUserProfile(
     val birthday: String,
     val sex: String,

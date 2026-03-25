@@ -43,6 +43,10 @@ val dataModule = module {
         SqlDelightWeightHistoryRepository(get())
     }
 
+    single<PolarSyncRepository> {
+        SqlDelightPolarSyncRepository(get())
+    }
+
     // Polar OAuth
     single { PolarOAuthRepository(get(), get()) }
 
