@@ -39,7 +39,7 @@ SELECT * FROM PolarMetricRecord
 WHERE metricFamily = ? AND externalId = ?;
 
 upsertMetricRecord:
-INSERT INTO PolarMetricRecord(
+INSERT OR REPLACE INTO PolarMetricRecord(
     metricFamily,
     externalId,
     source,
@@ -48,14 +48,7 @@ INSERT INTO PolarMetricRecord(
     endedAt,
     payloadJson,
     syncedAt
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-ON CONFLICT(metricFamily, externalId) DO UPDATE SET
-    source = excluded.source,
-    localDate = excluded.localDate,
-    startedAt = excluded.startedAt,
-    endedAt = excluded.endedAt,
-    payloadJson = excluded.payloadJson,
-    syncedAt = excluded.syncedAt;
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?);
 
 deleteRecordsForFamily:
 DELETE FROM PolarMetricRecord
@@ -70,16 +63,12 @@ SELECT * FROM PolarSyncCheckpoint
 ORDER BY metricFamily ASC;
 
 upsertCheckpoint:
-INSERT INTO PolarSyncCheckpoint(
+INSERT OR REPLACE INTO PolarSyncCheckpoint(
     metricFamily,
     lastSyncCursor,
     lastSuccessfulSyncAt,
     lastFailureMessage
-) VALUES (?, ?, ?, ?)
-ON CONFLICT(metricFamily) DO UPDATE SET
-    lastSyncCursor = excluded.lastSyncCursor,
-    lastSuccessfulSyncAt = excluded.lastSuccessfulSyncAt,
-    lastFailureMessage = excluded.lastFailureMessage;
+) VALUES (?, ?, ?, ?);
 
 deleteCheckpoint:
 DELETE FROM PolarSyncCheckpoint
