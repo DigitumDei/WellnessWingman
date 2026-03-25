@@ -72,35 +72,32 @@ class PolarSyncOrchestrator(
     suspend fun syncIfStale(
         trigger: PolarSyncTrigger,
         maxAge: Duration = DEFAULT_AUTOMATIC_SYNC_MAX_AGE
-    ): PolarSyncRunResult {
-        val latestSuccessfulSync = polarSyncRepository.getAllCheckpoints()
-            .maxByOrNull { it.lastSuccessfulSyncAt }
-            ?.lastSuccessfulSyncAt
-
-        val now = Clock.System.now()
-        if (
-            latestSuccessfulSync != null &&
-            now - latestSuccessfulSync < maxAge &&
-            trigger != PolarSyncTrigger.MANUAL_REFRESH &&
-            trigger != PolarSyncTrigger.INITIAL_LINK
-        ) {
-            val result = PolarSyncRunResult(
-                trigger = trigger,
-                outcome = PolarSyncOutcome.SKIPPED,
-                startedAt = now,
-                completedAt = now,
-                metricResults = emptyList(),
-                message = "Polar sync skipped because data is still fresh."
-            )
-            _status.value = _status.value.copy(lastResult = result)
-            return result
-        }
-
-        return sync(trigger)
+    ): PolarSyncRunResult = syncMutex.withLock {
+        syncLocked(trigger = trigger, maxAge = maxAge)
     }
 
     suspend fun sync(trigger: PolarSyncTrigger): PolarSyncRunResult = syncMutex.withLock {
+        syncLocked(trigger = trigger, maxAge = null)
+    }
+
+    private suspend fun syncLocked(
+        trigger: PolarSyncTrigger,
+        maxAge: Duration?
+    ): PolarSyncRunResult {
         val startedAt = Clock.System.now()
+        if (maxAge != null && shouldSkipStaleSync(trigger, maxAge, startedAt)) {
+            return PolarSyncRunResult(
+                trigger = trigger,
+                outcome = PolarSyncOutcome.SKIPPED,
+                startedAt = startedAt,
+                completedAt = startedAt,
+                metricResults = emptyList(),
+                message = "Polar sync skipped because data is still fresh."
+            ).also { result ->
+                _status.value = _status.value.copy(lastResult = result)
+            }
+        }
+
         _status.value = _status.value.copy(isRunning = true, activeTrigger = trigger)
 
         val result = try {
@@ -121,7 +118,23 @@ class PolarSyncOrchestrator(
         }
 
         _status.value = _status.value.copy(lastResult = result)
-        result
+        return result
+    }
+
+    private suspend fun shouldSkipStaleSync(
+        trigger: PolarSyncTrigger,
+        maxAge: Duration,
+        now: Instant
+    ): Boolean {
+        if (trigger == PolarSyncTrigger.MANUAL_REFRESH || trigger == PolarSyncTrigger.INITIAL_LINK) {
+            return false
+        }
+
+        val latestSuccessfulSync = polarSyncRepository.getAllCheckpoints()
+            .maxByOrNull { it.lastSuccessfulSyncAt }
+            ?.lastSuccessfulSyncAt
+
+        return latestSuccessfulSync != null && now - latestSuccessfulSync < maxAge
     }
 
     private suspend fun runSync(trigger: PolarSyncTrigger, startedAt: Instant): PolarSyncRunResult {

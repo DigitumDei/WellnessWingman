@@ -12,7 +12,10 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import io.ktor.serialization.kotlinx.json.json
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDate
 import kotlinx.serialization.json.Json
@@ -100,15 +103,64 @@ class PolarSyncOrchestratorTest {
         assertNotNull(syncRepository.getCheckpoint(PolarMetricFamily.ACTIVITY)?.lastFailureMessage)
     }
 
-    private fun createSyncHttpClient(): HttpClient {
+    @Test
+    fun `concurrent automatic sync rechecks freshness after waiting for mutex`() = runTest {
+        val settings = FakeAppSettingsRepository().apply {
+            setPolarAccessToken("token")
+            setPolarRefreshToken("refresh")
+            setPolarTokenExpiresAt(Long.MAX_VALUE)
+            setPolarUserId("polar-user-1")
+        }
+        val syncRepository = InMemoryPolarSyncRepository()
+        val firstActivityRequestStarted = CompletableDeferred<Unit>()
+        val allowFirstActivityRequestToFinish = CompletableDeferred<Unit>()
+        var activityRequestCount = 0
+        val orchestrator = PolarSyncOrchestrator(
+            appSettingsRepository = settings,
+            polarOAuthRepository = PolarOAuthRepository(settings, PolarOAuthConfig("client", "https://broker.test"), createNoOpHttpClient()),
+            polarApiClient = PolarApiClient(
+                createSyncHttpClient(
+                    onActivityRequest = {
+                        activityRequestCount += 1
+                        if (activityRequestCount == 1) {
+                            firstActivityRequestStarted.complete(Unit)
+                            allowFirstActivityRequestToFinish.await()
+                        }
+                    }
+                )
+            ),
+            polarSyncRepository = syncRepository
+        )
+
+        val first = async { orchestrator.syncIfStale(PolarSyncTrigger.APP_ENTRY) }
+        firstActivityRequestStarted.await()
+
+        val second = async { orchestrator.syncIfStale(PolarSyncTrigger.ANDROID_BACKGROUND) }
+        runCurrent()
+        allowFirstActivityRequestToFinish.complete(Unit)
+
+        val firstResult = first.await()
+        val secondResult = second.await()
+
+        assertEquals(PolarSyncOutcome.SUCCESS, firstResult.outcome)
+        assertEquals(PolarSyncOutcome.SKIPPED, secondResult.outcome)
+        assertEquals(1, activityRequestCount)
+        assertTrue(secondResult.metricResults.isEmpty())
+    }
+
+    private fun createSyncHttpClient(
+        onActivityRequest: (suspend () -> Unit)? = null
+    ): HttpClient {
         return HttpClient(MockEngine { request ->
             when {
-                request.url.encodedPath.endsWith("/activity/list") ->
+                request.url.encodedPath.endsWith("/activity/list") -> {
+                    onActivityRequest?.invoke()
                     respond(
                         """{"activityDays":[{"date":"2026-03-23","activitiesPerDevice":[{"activitySamples":[{"stepSamples":{"startTime":"00:00:00","interval":60000,"steps":[1200]}}]}]}]}""",
                         HttpStatusCode.OK,
                         jsonHeaders
                     )
+                }
                 request.url.encodedPath.endsWith("/sleeps") ->
                     respond(
                         """{"nightSleeps":[{"sleepDate":"2026-03-23","sleepResult":{"hypnogram":{"sleepStart":"2026-03-22T22:00:00Z","sleepEnd":"2026-03-23T06:00:00Z"}},"sleepEvaluation":{"phaseDurations":{"wake":"600s","rem":"5400s","light":"16200s","deep":"6600s"},"interruptions":{"totalCount":4,"longCount":1},"analysis":{"efficiencyPercent":95.0,"continuityIndex":4.5}},"sleepScore":{"sleepScore":85.0,"remScore":80.0,"n3Score":82.0,"scoreRate":4}}]}""",
