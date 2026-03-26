@@ -10,7 +10,6 @@ import com.aallam.openai.api.chat.ImagePart
 import com.aallam.openai.api.chat.Parameters
 import com.aallam.openai.api.chat.TextPart
 import com.aallam.openai.api.chat.ToolChoice
-import com.aallam.openai.api.chat.argumentsAsJson
 import com.aallam.openai.api.chat.chatCompletionRequest
 import com.aallam.openai.api.file.FileSource
 import com.aallam.openai.api.model.ModelId
@@ -24,6 +23,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonObject
 import kotlinx.datetime.Clock
 import io.github.aakira.napier.Napier
 import okio.Buffer
@@ -190,9 +190,9 @@ class OpenAiLlmClient(
 
                 val result = executor(
                     ToolCall(
-                        id = toolCall.id,
+                        id = toolCall.id.id,
                         name = toolCall.function.name,
-                        arguments = toolCall.function.argumentsAsJson()
+                        arguments = json.parseToJsonElement(toolCall.function.arguments).jsonObject
                     )
                 )
 
