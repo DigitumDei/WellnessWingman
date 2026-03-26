@@ -57,6 +57,7 @@ class WeeklySummaryServiceTest {
         override suspend fun getEntriesForDay(startMillis: Long, endMillis: Long) = entriesToReturn
         override suspend fun getEntriesForDay(date: LocalDate) = entriesToReturn
         override suspend fun getAllEntries() = entriesToReturn
+        override suspend fun getRecentEntries(limit: Int, entryType: EntryType?): List<TrackedEntry> = emptyList()
         override fun observeAllEntries(): Flow<List<TrackedEntry>> = emptyFlow()
         override suspend fun getEntryById(id: Long) = entriesToReturn.find { it.entryId == id }
         override suspend fun getEntryByExternalId(externalId: String) = null

@@ -1,6 +1,7 @@
 package com.wellnesswingman.domain.llm
 
 import com.wellnesswingman.data.model.EntryAnalysis
+import com.wellnesswingman.data.model.EntryType
 import com.wellnesswingman.data.model.TrackedEntry
 import com.wellnesswingman.data.model.WeightRecord
 import com.wellnesswingman.data.model.llm.ToolCall
@@ -151,12 +152,10 @@ class ToolRegistry(
         ) { call ->
             val limit = call.arguments["limit"]?.jsonPrimitive?.intOrNull?.coerceIn(1, 10) ?: 5
             val entryType = call.arguments["entryType"]?.jsonPrimitive?.contentOrNull?.trim()?.takeIf { it.isNotBlank() }
-            val entries = trackedEntryRepository.getAllEntries()
-                .asSequence()
-                .filter { entryType == null || it.entryType.name.equals(entryType, ignoreCase = true) }
-                .sortedByDescending(TrackedEntry::capturedAt)
-                .take(limit)
-                .toList()
+            val entries = trackedEntryRepository.getRecentEntries(
+                limit = limit,
+                entryType = entryType?.let { EntryType.fromString(it) }
+            )
 
             ToolResult(
                 toolCallId = call.id,

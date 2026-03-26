@@ -120,6 +120,7 @@ class AnalysisOrchestratorTest {
         val typeById = linkedMapOf<Long, EntryType>()
 
         override suspend fun getAllEntries(): List<TrackedEntry> = emptyList()
+        override suspend fun getRecentEntries(limit: Int, entryType: EntryType?): List<TrackedEntry> = emptyList()
         override fun observeAllEntries(): Flow<List<TrackedEntry>> = emptyFlow()
         override suspend fun getEntryById(id: Long): TrackedEntry? = null
         override suspend fun getEntryByExternalId(externalId: String): TrackedEntry? = null

@@ -223,6 +223,11 @@ class ToolRegistryTest {
         private val entries: List<TrackedEntry> = emptyList()
     ) : TrackedEntryRepository {
         override suspend fun getAllEntries(): List<TrackedEntry> = entries
+        override suspend fun getRecentEntries(limit: Int, entryType: EntryType?): List<TrackedEntry> =
+            entries
+                .filter { entryType == null || it.entryType == entryType }
+                .sortedByDescending { it.capturedAt }
+                .take(limit)
         override fun observeAllEntries(): Flow<List<TrackedEntry>> = emptyFlow()
         override suspend fun getEntryById(id: Long): TrackedEntry? = entries.find { it.entryId == id }
         override suspend fun getEntryByExternalId(externalId: String): TrackedEntry? = null

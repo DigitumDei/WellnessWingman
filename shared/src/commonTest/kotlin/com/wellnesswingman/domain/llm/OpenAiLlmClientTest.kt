@@ -31,7 +31,7 @@ class OpenAiLlmClientTest {
         val requests = mutableListOf<ChatCompletionRequest>()
         val api = mockk<OpenAI>()
         coEvery { api.chatCompletion(any()) } answers {
-            requests += firstArg()
+            requests += firstArg<ChatCompletionRequest>()
             when (requests.size) {
                 1 -> toolCallCompletion(
                     ChatMessage(
@@ -41,12 +41,11 @@ class OpenAiLlmClientTest {
                             OpenAiToolCall.Function(
                                 id = ToolId("call-1"),
                                 function = FunctionCall(
-                                    name = "lookup_calories",
-                                    arguments = """{"food":"apple"}"""
+                                    nameOrNull = "lookup_calories",
+                                    argumentsOrNull = """{"food":"apple"}"""
                                 )
                             )
-                        ),
-                        reasoningContent = "Need the calorie lookup first."
+                        )
                     )
                 )
                 else -> finalCompletion("""{"answer":"95 calories"}""")
@@ -88,8 +87,7 @@ class OpenAiLlmClientTest {
         val secondRequestMessages = requests[1].messages
         assertEquals(3, secondRequestMessages.size)
         assertNull(secondRequestMessages[1].content)
-        assertEquals("Need the calorie lookup first.", secondRequestMessages[1].reasoningContent)
-        assertEquals("lookup_calories", secondRequestMessages[1].toolCalls?.singleOrNull()?.function?.name)
+        assertEquals("lookup_calories", (secondRequestMessages[1].toolCalls?.singleOrNull() as? OpenAiToolCall.Function)?.function?.nameOrNull)
         assertEquals("call-1", secondRequestMessages[2].toolCallId?.id)
         assertEquals("lookup_calories", secondRequestMessages[2].name)
     }
@@ -99,7 +97,7 @@ class OpenAiLlmClientTest {
         val requests = mutableListOf<ChatCompletionRequest>()
         val api = mockk<OpenAI>()
         coEvery { api.chatCompletion(any()) } answers {
-            requests += firstArg()
+            requests += firstArg<ChatCompletionRequest>()
             when (requests.size) {
                 1 -> toolCallCompletion(
                     ChatMessage(
@@ -109,8 +107,8 @@ class OpenAiLlmClientTest {
                             OpenAiToolCall.Function(
                                 id = ToolId("call-1"),
                                 function = FunctionCall(
-                                    name = "lookup_calories",
-                                    arguments = """{"food":"""
+                                    nameOrNull = "lookup_calories",
+                                    argumentsOrNull = """{"food":"""
                                 )
                             )
                         )
@@ -142,7 +140,7 @@ class OpenAiLlmClientTest {
         assertFalse(executorInvoked)
         assertEquals("done", result.content)
         assertEquals(2, requests.size)
-        assertTrue(requests[1].messages[2].content.orEmpty().contains("Failed to parse tool arguments"))
+        assertTrue(requests[1].messages[2].content.orEmpty().contains("\"ok\":false"))
     }
 
     private fun toolCallCompletion(message: ChatMessage) = ChatCompletion(

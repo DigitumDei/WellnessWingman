@@ -42,6 +42,7 @@ private class FakeTrackedEntryRepository : TrackedEntryRepository {
     val upserted = mutableListOf<TrackedEntry>()
 
     override suspend fun getAllEntries(): List<TrackedEntry> = entries
+    override suspend fun getRecentEntries(limit: Int, entryType: EntryType?): List<TrackedEntry> = emptyList()
     override fun observeAllEntries(): Flow<List<TrackedEntry>> = flowOf(entries)
     override suspend fun getEntryById(id: Long): TrackedEntry? = entries.find { it.entryId == id }
     override suspend fun getEntryByExternalId(externalId: String): TrackedEntry? = entries.find { it.externalId == externalId }
