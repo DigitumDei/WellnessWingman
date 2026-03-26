@@ -361,7 +361,7 @@ class PolarSyncOrchestrator(
         error: Throwable
     ): PolarMetricSyncResult {
         val diagnosticsMessage = PolarSyncDiagnostics.summarizeError(error)
-        Napier.e("Polar sync failed for ${family.storageValue}: $diagnosticsMessage")
+        Napier.e("Polar sync failed for ${family.storageValue}: $diagnosticsMessage", error)
         val existingCheckpoint = polarSyncRepository.getCheckpoint(family)
         if (existingCheckpoint != null) {
             polarSyncRepository.updateCheckpoint(

@@ -39,6 +39,7 @@ import com.wellnesswingman.domain.llm.LlmClient
 import com.wellnesswingman.domain.llm.LlmClientFactory
 import com.wellnesswingman.domain.llm.LlmDiagnostics
 import com.wellnesswingman.domain.polar.PolarInsightService
+import com.wellnesswingman.domain.testutil.FakePolarSyncRepository
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.flow.Flow
@@ -131,33 +132,6 @@ class DailySummaryServiceTest {
         override suspend fun upsertWeightRecord(record: WeightRecord) {}
     }
 
-    private class FakePolarSyncRepository(
-        private val activities: List<StoredPolarActivity> = emptyList(),
-        private val sleepResults: List<StoredPolarSleepResult> = emptyList(),
-        private val trainingSessions: List<StoredPolarTrainingSession> = emptyList(),
-        private val nightlyRecharge: List<StoredPolarNightlyRecharge> = emptyList()
-    ) : PolarSyncRepository {
-        override suspend fun upsertActivities(activities: List<PolarDailyActivity>, syncedAt: Instant) = 0
-        override suspend fun getActivities(startDate: LocalDate, endDateExclusive: LocalDate) =
-            activities.filter { it.localDate >= startDate && it.localDate < endDateExclusive }
-        override suspend fun upsertSleepResults(results: List<PolarSleepResult>, syncedAt: Instant) = 0
-        override suspend fun getSleepResults(startDate: LocalDate, endDateExclusive: LocalDate) =
-            sleepResults.filter { it.localDate >= startDate && it.localDate < endDateExclusive }
-        override suspend fun upsertTrainingSessions(sessions: List<PolarTrainingSession>, syncedAt: Instant) = 0
-        override suspend fun getTrainingSessions(startDate: LocalDate, endDateExclusive: LocalDate) =
-            trainingSessions.filter { it.localDate >= startDate && it.localDate < endDateExclusive }
-        override suspend fun upsertNightlyRecharge(results: List<PolarNightlyRecharge>, syncedAt: Instant) = 0
-        override suspend fun getNightlyRecharge(startDate: LocalDate, endDateExclusive: LocalDate) =
-            nightlyRecharge.filter { it.localDate >= startDate && it.localDate < endDateExclusive }
-        override suspend fun upsertUserProfile(userId: String, profile: PolarUserProfile, syncedAt: Instant) = Unit
-        override suspend fun getUserProfile(userId: String): StoredPolarUserProfile? = null
-        override suspend fun getCheckpoint(metricFamily: PolarMetricFamily): PolarSyncCheckpoint? = null
-        override suspend fun getAllCheckpoints(): List<PolarSyncCheckpoint> = emptyList()
-        override suspend fun updateCheckpoint(checkpoint: PolarSyncCheckpoint) = Unit
-        override suspend fun clearCheckpoint(metricFamily: PolarMetricFamily) = Unit
-        override suspend fun clearAll() = Unit
-    }
-
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
 
     private fun makeLlmClientFactory(hasKey: Boolean, response: String = """{"insights":[],"recommendations":[]}"""): LlmClientFactory {
@@ -242,7 +216,8 @@ class DailySummaryServiceTest {
             dailySummaryRepository = FakeDailySummaryRepository(),
             llmClientFactory = makeLlmClientFactory(hasKey = false),
             dailyTotalsCalculator = DailyTotalsCalculator(),
-            weightHistoryRepository = FakeWeightHistoryRepository()
+            weightHistoryRepository = FakeWeightHistoryRepository(),
+            polarInsightService = polarInsightService()
         )
 
         val result = service.generateSummary(LocalDate(2025, 3, 1))
@@ -345,7 +320,8 @@ class DailySummaryServiceTest {
             dailySummaryRepository = FakeDailySummaryRepository(),
             llmClientFactory = makeLlmClientFactory(hasKey = true),
             dailyTotalsCalculator = DailyTotalsCalculator(),
-            weightHistoryRepository = FakeWeightHistoryRepository()
+            weightHistoryRepository = FakeWeightHistoryRepository(),
+            polarInsightService = polarInsightService()
         )
 
         val result = service.generateSummary(LocalDate(2025, 3, 1))
@@ -367,7 +343,8 @@ class DailySummaryServiceTest {
             dailySummaryRepository = FakeDailySummaryRepository(),
             llmClientFactory = makeLlmClientFactory(hasKey = true),
             dailyTotalsCalculator = DailyTotalsCalculator(),
-            weightHistoryRepository = FakeWeightHistoryRepository()
+            weightHistoryRepository = FakeWeightHistoryRepository(),
+            polarInsightService = polarInsightService()
         )
 
         val result = service.generateSummary(LocalDate(2025, 3, 1))
@@ -406,7 +383,8 @@ class DailySummaryServiceTest {
             dailySummaryRepository = fakeSummaryRepo,
             llmClientFactory = makeCapturingLlmClientFactory(response = llmResponse, capturedPrompts = capturedPrompts),
             dailyTotalsCalculator = DailyTotalsCalculator(),
-            weightHistoryRepository = FakeWeightHistoryRepository()
+            weightHistoryRepository = FakeWeightHistoryRepository(),
+            polarInsightService = polarInsightService()
         )
 
         val result = service.generateSummary(LocalDate(2025, 3, 1))
@@ -450,7 +428,8 @@ class DailySummaryServiceTest {
             dailySummaryRepository = FakeDailySummaryRepository(),
             llmClientFactory = makeCapturingLlmClientFactory(response = llmResponse, capturedPrompts = capturedPrompts),
             dailyTotalsCalculator = DailyTotalsCalculator(),
-            weightHistoryRepository = FakeWeightHistoryRepository()
+            weightHistoryRepository = FakeWeightHistoryRepository(),
+            polarInsightService = polarInsightService()
         )
 
         val result = service.generateSummary(LocalDate(2025, 3, 1))
@@ -484,7 +463,8 @@ class DailySummaryServiceTest {
             dailySummaryRepository = FakeDailySummaryRepository(),
             llmClientFactory = makeCapturingLlmClientFactory(response = llmResponse, capturedPrompts = capturedPrompts),
             dailyTotalsCalculator = DailyTotalsCalculator(),
-            weightHistoryRepository = FakeWeightHistoryRepository()
+            weightHistoryRepository = FakeWeightHistoryRepository(),
+            polarInsightService = polarInsightService()
         )
 
         val result = service.generateSummary(LocalDate(2025, 3, 1))
@@ -517,7 +497,8 @@ class DailySummaryServiceTest {
             dailySummaryRepository = FakeDailySummaryRepository(),
             llmClientFactory = makeCapturingLlmClientFactory(response = llmResponse, capturedPrompts = capturedPrompts),
             dailyTotalsCalculator = DailyTotalsCalculator(),
-            weightHistoryRepository = FakeWeightHistoryRepository()
+            weightHistoryRepository = FakeWeightHistoryRepository(),
+            polarInsightService = polarInsightService()
         )
 
         val result = service.generateSummary(LocalDate(2025, 3, 1))
@@ -547,7 +528,8 @@ class DailySummaryServiceTest {
             dailySummaryRepository = FakeDailySummaryRepository(),
             llmClientFactory = makeCapturingLlmClientFactory(response = llmResponse, capturedPrompts = capturedPrompts),
             dailyTotalsCalculator = DailyTotalsCalculator(),
-            weightHistoryRepository = FakeWeightHistoryRepository()
+            weightHistoryRepository = FakeWeightHistoryRepository(),
+            polarInsightService = polarInsightService()
         )
 
         val result = service.generateSummary(LocalDate(2025, 3, 1), userComments = "Felt energetic today!")
@@ -579,7 +561,8 @@ class DailySummaryServiceTest {
             dailySummaryRepository = FakeDailySummaryRepository(),
             llmClientFactory = makeLlmClientFactory(hasKey = true, response = altFormatResponse),
             dailyTotalsCalculator = DailyTotalsCalculator(),
-            weightHistoryRepository = FakeWeightHistoryRepository()
+            weightHistoryRepository = FakeWeightHistoryRepository(),
+            polarInsightService = polarInsightService()
         )
 
         val result = service.generateSummary(LocalDate(2025, 3, 1))
@@ -612,7 +595,8 @@ class DailySummaryServiceTest {
             dailySummaryRepository = FakeDailySummaryRepository(),
             llmClientFactory = makeLlmClientFactory(hasKey = true, response = textResponse),
             dailyTotalsCalculator = DailyTotalsCalculator(),
-            weightHistoryRepository = FakeWeightHistoryRepository()
+            weightHistoryRepository = FakeWeightHistoryRepository(),
+            polarInsightService = polarInsightService()
         )
 
         val result = service.generateSummary(LocalDate(2025, 3, 1))
@@ -643,7 +627,8 @@ class DailySummaryServiceTest {
             dailySummaryRepository = FakeDailySummaryRepository(),
             llmClientFactory = makeCapturingLlmClientFactory(response = llmResponse, capturedPrompts = capturedPrompts),
             dailyTotalsCalculator = DailyTotalsCalculator(),
-            weightHistoryRepository = FakeWeightHistoryRepository(listOf(weightRecord))
+            weightHistoryRepository = FakeWeightHistoryRepository(listOf(weightRecord)),
+            polarInsightService = polarInsightService()
         )
 
         val result = service.generateSummary(LocalDate(2025, 3, 1))
@@ -675,7 +660,8 @@ class DailySummaryServiceTest {
             dailySummaryRepository = FakeDailySummaryRepository(),
             llmClientFactory = makeLlmClientFactory(hasKey = true, response = llmResponse),
             dailyTotalsCalculator = DailyTotalsCalculator(),
-            weightHistoryRepository = FakeWeightHistoryRepository()
+            weightHistoryRepository = FakeWeightHistoryRepository(),
+            polarInsightService = polarInsightService()
         )
 
         val result = service.generateSummary(LocalDate(2025, 3, 1))
@@ -701,7 +687,8 @@ class DailySummaryServiceTest {
             dailySummaryRepository = fakeSummaryRepo,
             llmClientFactory = makeLlmClientFactory(hasKey = true, response = llmResponse),
             dailyTotalsCalculator = DailyTotalsCalculator(),
-            weightHistoryRepository = FakeWeightHistoryRepository()
+            weightHistoryRepository = FakeWeightHistoryRepository(),
+            polarInsightService = polarInsightService()
         )
 
         val result = service.regenerateSummary(date, userComments = "Regenerated with new comment")
@@ -748,7 +735,8 @@ class DailySummaryServiceTest {
             dailySummaryRepository = fakeSummaryRepo,
             llmClientFactory = makeLlmClientFactory(hasKey = true, response = llmResponse),
             dailyTotalsCalculator = DailyTotalsCalculator(),
-            weightHistoryRepository = FakeWeightHistoryRepository()
+            weightHistoryRepository = FakeWeightHistoryRepository(),
+            polarInsightService = polarInsightService()
         )
 
         val result = service.generateSummary(LocalDate(2025, 3, 1))
@@ -768,7 +756,8 @@ class DailySummaryServiceTest {
             dailySummaryRepository = FakeDailySummaryRepository(),
             llmClientFactory = makeLlmClientFactory(hasKey = true, response = llmResponse),
             dailyTotalsCalculator = DailyTotalsCalculator(),
-            weightHistoryRepository = FakeWeightHistoryRepository()
+            weightHistoryRepository = FakeWeightHistoryRepository(),
+            polarInsightService = polarInsightService()
         )
 
         val result = service.generateSummary(LocalDate(2025, 3, 1))
@@ -799,7 +788,8 @@ class DailySummaryServiceTest {
             dailySummaryRepository = FakeDailySummaryRepository(),
             llmClientFactory = makeLlmClientFactory(hasKey = true, response = llmResponse),
             dailyTotalsCalculator = DailyTotalsCalculator(),
-            weightHistoryRepository = FakeWeightHistoryRepository()
+            weightHistoryRepository = FakeWeightHistoryRepository(),
+            polarInsightService = polarInsightService()
         )
 
         val result = service.generateSummary(LocalDate(2025, 3, 1))
@@ -836,7 +826,8 @@ class DailySummaryServiceTest {
             dailySummaryRepository = fakeSummaryRepo,
             llmClientFactory = makeLlmClientFactory(hasKey = true, response = llmResponse),
             dailyTotalsCalculator = DailyTotalsCalculator(),
-            weightHistoryRepository = FakeWeightHistoryRepository()
+            weightHistoryRepository = FakeWeightHistoryRepository(),
+            polarInsightService = polarInsightService()
         )
 
         val result = service.generateSummary(LocalDate(2025, 3, 1))
@@ -869,7 +860,8 @@ class DailySummaryServiceTest {
             dailySummaryRepository = FakeDailySummaryRepository(),
             llmClientFactory = makeLlmClientFactory(hasKey = true, response = llmResponse),
             dailyTotalsCalculator = DailyTotalsCalculator(),
-            weightHistoryRepository = FakeWeightHistoryRepository()
+            weightHistoryRepository = FakeWeightHistoryRepository(),
+            polarInsightService = polarInsightService()
         )
 
         val result = service.generateSummary(LocalDate(2025, 3, 1))
@@ -900,7 +892,8 @@ class DailySummaryServiceTest {
             dailySummaryRepository = FakeDailySummaryRepository(),
             llmClientFactory = makeLlmClientFactory(hasKey = true, response = llmResponse),
             dailyTotalsCalculator = DailyTotalsCalculator(),
-            weightHistoryRepository = FakeWeightHistoryRepository()
+            weightHistoryRepository = FakeWeightHistoryRepository(),
+            polarInsightService = polarInsightService()
         )
 
         val result = service.generateSummary(LocalDate(2025, 3, 1))
@@ -928,7 +921,8 @@ class DailySummaryServiceTest {
             dailySummaryRepository = FakeDailySummaryRepository(),
             llmClientFactory = makeLlmClientFactory(hasKey = true, response = llmResponse),
             dailyTotalsCalculator = DailyTotalsCalculator(),
-            weightHistoryRepository = FakeWeightHistoryRepository()
+            weightHistoryRepository = FakeWeightHistoryRepository(),
+            polarInsightService = polarInsightService()
         )
 
         val result = service.generateSummary(LocalDate(2025, 3, 1))
@@ -956,7 +950,8 @@ class DailySummaryServiceTest {
             dailySummaryRepository = FakeDailySummaryRepository(),
             llmClientFactory = makeLlmClientFactory(hasKey = true, response = llmResponse),
             dailyTotalsCalculator = DailyTotalsCalculator(),
-            weightHistoryRepository = FakeWeightHistoryRepository()
+            weightHistoryRepository = FakeWeightHistoryRepository(),
+            polarInsightService = polarInsightService()
         )
 
         val result = service.generateSummary(LocalDate(2025, 3, 1))
@@ -984,7 +979,8 @@ class DailySummaryServiceTest {
             dailySummaryRepository = FakeDailySummaryRepository(),
             llmClientFactory = makeLlmClientFactory(hasKey = true, response = llmResponse),
             dailyTotalsCalculator = DailyTotalsCalculator(),
-            weightHistoryRepository = FakeWeightHistoryRepository()
+            weightHistoryRepository = FakeWeightHistoryRepository(),
+            polarInsightService = polarInsightService()
         )
 
         val result = service.generateSummary(LocalDate(2025, 3, 1))
@@ -1015,7 +1011,8 @@ class DailySummaryServiceTest {
             dailySummaryRepository = FakeDailySummaryRepository(),
             llmClientFactory = makeLlmClientFactory(hasKey = true, response = llmResponse),
             dailyTotalsCalculator = DailyTotalsCalculator(),
-            weightHistoryRepository = FakeWeightHistoryRepository()
+            weightHistoryRepository = FakeWeightHistoryRepository(),
+            polarInsightService = polarInsightService()
         )
 
         val result = service.generateSummary(LocalDate(2025, 3, 1))
@@ -1038,7 +1035,8 @@ class DailySummaryServiceTest {
             dailySummaryRepository = FakeDailySummaryRepository(),
             llmClientFactory = makeLlmClientFactory(hasKey = true, response = llmResponse),
             dailyTotalsCalculator = DailyTotalsCalculator(),
-            weightHistoryRepository = FakeWeightHistoryRepository()
+            weightHistoryRepository = FakeWeightHistoryRepository(),
+            polarInsightService = polarInsightService()
         )
 
         val result = service.generateSummary(LocalDate(2025, 3, 1))
@@ -1068,7 +1066,8 @@ class DailySummaryServiceTest {
             dailySummaryRepository = FakeDailySummaryRepository(),
             llmClientFactory = makeLlmClientFactory(hasKey = true, response = llmResponse),
             dailyTotalsCalculator = DailyTotalsCalculator(),
-            weightHistoryRepository = FakeWeightHistoryRepository()
+            weightHistoryRepository = FakeWeightHistoryRepository(),
+            polarInsightService = polarInsightService()
         )
 
         val result = service.generateSummary(LocalDate(2025, 3, 1))
@@ -1100,7 +1099,8 @@ class DailySummaryServiceTest {
             dailySummaryRepository = FakeDailySummaryRepository(),
             llmClientFactory = makeLlmClientFactory(hasKey = true, response = llmResponse),
             dailyTotalsCalculator = DailyTotalsCalculator(),
-            weightHistoryRepository = FakeWeightHistoryRepository()
+            weightHistoryRepository = FakeWeightHistoryRepository(),
+            polarInsightService = polarInsightService()
         )
 
         val result = service.generateSummary(LocalDate(2025, 3, 1))
@@ -1135,7 +1135,8 @@ class DailySummaryServiceTest {
             dailySummaryRepository = FakeDailySummaryRepository(),
             llmClientFactory = makeLlmClientFactory(hasKey = true, response = llmResponse),
             dailyTotalsCalculator = DailyTotalsCalculator(),
-            weightHistoryRepository = throwingWeightRepo
+            weightHistoryRepository = throwingWeightRepo,
+            polarInsightService = polarInsightService()
         )
 
         val result = service.generateSummary(LocalDate(2025, 3, 1))
@@ -1161,7 +1162,8 @@ class DailySummaryServiceTest {
             dailySummaryRepository = FakeDailySummaryRepository(),
             llmClientFactory = makeLlmClientFactory(hasKey = true, response = unstructuredResponse),
             dailyTotalsCalculator = DailyTotalsCalculator(),
-            weightHistoryRepository = FakeWeightHistoryRepository()
+            weightHistoryRepository = FakeWeightHistoryRepository(),
+            polarInsightService = polarInsightService()
         )
 
         val result = service.generateSummary(LocalDate(2025, 3, 1))
@@ -1187,10 +1189,90 @@ class DailySummaryServiceTest {
             dailySummaryRepository = FakeDailySummaryRepository(),
             llmClientFactory = makeLlmClientFactory(hasKey = true, response = llmResponse),
             dailyTotalsCalculator = DailyTotalsCalculator(),
-            weightHistoryRepository = FakeWeightHistoryRepository()
+            weightHistoryRepository = FakeWeightHistoryRepository(),
+            polarInsightService = polarInsightService()
         )
 
         val result = service.generateSummary(LocalDate(2025, 3, 1))
         assertIs<DailySummaryResult.Success>(result)
+    }
+
+    @Test
+    fun `generateSummary prefers tracked exercise over Polar exercise when both exist`() = runTest {
+        val prompts = mutableListOf<String>()
+        val date = LocalDate(2025, 3, 1)
+        val exerciseEntry = makeCompletedEntry(1, EntryType.EXERCISE)
+        val exerciseAnalysis = makeAnalysis(
+            1,
+            makeUnifiedJson(
+                UnifiedAnalysisResult(
+                    exerciseAnalysis = ExerciseAnalysisResult(
+                        activityType = "Running",
+                        metrics = ExerciseMetrics(durationMinutes = 30.0, calories = 300.0),
+                        insights = ExerciseInsights(summary = "Tracked run")
+                    )
+                )
+            )
+        )
+        val service = DailySummaryService(
+            trackedEntryRepository = FakeTrackedEntryRepository(listOf(exerciseEntry)),
+            entryAnalysisRepository = FakeEntryAnalysisRepository(mapOf(1L to exerciseAnalysis)),
+            dailySummaryRepository = FakeDailySummaryRepository(),
+            llmClientFactory = makeCapturingLlmClientFactory(capturedPrompts = prompts),
+            dailyTotalsCalculator = DailyTotalsCalculator(),
+            weightHistoryRepository = FakeWeightHistoryRepository(),
+            polarInsightService = polarInsightService(
+                trainingSessions = listOf(
+                    StoredPolarTrainingSession(2, "session-1", "Polar", date, "2025-03-01T08:00:00", Clock.System.now(), PolarTrainingSession("session-1", "2025-03-01T08:00:00", 3600, "1", 430, 5000.0, 148, 172, "Tempo run"))
+                )
+            )
+        )
+
+        val result = service.generateSummary(date)
+
+        assertIs<DailySummaryResult.Success>(result)
+        assertTrue(prompts.single().contains("Tracked run"))
+        assertFalse(prompts.single().contains("Exercise (Polar):"))
+    }
+
+    @Test
+    fun `generateSummary includes Polar exercise when tracked sleep exists but no tracked exercise`() = runTest {
+        val prompts = mutableListOf<String>()
+        val date = LocalDate(2025, 3, 1)
+        val sleepEntry = makeCompletedEntry(1, EntryType.SLEEP)
+        val sleepAnalysis = makeAnalysis(
+            1,
+            makeUnifiedJson(
+                UnifiedAnalysisResult(
+                    sleepAnalysis = SleepAnalysisResult(durationHours = 7.0, qualitySummary = "Tracked sleep")
+                )
+            )
+        )
+        val service = DailySummaryService(
+            trackedEntryRepository = FakeTrackedEntryRepository(listOf(sleepEntry)),
+            entryAnalysisRepository = FakeEntryAnalysisRepository(mapOf(1L to sleepAnalysis)),
+            dailySummaryRepository = FakeDailySummaryRepository(),
+            llmClientFactory = makeCapturingLlmClientFactory(capturedPrompts = prompts),
+            dailyTotalsCalculator = DailyTotalsCalculator(),
+            weightHistoryRepository = FakeWeightHistoryRepository(),
+            polarInsightService = polarInsightService(
+                trainingSessions = listOf(
+                    StoredPolarTrainingSession(2, "session-1", "Polar", date, "2025-03-01T08:00:00", Clock.System.now(), PolarTrainingSession("session-1", "2025-03-01T08:00:00", 3600, "1", 430, 5000.0, 148, 172, "Tempo run"))
+                ),
+                sleepResults = listOf(
+                    StoredPolarSleepResult(3, "sleep:2025-03-01", "Polar", date, null, null, Clock.System.now(), PolarSleepResult("2025-03-01", "2025-02-28T23:00:00Z", "2025-03-01T07:00:00Z", 28800, 7200, 5400, 14400, 1800, 91.0, 4.2, 2, 0, 85.0, 80.0, 82.0, 4))
+                )
+            )
+        )
+
+        val result = service.generateSummary(date)
+
+        assertIs<DailySummaryResult.Success>(result)
+        val prompt = prompts.single()
+        // Tracked sleep takes precedence — no Polar sleep
+        assertTrue(prompt.contains("Tracked sleep"))
+        assertFalse(prompt.contains("Sleep (Polar):"))
+        // But Polar exercise should be included since there's no tracked exercise
+        assertTrue(prompt.contains("Exercise (Polar):"))
     }
 }

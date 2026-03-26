@@ -39,7 +39,7 @@ class DailySummaryService(
     private val llmClientFactory: LlmClientFactory,
     private val dailyTotalsCalculator: DailyTotalsCalculator,
     private val weightHistoryRepository: WeightHistoryRepository,
-    private val polarInsightService: PolarInsightService = PolarInsightService()
+    private val polarInsightService: PolarInsightService
 ) {
 
     private val json = Json {

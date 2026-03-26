@@ -68,7 +68,16 @@ val domainModule = module {
             polarInsightService = get()
         )
     }
-    singleOf(::WeeklySummaryService)
+    single {
+        WeeklySummaryService(
+            trackedEntryRepository = get(),
+            weeklySummaryRepository = get(),
+            dailySummaryRepository = get(),
+            llmClientFactory = get(),
+            weightHistoryRepository = get(),
+            polarInsightService = get()
+        )
+    }
 
     // Background services
     single<BackgroundAnalysisService> {

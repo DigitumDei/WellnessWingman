@@ -37,7 +37,7 @@ class WeeklySummaryService(
     private val dailySummaryRepository: DailySummaryRepository,
     private val llmClientFactory: LlmClientFactory,
     private val weightHistoryRepository: WeightHistoryRepository,
-    private val polarInsightService: PolarInsightService = PolarInsightService()
+    private val polarInsightService: PolarInsightService
 ) {
 
     private val json = Json {
@@ -119,13 +119,14 @@ class WeeklySummaryService(
             val supplementalPolarSleepCount = polarContexts.count { context ->
                 context.date !in trackedSleepDates && context.sleepResults.isNotEmpty()
             }
+            val polarOtherCount = polarContexts.count { it.totalSteps != null || it.nightlyRecharge.isNotEmpty() }
             val otherCount = completedEntries.count {
                 it.entryType != EntryType.MEAL &&
                 it.entryType != EntryType.EXERCISE &&
                 it.entryType != EntryType.SLEEP &&
                 it.entryType != EntryType.DAILY_SUMMARY
-            } + polarContexts.count { it.totalSteps != null || it.nightlyRecharge.isNotEmpty() }
-            val totalEntries = completedEntries.size + supplementalPolarExerciseCount + supplementalPolarSleepCount
+            } + polarOtherCount
+            val totalEntries = completedEntries.size + supplementalPolarExerciseCount + supplementalPolarSleepCount + polarOtherCount
 
             // Get daily summaries for context
             val dailySummaries = dailySummaryRepository.getSummariesForDateRange(weekStart, weekEnd)
