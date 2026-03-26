@@ -42,6 +42,7 @@ val viewModelModule = module {
             trackedEntryRepository = get(),
             weeklySummaryService = get(),
             weeklySummaryRepository = get(),
+            polarInsightService = get(),
             audioRecordingService = get(),
             llmClientFactory = get(),
             fileSystem = get()
