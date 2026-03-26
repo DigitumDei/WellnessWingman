@@ -213,17 +213,40 @@ class PolarOAuthRepositoryTest {
     fun `refreshTokens fails on HTTP error`() = runTest {
         val client = createClient { request ->
             respond(
-                content = """{"error":"invalid_grant"}""",
+                content = """{"error":"server_error"}""",
                 status = HttpStatusCode.BadRequest,
                 headers = jsonHeaders
             )
         }
 
+        fakeSettings.setPolarAccessToken("old-at")
         fakeSettings.setPolarRefreshToken("old-rt")
         val repo = PolarOAuthRepository(fakeSettings, config, client)
         val result = repo.refreshTokens()
 
         assertTrue(result.isFailure)
+        // Non-invalid_grant errors should NOT clear tokens (may be transient)
+        assertNotNull(fakeSettings.getPolarAccessToken())
+    }
+
+    @Test
+    fun `refreshTokens clears tokens on invalid_grant to stop retry loop`() = runTest {
+        val client = createClient { request ->
+            respond(
+                content = """{"detail":"{\"error\":\"invalid_grant\"}","error":"Refresh failed"}""",
+                status = HttpStatusCode.BadRequest,
+                headers = jsonHeaders
+            )
+        }
+
+        fakeSettings.setPolarAccessToken("old-at")
+        fakeSettings.setPolarRefreshToken("old-rt")
+        val repo = PolarOAuthRepository(fakeSettings, config, client)
+        val result = repo.refreshTokens()
+
+        assertTrue(result.isFailure)
+        assertNull(fakeSettings.getPolarAccessToken())
+        assertNull(fakeSettings.getPolarRefreshToken())
     }
 
     // --- disconnect ---

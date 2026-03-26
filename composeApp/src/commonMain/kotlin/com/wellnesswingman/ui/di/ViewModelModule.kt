@@ -25,6 +25,7 @@ val viewModelModule = module {
             dailySummaryRepository = get(),
             dailySummaryService = get(),
             dailyTotalsCalculator = get(),
+            polarInsightService = get(),
             fileSystem = get(),
             pendingCaptureStore = get(),
             polarSyncOrchestrator = get()
@@ -41,6 +42,7 @@ val viewModelModule = module {
             trackedEntryRepository = get(),
             weeklySummaryService = get(),
             weeklySummaryRepository = get(),
+            polarInsightService = get(),
             audioRecordingService = get(),
             llmClientFactory = get(),
             fileSystem = get()
@@ -54,6 +56,7 @@ val viewModelModule = module {
             dailySummaryRepository = get(),
             dailySummaryService = get(),
             dailyTotalsCalculator = get(),
+            polarInsightService = get(),
             fileSystem = get()
         )
     }

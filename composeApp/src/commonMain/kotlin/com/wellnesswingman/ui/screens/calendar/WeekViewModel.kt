@@ -11,6 +11,8 @@ import com.wellnesswingman.data.repository.TrackedEntryRepository
 import com.wellnesswingman.data.repository.WeeklySummaryRepository
 import com.wellnesswingman.domain.analysis.WeeklySummaryService
 import com.wellnesswingman.domain.llm.LlmClientFactory
+import com.wellnesswingman.domain.polar.PolarDayContext
+import com.wellnesswingman.domain.polar.PolarInsightService
 import com.wellnesswingman.platform.AudioRecordingService
 import com.wellnesswingman.platform.FileSystem
 import com.wellnesswingman.ui.common.CommentsState
@@ -26,6 +28,7 @@ class WeekViewModel(
     private val trackedEntryRepository: TrackedEntryRepository,
     private val weeklySummaryService: WeeklySummaryService,
     private val weeklySummaryRepository: WeeklySummaryRepository,
+    private val polarInsightService: PolarInsightService,
     private val audioRecordingService: AudioRecordingService,
     private val llmClientFactory: LlmClientFactory,
     private val fileSystem: FileSystem
@@ -72,6 +75,12 @@ class WeekViewModel(
                     startInstant.toEpochMilliseconds(),
                     endInstant.toEpochMilliseconds()
                 )
+                val polarContexts = try {
+                    polarInsightService.getDayContexts(weekStart, weekEnd.plus(1, DateTimeUnit.DAY))
+                } catch (e: Exception) {
+                    Napier.w("Failed to load Polar week context for $weekStart. Showing tracked counts only.", e)
+                    emptyList()
+                }
 
                 val entriesByDate = entries.groupBy { entry ->
                     entry.capturedAt.toLocalDateTime(TimeZone.currentSystemDefault()).date
@@ -83,17 +92,9 @@ class WeekViewModel(
                     it.entryType != EntryType.DAILY_SUMMARY
                 }
 
-                val counts = EntryCounts(
-                    mealCount = completedEntries.count { it.entryType == EntryType.MEAL },
-                    exerciseCount = completedEntries.count { it.entryType == EntryType.EXERCISE },
-                    sleepCount = completedEntries.count { it.entryType == EntryType.SLEEP },
-                    otherCount = completedEntries.count {
-                        it.entryType != EntryType.MEAL &&
-                        it.entryType != EntryType.EXERCISE &&
-                        it.entryType != EntryType.SLEEP &&
-                        it.entryType != EntryType.DAILY_SUMMARY
-                    },
-                    totalEntries = completedEntries.size
+                val counts = calculateWeekEntryCounts(
+                    completedEntries = completedEntries,
+                    polarContexts = polarContexts
                 )
                 _entryCounts.value = counts
 
@@ -276,3 +277,41 @@ data class EntryCounts(
     val otherCount: Int = 0,
     val totalEntries: Int = 0
 )
+
+internal fun calculateWeekEntryCounts(
+    completedEntries: List<TrackedEntry>,
+    polarContexts: List<PolarDayContext>,
+    timeZone: TimeZone = TimeZone.currentSystemDefault()
+): EntryCounts {
+    val mealCount = completedEntries.count { it.entryType == EntryType.MEAL }
+    val trackedExerciseDates = completedEntries
+        .filter { it.entryType == EntryType.EXERCISE }
+        .map { it.capturedAt.toLocalDateTime(timeZone).date }
+        .toSet()
+    val trackedSleepDates = completedEntries
+        .filter { it.entryType == EntryType.SLEEP }
+        .map { it.capturedAt.toLocalDateTime(timeZone).date }
+        .toSet()
+    val trackedExerciseCount = completedEntries.count { it.entryType == EntryType.EXERCISE }
+    val trackedSleepCount = completedEntries.count { it.entryType == EntryType.SLEEP }
+    val supplementalPolarExerciseCount = polarContexts.sumOf { context ->
+        if (context.date !in trackedExerciseDates) context.exerciseSessionCount else 0
+    }
+    val supplementalPolarSleepCount = polarContexts.count { context ->
+        context.date !in trackedSleepDates && context.sleepResults.isNotEmpty()
+    }
+    val otherCount = completedEntries.count {
+        it.entryType != EntryType.MEAL &&
+        it.entryType != EntryType.EXERCISE &&
+        it.entryType != EntryType.SLEEP &&
+        it.entryType != EntryType.DAILY_SUMMARY
+    } + polarContexts.count { it.totalSteps != null || it.nightlyRecharge.isNotEmpty() }
+
+    return EntryCounts(
+        mealCount = mealCount,
+        exerciseCount = trackedExerciseCount + supplementalPolarExerciseCount,
+        sleepCount = trackedSleepCount + supplementalPolarSleepCount,
+        otherCount = otherCount,
+        totalEntries = mealCount + trackedExerciseCount + supplementalPolarExerciseCount + trackedSleepCount + supplementalPolarSleepCount + otherCount
+    )
+}

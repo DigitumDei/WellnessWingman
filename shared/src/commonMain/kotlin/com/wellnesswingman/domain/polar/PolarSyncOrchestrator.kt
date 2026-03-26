@@ -182,20 +182,30 @@ class PolarSyncOrchestrator(
             overlapDays = 1
         )
 
-        return fetchAuthorized(family) { token ->
-            polarApiClient.getActivities(
-                accessToken = token,
-                from = range.start.toString(),
-                to = range.endExclusive.toString()
+        // The Polar API enforces a 1-day max range when the `features` param is present.
+        // Paginate day-by-day, identical to syncSleep.
+        val accumulated = mutableListOf<com.wellnesswingman.data.model.polar.PolarDailyActivity>()
+        var day = range.start
+        while (day < range.endExclusive) {
+            val nextDay = day.plus(DatePeriod(days = 1))
+            val dayResult = fetchAuthorized(family) { token ->
+                polarApiClient.getActivities(
+                    accessToken = token,
+                    from = day.toString(),
+                    to = nextDay.toString()
+                )
+            }
+            dayResult.fold(
+                onSuccess = { accumulated += it },
+                onFailure = { error -> return handleFailure(family, error) }
             )
-        }.fold(
-            onSuccess = { activities ->
-                polarSyncRepository.upsertActivities(activities, syncedAt)
-                saveSuccessCheckpoint(family, today, syncedAt)
-                PolarMetricSyncResult(family, activities.size, checkpointCursor = today.toString())
-            },
-            onFailure = { error -> handleFailure(family, error) }
-        )
+            day = nextDay
+        }
+
+        polarSyncRepository.upsertActivities(accumulated, syncedAt)
+        val checkpointDate = latestActivityDate(accumulated) ?: today
+        saveSuccessCheckpoint(family, checkpointDate, syncedAt)
+        return PolarMetricSyncResult(family, accumulated.size, checkpointCursor = checkpointDate.toString())
     }
 
     private suspend fun syncSleep(today: LocalDate, syncedAt: Instant): PolarMetricSyncResult {
@@ -227,8 +237,9 @@ class PolarSyncOrchestrator(
         }
 
         polarSyncRepository.upsertSleepResults(accumulated, syncedAt)
-        saveSuccessCheckpoint(family, today, syncedAt)
-        return PolarMetricSyncResult(family, accumulated.size, checkpointCursor = today.toString())
+        val checkpointDate = latestSleepDate(accumulated) ?: today
+        saveSuccessCheckpoint(family, checkpointDate, syncedAt)
+        return PolarMetricSyncResult(family, accumulated.size, checkpointCursor = checkpointDate.toString())
     }
 
     private suspend fun syncTraining(today: LocalDate, syncedAt: Instant): PolarMetricSyncResult {
@@ -249,8 +260,9 @@ class PolarSyncOrchestrator(
         }.fold(
             onSuccess = { sessions ->
                 polarSyncRepository.upsertTrainingSessions(sessions, syncedAt)
-                saveSuccessCheckpoint(family, today, syncedAt)
-                PolarMetricSyncResult(family, sessions.size, checkpointCursor = today.toString())
+                val checkpointDate = latestTrainingDate(sessions) ?: today
+                saveSuccessCheckpoint(family, checkpointDate, syncedAt)
+                PolarMetricSyncResult(family, sessions.size, checkpointCursor = checkpointDate.toString())
             },
             onFailure = { error -> handleFailure(family, error) }
         )
@@ -274,8 +286,9 @@ class PolarSyncOrchestrator(
         }.fold(
             onSuccess = { results ->
                 polarSyncRepository.upsertNightlyRecharge(results, syncedAt)
-                saveSuccessCheckpoint(family, today, syncedAt)
-                PolarMetricSyncResult(family, results.size, checkpointCursor = today.toString())
+                val checkpointDate = latestNightlyRechargeDate(results) ?: today
+                saveSuccessCheckpoint(family, checkpointDate, syncedAt)
+                PolarMetricSyncResult(family, results.size, checkpointCursor = checkpointDate.toString())
             },
             onFailure = { error -> handleFailure(family, error) }
         )
@@ -343,13 +356,13 @@ class PolarSyncOrchestrator(
 
     private suspend fun saveSuccessCheckpoint(
         family: PolarMetricFamily,
-        today: LocalDate,
+        checkpointDate: LocalDate,
         syncedAt: Instant
     ) {
         polarSyncRepository.updateCheckpoint(
             PolarSyncCheckpoint(
                 metricFamily = family,
-                lastSyncCursor = today.toString(),
+                lastSyncCursor = checkpointDate.toString(),
                 lastSuccessfulSyncAt = syncedAt,
                 lastFailureMessage = null
             )
@@ -360,18 +373,19 @@ class PolarSyncOrchestrator(
         family: PolarMetricFamily,
         error: Throwable
     ): PolarMetricSyncResult {
-        Napier.e("Polar sync failed for ${family.storageValue}", error)
+        val diagnosticsMessage = PolarSyncDiagnostics.summarizeError(error)
+        Napier.e("Polar sync failed for ${family.storageValue}: $diagnosticsMessage", error)
         val existingCheckpoint = polarSyncRepository.getCheckpoint(family)
         if (existingCheckpoint != null) {
             polarSyncRepository.updateCheckpoint(
-                existingCheckpoint.copy(lastFailureMessage = error.message ?: "Unknown Polar sync error")
+                existingCheckpoint.copy(lastFailureMessage = diagnosticsMessage)
             )
         }
         return PolarMetricSyncResult(
             metricFamily = family,
             importedCount = 0,
             checkpointCursor = existingCheckpoint?.lastSyncCursor,
-            failureMessage = error.message ?: "Unknown Polar sync error"
+            failureMessage = diagnosticsMessage
         )
     }
 
@@ -414,6 +428,18 @@ class PolarSyncOrchestrator(
             appSettingsRepository.setDateOfBirth(profile.birthday)
         }
     }
+
+    private fun latestActivityDate(activities: List<com.wellnesswingman.data.model.polar.PolarDailyActivity>): LocalDate? =
+        activities.maxOfOrNull { LocalDate.parse(it.date) }
+
+    private fun latestSleepDate(results: List<com.wellnesswingman.data.model.polar.PolarSleepResult>): LocalDate? =
+        results.maxOfOrNull { LocalDate.parse(it.date) }
+
+    private fun latestTrainingDate(sessions: List<com.wellnesswingman.data.model.polar.PolarTrainingSession>): LocalDate? =
+        sessions.maxOfOrNull { LocalDate.parse(it.startTime.take(10)) }
+
+    private fun latestNightlyRechargeDate(results: List<com.wellnesswingman.data.model.polar.PolarNightlyRecharge>): LocalDate? =
+        results.maxOfOrNull { LocalDate.parse(it.date) }
 
     private data class DateRange(
         val start: LocalDate,

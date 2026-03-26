@@ -15,6 +15,8 @@ import com.wellnesswingman.data.repository.TrackedEntryRepository
 import com.wellnesswingman.domain.analysis.DailySummaryService
 import com.wellnesswingman.domain.analysis.DailyTotalsCalculator
 import com.wellnesswingman.domain.capture.PendingCaptureStore
+import com.wellnesswingman.domain.polar.PolarDayContext
+import com.wellnesswingman.domain.polar.PolarInsightService
 import com.wellnesswingman.domain.polar.PolarSyncOrchestrator
 import com.wellnesswingman.domain.polar.PolarSyncTrigger
 import com.wellnesswingman.platform.FileSystem
@@ -23,8 +25,10 @@ import io.github.aakira.napier.Napier
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
@@ -36,6 +40,7 @@ class MainViewModel(
     private val dailySummaryRepository: DailySummaryRepository,
     private val dailySummaryService: DailySummaryService,
     private val dailyTotalsCalculator: DailyTotalsCalculator,
+    private val polarInsightService: PolarInsightService,
     private val fileSystem: FileSystem,
     private val pendingCaptureStore: PendingCaptureStore,
     private val polarSyncOrchestrator: PolarSyncOrchestrator
@@ -56,6 +61,8 @@ class MainViewModel(
     private val _hasPendingCapture = MutableStateFlow(false)
     val hasPendingCapture: StateFlow<Boolean> = _hasPendingCapture.asStateFlow()
 
+    private var lastHandledPolarSyncCompletion: Instant? = null
+
     private val json = Json {
         ignoreUnknownKeys = true
         isLenient = true
@@ -63,6 +70,7 @@ class MainViewModel(
 
     init {
         observeEntries()
+        observePolarSyncStatus()
         checkPendingCapture()
         refreshPolarDataIfNeeded()
     }
@@ -101,24 +109,7 @@ class MainViewModel(
                 val today = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date
                 trackedEntryRepository.observeEntriesForDay(today).collect { entries ->
                     try {
-                        val filteredEntries = entries.filter { it.entryType != EntryType.DAILY_SUMMARY }
-                        if (filteredEntries.isEmpty()) {
-                            _uiState.value = MainUiState.Empty
-                            _summaryCardState.value = SummaryCardState.Hidden
-                        } else {
-                            val nutritionTotals = calculateNutritionTotals(filteredEntries)
-                            val hasCompletedMeals = filteredEntries.any {
-                                it.entryType == EntryType.MEAL && it.processingStatus == ProcessingStatus.COMPLETED
-                            }
-                            val thumbnails = loadThumbnails(filteredEntries)
-                            _uiState.value = MainUiState.Success(
-                                entries = filteredEntries,
-                                nutritionTotals = nutritionTotals,
-                                hasCompletedMeals = hasCompletedMeals,
-                                thumbnails = thumbnails
-                            )
-                            updateSummaryCardState(today, hasCompletedMeals)
-                        }
+                        renderTodayState(today, entries)
                     } catch (e: Exception) {
                         Napier.e("Error processing entries", e)
                         _uiState.value = MainUiState.Error(e.message ?: "Unknown error")
@@ -173,8 +164,53 @@ class MainViewModel(
         }
     }
 
-    private suspend fun updateSummaryCardState(date: LocalDate, hasCompletedMeals: Boolean) {
-        if (!hasCompletedMeals) {
+    private fun observePolarSyncStatus() {
+        screenModelScope.launch {
+            polarSyncOrchestrator.status.collectLatest { status ->
+                val completedAt = status.lastResult?.completedAt ?: return@collectLatest
+                if (status.isRunning || lastHandledPolarSyncCompletion == completedAt) {
+                    return@collectLatest
+                }
+
+                lastHandledPolarSyncCompletion = completedAt
+                try {
+                    val today = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date
+                    val entries = trackedEntryRepository.getEntriesForDay(today)
+                    renderTodayState(today, entries)
+                } catch (error: Exception) {
+                    Napier.w("Failed to refresh main screen after Polar sync: ${error.message}")
+                }
+            }
+        }
+    }
+
+    private suspend fun renderTodayState(today: LocalDate, entries: List<TrackedEntry>) {
+        val filteredEntries = entries.filter { it.entryType != EntryType.DAILY_SUMMARY }
+        val polarContext = polarInsightService.getDayContext(today)
+
+        if (shouldShowEmptyMainState(filteredEntries.size, polarContext.hasData)) {
+            _uiState.value = MainUiState.Empty
+            _summaryCardState.value = SummaryCardState.Hidden
+            return
+        }
+
+        val nutritionTotals = calculateNutritionTotals(filteredEntries)
+        val hasCompletedMeals = filteredEntries.any {
+            it.entryType == EntryType.MEAL && it.processingStatus == ProcessingStatus.COMPLETED
+        }
+        val thumbnails = loadThumbnails(filteredEntries)
+        _uiState.value = MainUiState.Success(
+            entries = filteredEntries,
+            nutritionTotals = nutritionTotals,
+            hasCompletedMeals = hasCompletedMeals,
+            polarContext = polarContext,
+            thumbnails = thumbnails
+        )
+        updateSummaryCardState(today, hasMainSummaryInputs(hasCompletedMeals, polarContext.hasData))
+    }
+
+    private suspend fun updateSummaryCardState(date: LocalDate, hasSummaryInputs: Boolean) {
+        if (!hasSummaryInputs) {
             _summaryCardState.value = SummaryCardState.Hidden
             return
         }
@@ -194,25 +230,7 @@ class MainViewModel(
 
                 val today = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date
                 val entries = trackedEntryRepository.getEntriesForDay(today)
-                val filteredEntries = entries.filter { it.entryType != EntryType.DAILY_SUMMARY }
-
-                if (filteredEntries.isEmpty()) {
-                    _uiState.value = MainUiState.Empty
-                    _summaryCardState.value = SummaryCardState.Hidden
-                } else {
-                    val nutritionTotals = calculateNutritionTotals(filteredEntries)
-                    val hasCompletedMeals = filteredEntries.any {
-                        it.entryType == EntryType.MEAL && it.processingStatus == ProcessingStatus.COMPLETED
-                    }
-                    val thumbnails = loadThumbnails(filteredEntries)
-                    _uiState.value = MainUiState.Success(
-                        entries = filteredEntries,
-                        nutritionTotals = nutritionTotals,
-                        hasCompletedMeals = hasCompletedMeals,
-                        thumbnails = thumbnails
-                    )
-                    updateSummaryCardState(today, hasCompletedMeals)
-                }
+                renderTodayState(today, entries)
             } catch (e: Exception) {
                 Napier.e("Failed to load entries", e)
                 _uiState.value = MainUiState.Error(e.message ?: "Unknown error")
@@ -226,25 +244,7 @@ class MainViewModel(
             try {
                 val today = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date
                 val entries = trackedEntryRepository.getEntriesForDay(today)
-                val filteredEntries = entries.filter { it.entryType != EntryType.DAILY_SUMMARY }
-
-                if (filteredEntries.isEmpty()) {
-                    _uiState.value = MainUiState.Empty
-                    _summaryCardState.value = SummaryCardState.Hidden
-                } else {
-                    val nutritionTotals = calculateNutritionTotals(filteredEntries)
-                    val hasCompletedMeals = filteredEntries.any {
-                        it.entryType == EntryType.MEAL && it.processingStatus == ProcessingStatus.COMPLETED
-                    }
-                    val thumbnails = loadThumbnails(filteredEntries)
-                    _uiState.value = MainUiState.Success(
-                        entries = filteredEntries,
-                        nutritionTotals = nutritionTotals,
-                        hasCompletedMeals = hasCompletedMeals,
-                        thumbnails = thumbnails
-                    )
-                    updateSummaryCardState(today, hasCompletedMeals)
-                }
+                renderTodayState(today, entries)
             } catch (e: Exception) {
                 Napier.e("Failed to refresh entries", e)
             } finally {
@@ -317,10 +317,17 @@ sealed class MainUiState {
         val entries: List<TrackedEntry>,
         val nutritionTotals: NutritionTotals = NutritionTotals(),
         val hasCompletedMeals: Boolean = false,
+        val polarContext: PolarDayContext,
         val thumbnails: Map<Long, ByteArray> = emptyMap()
     ) : MainUiState()
     data class Error(val message: String) : MainUiState()
 }
+
+internal fun shouldShowEmptyMainState(entryCount: Int, polarHasData: Boolean): Boolean =
+    entryCount == 0 && !polarHasData
+
+internal fun hasMainSummaryInputs(hasCompletedMeals: Boolean, polarHasData: Boolean): Boolean =
+    hasCompletedMeals || polarHasData
 
 sealed class SummaryCardState {
     object Hidden : SummaryCardState()

@@ -16,8 +16,13 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.runCurrent
+import kotlinx.datetime.Clock
+import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.plus
+import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.json.Json
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -36,11 +41,13 @@ class PolarSyncOrchestratorTest {
             setPolarTokenExpiresAt(Long.MAX_VALUE)
             setPolarUserId("polar-user-1")
         }
+        val today = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date
+        val importedDate = today.plus(DatePeriod(days = -2))
         val syncRepository = InMemoryPolarSyncRepository()
         val orchestrator = PolarSyncOrchestrator(
             appSettingsRepository = settings,
             polarOAuthRepository = PolarOAuthRepository(settings, PolarOAuthConfig("client", "https://broker.test"), createNoOpHttpClient()),
-            polarApiClient = PolarApiClient(createSyncHttpClient()),
+            polarApiClient = PolarApiClient(createSyncHttpClient(activityDate = importedDate)),
             polarSyncRepository = syncRepository
         )
 
@@ -52,9 +59,44 @@ class PolarSyncOrchestratorTest {
         assertEquals(1, syncRepository.sleepResults.size)
         assertEquals(1, syncRepository.trainingSessions.size)
         assertEquals(1, syncRepository.nightlyRecharge.size)
-        assertNotNull(syncRepository.getCheckpoint(PolarMetricFamily.ACTIVITY))
+        assertEquals(importedDate.toString(), syncRepository.getCheckpoint(PolarMetricFamily.ACTIVITY)?.lastSyncCursor)
         assertNotNull(syncRepository.getCheckpoint(PolarMetricFamily.USER_PROFILE))
         assertEquals(182.0, settings.getHeight())
+    }
+
+    @Test
+    fun `next activity sync starts from latest imported date minus overlap`() = runTest {
+        val settings = FakeAppSettingsRepository().apply {
+            setPolarAccessToken("token")
+            setPolarRefreshToken("refresh")
+            setPolarTokenExpiresAt(Long.MAX_VALUE)
+            setPolarUserId("polar-user-1")
+        }
+        val today = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date
+        val latestImportedDate = today.plus(DatePeriod(days = -2))
+        val capturedActivityFromDates = mutableListOf<String>()
+        val syncRepository = InMemoryPolarSyncRepository()
+        val orchestrator = PolarSyncOrchestrator(
+            appSettingsRepository = settings,
+            polarOAuthRepository = PolarOAuthRepository(settings, PolarOAuthConfig("client", "https://broker.test"), createNoOpHttpClient()),
+            polarApiClient = PolarApiClient(
+                createSyncHttpClient(
+                    activityDate = latestImportedDate,
+                    onActivityRequest = { from, _ -> capturedActivityFromDates += from }
+                )
+            ),
+            polarSyncRepository = syncRepository
+        )
+
+        orchestrator.sync(PolarSyncTrigger.MANUAL_REFRESH)
+        orchestrator.sync(PolarSyncTrigger.MANUAL_REFRESH)
+
+        assertEquals(latestImportedDate.toString(), syncRepository.getCheckpoint(PolarMetricFamily.ACTIVITY)?.lastSyncCursor)
+        // With day-by-day pagination, the first sync makes one request per day in the 28-day lookback window,
+        // and the second sync starts from the checkpoint minus overlap (latestImportedDate - 1).
+        val firstSyncRequestCount = 28
+        assertEquals(today.plus(DatePeriod(days = -27)).toString(), capturedActivityFromDates.first())
+        assertEquals(latestImportedDate.plus(DatePeriod(days = -1)).toString(), capturedActivityFromDates[firstSyncRequestCount])
     }
 
     @Test
@@ -120,7 +162,7 @@ class PolarSyncOrchestratorTest {
             polarOAuthRepository = PolarOAuthRepository(settings, PolarOAuthConfig("client", "https://broker.test"), createNoOpHttpClient()),
             polarApiClient = PolarApiClient(
                 createSyncHttpClient(
-                    onActivityRequest = {
+                    onActivityRequest = { _, _ ->
                         activityRequestCount += 1
                         if (activityRequestCount == 1) {
                             firstActivityRequestStarted.complete(Unit)
@@ -144,38 +186,46 @@ class PolarSyncOrchestratorTest {
 
         assertEquals(PolarSyncOutcome.SUCCESS, firstResult.outcome)
         assertEquals(PolarSyncOutcome.SKIPPED, secondResult.outcome)
-        assertEquals(1, activityRequestCount)
+        // Day-by-day pagination makes one request per day in the 28-day lookback; second sync is skipped.
+        assertEquals(28, activityRequestCount)
         assertTrue(secondResult.metricResults.isEmpty())
     }
 
     private fun createSyncHttpClient(
-        onActivityRequest: (suspend () -> Unit)? = null
+        activityDate: LocalDate = LocalDate.parse("2026-03-23"),
+        sleepDate: LocalDate = activityDate,
+        trainingDate: LocalDate = activityDate,
+        nightlyRechargeDate: LocalDate = activityDate,
+        onActivityRequest: (suspend (from: String, to: String) -> Unit)? = null
     ): HttpClient {
         return HttpClient(MockEngine { request ->
             when {
                 request.url.encodedPath.endsWith("/activity/list") -> {
-                    onActivityRequest?.invoke()
+                    onActivityRequest?.invoke(
+                        request.url.parameters["from"].orEmpty(),
+                        request.url.parameters["to"].orEmpty()
+                    )
                     respond(
-                        """{"activityDays":[{"date":"2026-03-23","activitiesPerDevice":[{"activitySamples":[{"stepSamples":{"startTime":"00:00:00","interval":60000,"steps":[1200]}}]}]}]}""",
+                        """{"activityDays":[{"date":"$activityDate","activitiesPerDevice":[{"activitySamples":[{"stepSamples":{"startTime":"00:00:00","interval":60000,"steps":[1200]}}]}]}]}""",
                         HttpStatusCode.OK,
                         jsonHeaders
                     )
                 }
                 request.url.encodedPath.endsWith("/sleeps") ->
                     respond(
-                        """{"nightSleeps":[{"sleepDate":"2026-03-23","sleepResult":{"hypnogram":{"sleepStart":"2026-03-22T22:00:00Z","sleepEnd":"2026-03-23T06:00:00Z"}},"sleepEvaluation":{"phaseDurations":{"wake":"600s","rem":"5400s","light":"16200s","deep":"6600s"},"interruptions":{"totalCount":4,"longCount":1},"analysis":{"efficiencyPercent":95.0,"continuityIndex":4.5}},"sleepScore":{"sleepScore":85.0,"remScore":80.0,"n3Score":82.0,"scoreRate":4}}]}""",
+                        """{"nightSleeps":[{"sleepDate":"$sleepDate","sleepResult":{"hypnogram":{"sleepStart":"${sleepDate.plus(DatePeriod(days = -1))}T22:00:00Z","sleepEnd":"${sleepDate}T06:00:00Z"}},"sleepEvaluation":{"phaseDurations":{"wake":"600s","rem":"5400s","light":"16200s","deep":"6600s"},"interruptions":{"totalCount":4,"longCount":1},"analysis":{"efficiencyPercent":95.0,"continuityIndex":4.5}},"sleepScore":{"sleepScore":85.0,"remScore":80.0,"n3Score":82.0,"scoreRate":4}}]}""",
                         HttpStatusCode.OK,
                         jsonHeaders
                     )
                 request.url.encodedPath.endsWith("/training-sessions/list") ->
                     respond(
-                        """{"trainingSessions":[{"identifier":{"id":"session-1"},"startTime":"2026-03-23T07:30:00","durationMillis":3600000,"sport":{"id":"1"},"calories":400,"distanceMeters":5000.0,"hrAvg":150,"hrMax":175,"trainingBenefit":"Benefit"}]}""",
+                        """{"trainingSessions":[{"identifier":{"id":"session-1"},"startTime":"${trainingDate}T07:30:00","durationMillis":3600000,"sport":{"id":"1"},"calories":400,"distanceMeters":5000.0,"hrAvg":150,"hrMax":175,"trainingBenefit":"Benefit"}]}""",
                         HttpStatusCode.OK,
                         jsonHeaders
                     )
                 request.url.encodedPath.endsWith("/nightly-recharge-results") ->
                     respond(
-                        """{"nightlyRechargeResults":[{"sleepResultDate":"2026-03-23","ansStatus":1.0,"ansRate":3,"recoveryIndicator":70,"recoveryIndicatorSubLevel":2,"meanNightlyRecoveryRmssd":55,"meanNightlyRecoveryRri":900,"meanBaselineRmssd":50,"sdBaselineRmssd":5,"meanBaselineRri":880,"sdBaselineRri":30}]}""",
+                        """{"nightlyRechargeResults":[{"sleepResultDate":"$nightlyRechargeDate","ansStatus":1.0,"ansRate":3,"recoveryIndicator":70,"recoveryIndicatorSubLevel":2,"meanNightlyRecoveryRmssd":55,"meanNightlyRecoveryRri":900,"meanBaselineRmssd":50,"sdBaselineRmssd":5,"meanBaselineRri":880,"sdBaselineRri":30}]}""",
                         HttpStatusCode.OK,
                         jsonHeaders
                     )
