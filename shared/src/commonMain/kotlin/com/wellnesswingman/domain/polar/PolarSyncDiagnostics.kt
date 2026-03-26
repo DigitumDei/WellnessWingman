@@ -19,6 +19,14 @@ object PolarSyncDiagnostics {
 
     private fun redact(text: String): String {
         return text
+            .replace(
+                Regex("(?i)(\"(?:access[_ -]?token|refresh[_ -]?token|authorization)\"\\s*:\\s*)\"[^\"]*\""),
+                "$1\"[REDACTED]\""
+            )
+            .replace(
+                Regex("(?i)('(?:access[_ -]?token|refresh[_ -]?token|authorization)'\\s*:\\s*)'[^']*'"),
+                "$1'[REDACTED]'"
+            )
             .replace(Regex("(?i)(access[_ -]?token|refresh[_ -]?token|authorization)\\s*[:=]\\s*[^\\s,;]+"), "$1=[REDACTED]")
             .replace(Regex("(?i)bearer\\s+[A-Za-z0-9._\\-]+"), "Bearer [REDACTED]")
             .replace(Regex("\"(activityDays|nightSleeps|trainingSessions|nightlyRechargeResults)\"\\s*:\\s*\\[[^\\]]*]"), "\"$1\":[REDACTED]")

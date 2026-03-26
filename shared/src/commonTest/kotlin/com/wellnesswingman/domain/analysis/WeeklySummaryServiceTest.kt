@@ -41,6 +41,8 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.atStartOfDayIn
 import kotlinx.serialization.json.Json
 import kotlin.test.*
 
@@ -178,6 +180,18 @@ class WeeklySummaryServiceTest {
         entryId = entryId,
         entryType = entryType,
         capturedAt = Clock.System.now(),
+        processingStatus = ProcessingStatus.COMPLETED
+    )
+
+    private fun completedEntryOnDate(
+        entryId: Long,
+        entryType: EntryType,
+        date: LocalDate,
+        timeZone: TimeZone = TimeZone.currentSystemDefault()
+    ) = TrackedEntry(
+        entryId = entryId,
+        entryType = entryType,
+        capturedAt = date.atStartOfDayIn(timeZone),
         processingStatus = ProcessingStatus.COMPLETED
     )
 
@@ -802,11 +816,10 @@ class WeeklySummaryServiceTest {
         val saved = weeklyRepo.inserted.first()
         // otherCount should include days with steps or nightly recharge
         assertTrue(saved.otherCount > 0, "Expected otherCount to include Polar step/recharge days")
-        // totalEntries must be >= otherCount (the blocking bug was otherCount > totalEntries)
+        // totalEntries must still roll up all category counts, including Polar-derived counts.
         assertTrue(
-            saved.totalEntries >= saved.mealCount + saved.exerciseCount + saved.sleepCount + saved.otherCount
-                    || saved.totalEntries >= saved.otherCount,
-            "Expected totalEntries (${ saved.totalEntries}) >= otherCount (${saved.otherCount})"
+            saved.totalEntries >= saved.mealCount + saved.exerciseCount + saved.sleepCount + saved.otherCount,
+            "Expected totalEntries (${saved.totalEntries}) to cover category totals (${saved.mealCount + saved.exerciseCount + saved.sleepCount + saved.otherCount})"
         )
     }
 
@@ -814,11 +827,10 @@ class WeeklySummaryServiceTest {
     fun `generateSummary suppresses Polar sleep on days with tracked sleep`() = runTest {
         val prompts = mutableListOf<String>()
         val weekStart = LocalDate(2025, 3, 3)
-        val sleepEntry = TrackedEntry(
+        val sleepEntry = completedEntryOnDate(
             entryId = 1,
             entryType = EntryType.SLEEP,
-            capturedAt = Clock.System.now(),
-            processingStatus = ProcessingStatus.COMPLETED
+            date = LocalDate(2025, 3, 3)
         )
         val service = WeeklySummaryService(
             trackedEntryRepository = FakeTrackedEntryRepository(listOf(sleepEntry)),
@@ -845,11 +857,10 @@ class WeeklySummaryServiceTest {
     fun `generateSummary suppresses Polar exercise on days with tracked exercise`() = runTest {
         val prompts = mutableListOf<String>()
         val weekStart = LocalDate(2025, 3, 3)
-        val exerciseEntry = TrackedEntry(
+        val exerciseEntry = completedEntryOnDate(
             entryId = 1,
             entryType = EntryType.EXERCISE,
-            capturedAt = Clock.System.now(),
-            processingStatus = ProcessingStatus.COMPLETED
+            date = LocalDate(2025, 3, 3)
         )
         val service = WeeklySummaryService(
             trackedEntryRepository = FakeTrackedEntryRepository(listOf(exerciseEntry)),
