@@ -16,7 +16,7 @@ import com.wellnesswingman.domain.analysis.DailySummaryService
 import com.wellnesswingman.domain.analysis.DailyTotalsCalculator
 import com.wellnesswingman.domain.polar.PolarDayContext
 import com.wellnesswingman.domain.polar.PolarInsightService
-import com.wellnesswingman.platform.FileSystem
+import com.wellnesswingman.platform.FileSystemOperations
 import com.wellnesswingman.ui.screens.main.SummaryCardState
 import com.wellnesswingman.ui.screens.photo.PhotoReviewViewModel
 import io.github.aakira.napier.Napier
@@ -34,7 +34,7 @@ class DayDetailViewModel(
     private val dailySummaryService: DailySummaryService,
     private val dailyTotalsCalculator: DailyTotalsCalculator,
     private val polarInsightService: PolarInsightService,
-    private val fileSystem: FileSystem
+    private val fileSystem: FileSystemOperations
 ) : ScreenModel {
 
     private val _uiState = MutableStateFlow<DayDetailUiState>(DayDetailUiState.Loading)
@@ -76,7 +76,7 @@ class DayDetailViewModel(
                 val filteredEntries = entries.filter { it.entryType != EntryType.DAILY_SUMMARY }
                 val polarContext = polarInsightService.getDayContext(date)
 
-                if (filteredEntries.isEmpty() && !polarContext.hasData) {
+                if (shouldShowEmptyDayState(filteredEntries.size, polarContext.hasData)) {
                     _uiState.value = DayDetailUiState.Empty
                     _summaryCardState.value = SummaryCardState.Hidden
                 } else {
@@ -94,7 +94,7 @@ class DayDetailViewModel(
                         thumbnails = thumbnails
                     )
 
-                    updateSummaryCardState(date, hasCompletedMeals || polarContext.hasData)
+                    updateSummaryCardState(date, hasDaySummaryInputs(hasCompletedMeals, polarContext.hasData))
                 }
             } catch (e: Exception) {
                 Napier.e("Failed to load day $date", e)
@@ -205,6 +205,12 @@ class DayDetailViewModel(
         }
     }
 }
+
+internal fun shouldShowEmptyDayState(entryCount: Int, polarHasData: Boolean): Boolean =
+    entryCount == 0 && !polarHasData
+
+internal fun hasDaySummaryInputs(hasCompletedMeals: Boolean, polarHasData: Boolean): Boolean =
+    hasCompletedMeals || polarHasData
 
 sealed class DayDetailUiState {
     object Loading : DayDetailUiState()

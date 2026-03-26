@@ -73,6 +73,12 @@ kotlin {
             }
         }
 
+        val commonTest by getting {
+            dependencies {
+                implementation(libs.kotlin.test)
+            }
+        }
+
         val androidMain by getting {
             dependencies {
                 implementation(libs.androidx.activity.compose)

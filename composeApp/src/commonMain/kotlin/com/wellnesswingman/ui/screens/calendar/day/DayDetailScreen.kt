@@ -3,6 +3,7 @@ package com.wellnesswingman.ui.screens.calendar.day
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -156,27 +157,16 @@ fun DayEntryList(
             }
         }
 
-        // Daily Nutrition Summary Card
-        if (hasCompletedMeals) {
-            item(key = "nutrition_summary") {
-                DailyNutritionCard(
-                    nutritionTotals = nutritionTotals,
-                    summaryCardState = summaryCardState,
-                    isGeneratingSummary = isGeneratingSummary,
-                    onGenerateSummary = onGenerateSummary,
-                    onViewSummary = onViewSummary
-                )
-            }
-        } else if (summaryCardState != SummaryCardState.Hidden) {
-            item(key = "daily_summary_action") {
-                DailySummaryActionCard(
-                    summaryCardState = summaryCardState,
-                    isGeneratingSummary = isGeneratingSummary,
-                    onGenerateSummary = onGenerateSummary,
-                    onViewSummary = onViewSummary
-                )
-            }
-        }
+        daySummarySection(
+            entries = entries,
+            nutritionTotals = nutritionTotals,
+            hasCompletedMeals = hasCompletedMeals,
+            polarContext = polarContext,
+            summaryCardState = summaryCardState,
+            isGeneratingSummary = isGeneratingSummary,
+            onGenerateSummary = onGenerateSummary,
+            onViewSummary = onViewSummary
+        )
 
         if (polarContext.hasData) {
             item(key = "polar_summary") {
@@ -205,8 +195,44 @@ fun DayEntryList(
     }
 }
 
+private fun LazyListScope.daySummarySection(
+    entries: List<TrackedEntry>,
+    nutritionTotals: NutritionTotals,
+    hasCompletedMeals: Boolean,
+    polarContext: PolarDayContext,
+    summaryCardState: SummaryCardState,
+    isGeneratingSummary: Boolean,
+    onGenerateSummary: () -> Unit,
+    onViewSummary: () -> Unit
+) {
+    when {
+        hasCompletedMeals -> item(key = "nutrition_summary") {
+            DailyNutritionCard(
+                nutritionTotals = nutritionTotals,
+                summaryCardState = summaryCardState,
+                isGeneratingSummary = isGeneratingSummary,
+                onGenerateSummary = onGenerateSummary,
+                onViewSummary = onViewSummary
+            )
+        }
+        summaryCardState != SummaryCardState.Hidden -> item(key = "daily_summary_action") {
+            DailySummaryActionCard(
+                description = daySummaryActionDescription(
+                    hasTrackedEntries = entries.isNotEmpty(),
+                    hasPolarData = polarContext.hasData
+                ),
+                summaryCardState = summaryCardState,
+                isGeneratingSummary = isGeneratingSummary,
+                onGenerateSummary = onGenerateSummary,
+                onViewSummary = onViewSummary
+            )
+        }
+    }
+}
+
 @Composable
 private fun DailySummaryActionCard(
+    description: String,
     summaryCardState: SummaryCardState,
     isGeneratingSummary: Boolean,
     onGenerateSummary: () -> Unit,
@@ -228,7 +254,7 @@ private fun DailySummaryActionCard(
                 fontWeight = FontWeight.SemiBold
             )
             Text(
-                text = "Generate a daily recap using your synced Polar data for this day.",
+                text = description,
                 style = MaterialTheme.typography.bodyMedium
             )
             when (summaryCardState) {
@@ -272,6 +298,16 @@ private fun DailySummaryActionCard(
         }
     }
 }
+
+internal fun daySummaryActionDescription(hasTrackedEntries: Boolean, hasPolarData: Boolean): String =
+    when {
+        hasTrackedEntries && hasPolarData ->
+            "Generate a daily recap from today's tracked entries and synced Polar data."
+        hasPolarData ->
+            "Generate a daily recap using your synced Polar data for this day."
+        else ->
+            "Generate a daily recap for this day."
+    }
 
 @Composable
 private fun PolarMetricsCard(
