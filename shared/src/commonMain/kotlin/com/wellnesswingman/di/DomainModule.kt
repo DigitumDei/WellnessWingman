@@ -12,6 +12,7 @@ import com.wellnesswingman.domain.capture.PendingCaptureStore
 import com.wellnesswingman.domain.events.DefaultStatusChangeNotifier
 import com.wellnesswingman.domain.events.StatusChangeNotifier
 import com.wellnesswingman.domain.llm.LlmClientFactory
+import com.wellnesswingman.domain.llm.ToolRegistry
 import com.wellnesswingman.domain.migration.DataMigrationService
 import com.wellnesswingman.domain.migration.DefaultDataMigrationService
 import com.wellnesswingman.domain.navigation.CalendarNavigationService
@@ -39,6 +40,7 @@ val domainModule = module {
 
     // LLM
     singleOf(::LlmClientFactory)
+    singleOf(::ToolRegistry)
 
     // Event system
     single<StatusChangeNotifier> { DefaultStatusChangeNotifier() }
@@ -53,6 +55,7 @@ val domainModule = module {
             trackedEntryRepository = get(),
             entryAnalysisRepository = get(),
             llmClientFactory = get(),
+            toolRegistry = get(),
             fileSystem = get(),
             appSettingsRepository = get()
         )

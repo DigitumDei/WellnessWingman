@@ -10,6 +10,7 @@ import com.wellnesswingman.data.repository.AppSettingsRepository
 import com.wellnesswingman.data.repository.EntryAnalysisRepository
 import com.wellnesswingman.data.repository.TrackedEntryRepository
 import com.wellnesswingman.domain.llm.LlmClientFactory
+import com.wellnesswingman.domain.llm.ToolRegistry
 import com.wellnesswingman.platform.FileSystem
 import com.wellnesswingman.util.formatDecimal
 import io.github.aakira.napier.Napier
@@ -40,6 +41,7 @@ class AnalysisOrchestrator(
     private val trackedEntryRepository: TrackedEntryRepository,
     private val entryAnalysisRepository: EntryAnalysisRepository,
     private val llmClientFactory: LlmClientFactory,
+    private val toolRegistry: ToolRegistry,
     private val fileSystem: FileSystem,
     private val appSettingsRepository: AppSettingsRepository
 ) {
@@ -81,9 +83,20 @@ class AnalysisOrchestrator(
                         "The file may not have been written yet.")
                 }
                 val imageBytes = fileSystem.readBytes(entry.blobPath)
-                llmClient.analyzeImage(imageBytes, prompt, null)
+                llmClient.analyzeImage(
+                    imageBytes = imageBytes,
+                    prompt = prompt,
+                    jsonSchema = null,
+                    tools = toolRegistry.definitions(),
+                    toolExecutor = toolRegistry::execute
+                )
             } else {
-                llmClient.generateCompletion(prompt, null)
+                llmClient.generateCompletion(
+                    prompt = prompt,
+                    jsonSchema = null,
+                    tools = toolRegistry.definitions(),
+                    toolExecutor = toolRegistry::execute
+                )
             }
 
             // Validate and extract detected entry type

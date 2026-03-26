@@ -38,6 +38,7 @@ import com.wellnesswingman.domain.llm.LlmAnalysisResult
 import com.wellnesswingman.domain.llm.LlmClient
 import com.wellnesswingman.domain.llm.LlmClientFactory
 import com.wellnesswingman.domain.llm.LlmDiagnostics
+import com.wellnesswingman.domain.llm.ToolExecutor
 import com.wellnesswingman.domain.polar.PolarInsightService
 import com.wellnesswingman.domain.testutil.FakePolarSyncRepository
 import io.mockk.every
@@ -136,10 +137,21 @@ class DailySummaryServiceTest {
 
     private fun makeLlmClientFactory(hasKey: Boolean, response: String = """{"insights":[],"recommendations":[]}"""): LlmClientFactory {
         val fakeLlmClient = object : LlmClient {
-            override suspend fun analyzeImage(imageBytes: ByteArray, prompt: String, jsonSchema: String?) =
+            override suspend fun analyzeImage(
+                imageBytes: ByteArray,
+                prompt: String,
+                jsonSchema: String?,
+                tools: List<com.wellnesswingman.data.model.llm.ToolDefinition>,
+                toolExecutor: ToolExecutor?
+            ) =
                 LlmAnalysisResult(response, LlmDiagnostics())
             override suspend fun transcribeAudio(audioBytes: ByteArray, mimeType: String) = ""
-            override suspend fun generateCompletion(prompt: String, jsonSchema: String?) =
+            override suspend fun generateCompletion(
+                prompt: String,
+                jsonSchema: String?,
+                tools: List<com.wellnesswingman.data.model.llm.ToolDefinition>,
+                toolExecutor: ToolExecutor?
+            ) =
                 LlmAnalysisResult(response, LlmDiagnostics())
         }
         val factory = mockk<LlmClientFactory>()
@@ -157,10 +169,21 @@ class DailySummaryServiceTest {
         capturedPrompts: MutableList<String>
     ): LlmClientFactory {
         val fakeLlmClient = object : LlmClient {
-            override suspend fun analyzeImage(imageBytes: ByteArray, prompt: String, jsonSchema: String?) =
+            override suspend fun analyzeImage(
+                imageBytes: ByteArray,
+                prompt: String,
+                jsonSchema: String?,
+                tools: List<com.wellnesswingman.data.model.llm.ToolDefinition>,
+                toolExecutor: ToolExecutor?
+            ) =
                 LlmAnalysisResult(response, LlmDiagnostics())
             override suspend fun transcribeAudio(audioBytes: ByteArray, mimeType: String) = ""
-            override suspend fun generateCompletion(prompt: String, jsonSchema: String?): LlmAnalysisResult {
+            override suspend fun generateCompletion(
+                prompt: String,
+                jsonSchema: String?,
+                tools: List<com.wellnesswingman.data.model.llm.ToolDefinition>,
+                toolExecutor: ToolExecutor?
+            ): LlmAnalysisResult {
                 capturedPrompts.add(prompt)
                 return LlmAnalysisResult(response, LlmDiagnostics())
             }

@@ -1,5 +1,7 @@
 package com.wellnesswingman.domain.llm
 
+import com.wellnesswingman.data.model.llm.ToolCall
+import com.wellnesswingman.data.model.llm.ToolDefinition
 import io.github.aakira.napier.Napier
 import io.ktor.client.*
 import io.ktor.client.call.*
@@ -12,6 +14,9 @@ import io.ktor.serialization.kotlinx.json.*
 import kotlinx.datetime.Clock
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 
@@ -24,9 +29,9 @@ class GeminiLlmClient(
     private val model: String = "gemini-1.5-flash",
     private val httpClient: HttpClient = createDefaultHttpClient()
 ) : LlmClient {
-
     companion object {
         private const val BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
+        private const val MAX_TOOL_ROUNDS = 5
 
         fun createDefaultHttpClient(): HttpClient {
             return HttpClient {
@@ -49,63 +54,30 @@ class GeminiLlmClient(
     override suspend fun analyzeImage(
         imageBytes: ByteArray,
         prompt: String,
-        jsonSchema: String?
+        jsonSchema: String?,
+        tools: List<ToolDefinition>,
+        toolExecutor: ToolExecutor?
     ): LlmAnalysisResult {
-        val startTime = Clock.System.now()
-
-        // Encode image as base64
         val base64Image = Base64.encode(imageBytes)
-
-        val request = GeminiRequest(
-            contents = listOf(
+        return runConversation(
+            contents = mutableListOf(
                 GeminiContent(
+                    role = "user",
                     parts = listOf(
                         GeminiPart(text = prompt),
-                        GeminiPart(inlineData = GeminiPart.InlineData(
-                            mimeType = "image/jpeg",
-                            data = base64Image
-                        ))
+                        GeminiPart(
+                            inlineData = GeminiPart.InlineData(
+                                mimeType = "image/jpeg",
+                                data = base64Image
+                            )
+                        )
                     )
                 )
             ),
-            generationConfig = GenerationConfig(
-                responseMimeType = if (jsonSchema != null) "application/json" else null
-            )
-        )
-
-        val httpResponse = httpClient.post(
-            "$BASE_URL/models/$model:generateContent"
-        ) {
-            contentType(ContentType.Application.Json)
-            header("x-goog-api-key", apiKey)
-            setBody(request)
-        }
-
-        val endTime = Clock.System.now()
-
-        if (!httpResponse.status.isSuccess()) {
-            val errorBody = httpResponse.bodyAsText()
-            Napier.e("Gemini API error ${httpResponse.status}: $errorBody")
-            throw Exception("Gemini API error ${httpResponse.status}: $errorBody")
-        }
-
-        val response: GeminiResponse = httpResponse.body()
-
-        val content = sanitize(
-            response.candidates.firstOrNull()
-                ?.content?.parts?.firstNotNullOfOrNull { it.text }
-                ?: ""
-        )
-
-        return LlmAnalysisResult(
-            content = content,
-            diagnostics = LlmDiagnostics(
-                promptTokens = response.usageMetadata?.promptTokenCount ?: 0,
-                completionTokens = response.usageMetadata?.candidatesTokenCount ?: 0,
-                totalTokens = response.usageMetadata?.totalTokenCount ?: 0,
-                model = model,
-                latencyMs = (endTime - startTime).inWholeMilliseconds
-            )
+            jsonSchema = jsonSchema,
+            tools = tools,
+            toolExecutor = toolExecutor,
+            startTime = Clock.System.now()
         )
     }
 
@@ -161,21 +133,107 @@ class GeminiLlmClient(
 
     override suspend fun generateCompletion(
         prompt: String,
-        jsonSchema: String?
+        jsonSchema: String?,
+        tools: List<ToolDefinition>,
+        toolExecutor: ToolExecutor?
     ): LlmAnalysisResult {
-        val startTime = Clock.System.now()
-
-        val request = GeminiRequest(
-            contents = listOf(
+        return runConversation(
+            contents = mutableListOf(
                 GeminiContent(
+                    role = "user",
                     parts = listOf(GeminiPart(text = prompt))
                 )
             ),
-            generationConfig = GenerationConfig(
-                responseMimeType = if (jsonSchema != null) "application/json" else null
-            )
+            jsonSchema = jsonSchema,
+            tools = tools,
+            toolExecutor = toolExecutor,
+            startTime = Clock.System.now()
         )
+    }
 
+    private suspend fun runConversation(
+        contents: MutableList<GeminiContent>,
+        jsonSchema: String?,
+        tools: List<ToolDefinition>,
+        toolExecutor: ToolExecutor?,
+        startTime: kotlinx.datetime.Instant
+    ): LlmAnalysisResult {
+        var promptTokens = 0
+        var completionTokens = 0
+        var totalTokens = 0
+
+        repeat(MAX_TOOL_ROUNDS + 1) { round ->
+            val response = executeRequest(
+                GeminiRequest(
+                    contents = contents,
+                    tools = tools.takeIf { it.isNotEmpty() }?.let(::geminiTools),
+                    generationConfig = GenerationConfig(
+                        responseMimeType = if (jsonSchema != null) "application/json" else null
+                    )
+                )
+            )
+
+            promptTokens += response.usageMetadata?.promptTokenCount ?: 0
+            completionTokens += response.usageMetadata?.candidatesTokenCount ?: 0
+            totalTokens += response.usageMetadata?.totalTokenCount ?: 0
+
+            val candidate = response.candidates.firstOrNull()
+                ?: error("Gemini returned no completion candidates")
+            val content = candidate.content
+            val functionCalls = content.parts.mapNotNull { it.functionCall }
+
+            if (functionCalls.isEmpty()) {
+                val endTime = Clock.System.now()
+                val text = sanitize(
+                    content.parts.mapNotNull { it.text }
+                        .joinToString("\n")
+                )
+                return LlmAnalysisResult(
+                    content = text,
+                    diagnostics = LlmDiagnostics(
+                        promptTokens = promptTokens,
+                        completionTokens = completionTokens,
+                        totalTokens = totalTokens,
+                        model = model,
+                        latencyMs = (endTime - startTime).inWholeMilliseconds
+                    )
+                )
+            }
+
+            val executor = toolExecutor
+                ?: error("Gemini requested tool calls but no tool executor was provided")
+
+            Napier.d("Sending Gemini tool response, round ${round + 1}")
+            contents.add(content.copy(role = "model"))
+            contents.add(
+                GeminiContent(
+                    role = "user",
+                    parts = functionCalls.map { functionCall ->
+                        val result = executor(
+                            ToolCall(
+                                id = functionCall.id,
+                                name = functionCall.name,
+                                arguments = functionCall.args
+                            )
+                        )
+                        GeminiPart(
+                            functionResponse = GeminiFunctionResponse(
+                                name = functionCall.name,
+                                response = buildJsonObject {
+                                    put("ok", JsonPrimitive(!result.isError))
+                                    put("content", result.content)
+                                }
+                            )
+                        )
+                    }
+                )
+            )
+        }
+
+        error("Gemini tool loop exceeded $MAX_TOOL_ROUNDS rounds")
+    }
+
+    private suspend fun executeRequest(request: GeminiRequest): GeminiResponse {
         val httpResponse = httpClient.post(
             "$BASE_URL/models/$model:generateContent"
         ) {
@@ -184,33 +242,26 @@ class GeminiLlmClient(
             setBody(request)
         }
 
-        val endTime = Clock.System.now()
-
         if (!httpResponse.status.isSuccess()) {
             val errorBody = httpResponse.bodyAsText()
             Napier.e("Gemini API error ${httpResponse.status}: $errorBody")
             throw Exception("Gemini API error ${httpResponse.status}: $errorBody")
         }
 
-        val response: GeminiResponse = httpResponse.body()
-
-        val content = sanitize(
-            response.candidates.firstOrNull()
-                ?.content?.parts?.firstNotNullOfOrNull { it.text }
-                ?: ""
-        )
-
-        return LlmAnalysisResult(
-            content = content,
-            diagnostics = LlmDiagnostics(
-                promptTokens = response.usageMetadata?.promptTokenCount ?: 0,
-                completionTokens = response.usageMetadata?.candidatesTokenCount ?: 0,
-                totalTokens = response.usageMetadata?.totalTokenCount ?: 0,
-                model = model,
-                latencyMs = (endTime - startTime).inWholeMilliseconds
-            )
-        )
+        return httpResponse.body()
     }
+
+    private fun geminiTools(tools: List<ToolDefinition>): List<GeminiTool> = listOf(
+        GeminiTool(
+            functionDeclarations = tools.map { tool ->
+                GeminiFunctionDeclaration(
+                    name = tool.name,
+                    description = tool.description,
+                    parameters = tool.parametersSchema
+                )
+            }
+        )
+    )
 }
 
 // Gemini API request/response models
@@ -218,7 +269,20 @@ class GeminiLlmClient(
 @Serializable
 data class GeminiRequest(
     val contents: List<GeminiContent>,
+    val tools: List<GeminiTool>? = null,
     val generationConfig: GenerationConfig? = null
+)
+
+@Serializable
+data class GeminiTool(
+    val functionDeclarations: List<GeminiFunctionDeclaration>
+)
+
+@Serializable
+data class GeminiFunctionDeclaration(
+    val name: String,
+    val description: String,
+    val parameters: JsonObject
 )
 
 @Serializable
@@ -230,7 +294,9 @@ data class GeminiContent(
 @Serializable
 data class GeminiPart(
     val text: String? = null,
-    val inlineData: InlineData? = null
+    val inlineData: InlineData? = null,
+    val functionCall: GeminiFunctionCall? = null,
+    val functionResponse: GeminiFunctionResponse? = null
 ) {
     @Serializable
     data class InlineData(
@@ -238,6 +304,19 @@ data class GeminiPart(
         val data: String
     )
 }
+
+@Serializable
+data class GeminiFunctionCall(
+    val id: String? = null,
+    val name: String,
+    val args: JsonObject = JsonObject(emptyMap())
+)
+
+@Serializable
+data class GeminiFunctionResponse(
+    val name: String,
+    val response: JsonObject
+)
 
 @Serializable
 data class GenerationConfig(
