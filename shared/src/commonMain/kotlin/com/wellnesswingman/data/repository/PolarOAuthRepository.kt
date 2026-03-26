@@ -149,6 +149,10 @@ class PolarOAuthRepository(
             if (!response.status.isSuccess()) {
                 val errorBody = response.bodyAsText()
                 Napier.e("Refresh failed (${response.status}): $errorBody")
+                if (errorBody.contains("invalid_grant", ignoreCase = true)) {
+                    Napier.w("Refresh token revoked (invalid_grant) — disconnecting Polar account to stop retry loop")
+                    settings.clearPolarTokens()
+                }
                 return Result.failure(Exception("Refresh failed: ${response.status}"))
             }
 
