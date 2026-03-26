@@ -321,12 +321,13 @@ class WeeklySummaryServiceTest {
                     StoredPolarActivity(1, "activity:2025-03-01", "Polar", weekStart, null, Clock.System.now(), PolarDailyActivity("2025-03-01", 9200, "00:00:00", 60000, listOf(9200)))
                 ),
                 trainingSessions = listOf(
-                    StoredPolarTrainingSession(2, "session-1", "Polar", weekStart, "2025-03-01T08:00:00", Clock.System.now(), PolarTrainingSession("session-1", "2025-03-01T08:00:00", 3600, "1", 430, 5000.0, 148, 172, "Tempo run")))
+                    StoredPolarTrainingSession(2, "session-1", "Polar", weekStart, "2025-03-01T08:00:00", Clock.System.now(), PolarTrainingSession("session-1", "2025-03-01T08:00:00", 3600, "1", 430, 5000.0, 148, 172, "Tempo run"))
                 )
             )
         )
 
         val result = service.generateSummary(weekStart)
+
 
         assertIs<WeeklySummaryResult.Success>(result)
         assertTrue(prompts.single().contains("Polar Sync Context"))
@@ -805,7 +806,7 @@ class WeeklySummaryServiceTest {
                     StoredPolarActivity(2, "activity:2025-03-04", "Polar", LocalDate(2025, 3, 4), null, Clock.System.now(), PolarDailyActivity("2025-03-04", 9000, "00:00:00", 60000, listOf(9000)))
                 ),
                 nightlyRecharge = listOf(
-                    StoredPolarNightlyRecharge(3, "recharge:2025-03-03", "Polar", LocalDate(2025, 3, 3), null, Clock.System.now(), PolarNightlyRecharge("2025-03-03", 4.5, 3, 42.0))
+                    StoredPolarNightlyRecharge(3, "recharge:2025-03-03", "Polar", LocalDate(2025, 3, 3), Clock.System.now(), PolarNightlyRecharge("2025-03-03", 4.5, 3, 42, 0, 0, 0, 0, 0, 0, 0))
                 )
             )
         )
