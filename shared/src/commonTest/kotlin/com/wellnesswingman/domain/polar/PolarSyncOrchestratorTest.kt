@@ -92,9 +92,11 @@ class PolarSyncOrchestratorTest {
         orchestrator.sync(PolarSyncTrigger.MANUAL_REFRESH)
 
         assertEquals(latestImportedDate.toString(), syncRepository.getCheckpoint(PolarMetricFamily.ACTIVITY)?.lastSyncCursor)
-        assertEquals(2, capturedActivityFromDates.size)
+        // With day-by-day pagination, the first sync makes one request per day in the 28-day lookback window,
+        // and the second sync starts from the checkpoint minus overlap (latestImportedDate - 1).
+        val firstSyncRequestCount = 28
         assertEquals(today.plus(DatePeriod(days = -27)).toString(), capturedActivityFromDates.first())
-        assertEquals(latestImportedDate.plus(DatePeriod(days = -1)).toString(), capturedActivityFromDates.last())
+        assertEquals(latestImportedDate.plus(DatePeriod(days = -1)).toString(), capturedActivityFromDates[firstSyncRequestCount])
     }
 
     @Test
@@ -184,7 +186,8 @@ class PolarSyncOrchestratorTest {
 
         assertEquals(PolarSyncOutcome.SUCCESS, firstResult.outcome)
         assertEquals(PolarSyncOutcome.SKIPPED, secondResult.outcome)
-        assertEquals(1, activityRequestCount)
+        // Day-by-day pagination makes one request per day in the 28-day lookback; second sync is skipped.
+        assertEquals(28, activityRequestCount)
         assertTrue(secondResult.metricResults.isEmpty())
     }
 

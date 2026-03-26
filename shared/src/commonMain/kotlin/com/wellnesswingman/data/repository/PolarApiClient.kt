@@ -51,7 +51,8 @@ class PolarApiClient(
 
     /**
      * Fetches daily activity summaries for the given date range.
-     * Maximum range: 28 days.
+     * Maximum range: 1 day (API constraint when features are requested).
+     * The caller must paginate day-by-day for multi-day ranges.
      */
     suspend fun getActivities(
         accessToken: String,

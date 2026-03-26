@@ -182,21 +182,30 @@ class PolarSyncOrchestrator(
             overlapDays = 1
         )
 
-        return fetchAuthorized(family) { token ->
-            polarApiClient.getActivities(
-                accessToken = token,
-                from = range.start.toString(),
-                to = range.endExclusive.toString()
+        // The Polar API enforces a 1-day max range when the `features` param is present.
+        // Paginate day-by-day, identical to syncSleep.
+        val accumulated = mutableListOf<com.wellnesswingman.data.model.polar.PolarDailyActivity>()
+        var day = range.start
+        while (day < range.endExclusive) {
+            val nextDay = day.plus(DatePeriod(days = 1))
+            val dayResult = fetchAuthorized(family) { token ->
+                polarApiClient.getActivities(
+                    accessToken = token,
+                    from = day.toString(),
+                    to = nextDay.toString()
+                )
+            }
+            dayResult.fold(
+                onSuccess = { accumulated += it },
+                onFailure = { error -> return handleFailure(family, error) }
             )
-        }.fold(
-            onSuccess = { activities ->
-                polarSyncRepository.upsertActivities(activities, syncedAt)
-                val checkpointDate = latestActivityDate(activities) ?: today
-                saveSuccessCheckpoint(family, checkpointDate, syncedAt)
-                PolarMetricSyncResult(family, activities.size, checkpointCursor = checkpointDate.toString())
-            },
-            onFailure = { error -> handleFailure(family, error) }
-        )
+            day = nextDay
+        }
+
+        polarSyncRepository.upsertActivities(accumulated, syncedAt)
+        val checkpointDate = latestActivityDate(accumulated) ?: today
+        saveSuccessCheckpoint(family, checkpointDate, syncedAt)
+        return PolarMetricSyncResult(family, accumulated.size, checkpointCursor = checkpointDate.toString())
     }
 
     private suspend fun syncSleep(today: LocalDate, syncedAt: Instant): PolarMetricSyncResult {
