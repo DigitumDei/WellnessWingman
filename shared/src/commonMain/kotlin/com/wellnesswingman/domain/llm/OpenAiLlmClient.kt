@@ -36,18 +36,17 @@ import kotlin.time.Duration.Companion.seconds
  */
 class OpenAiLlmClient(
     apiKey: String,
-    private val model: String = "gpt-4o-mini"
+    private val model: String = "gpt-4o-mini",
+    private val client: OpenAI = OpenAI(
+        token = apiKey,
+        logging = LoggingConfig(),
+        timeout = Timeout(socket = 60.seconds, connect = 60.seconds, request = 60.seconds)
+    )
 ) : LlmClient {
     private val json = Json {
         ignoreUnknownKeys = true
         isLenient = true
     }
-
-    private val client = OpenAI(
-        token = apiKey,
-        logging = LoggingConfig(),
-        timeout = Timeout(socket = 60.seconds, connect = 60.seconds, request = 60.seconds)
-    )
 
     private companion object {
         const val MAX_TOOL_ROUNDS = 5
@@ -174,27 +173,30 @@ class OpenAiLlmClient(
             val executor = toolExecutor
                 ?: error("OpenAI requested tool calls but no tool executor was provided")
 
-            messages.add(
-                ChatMessage(
-                    role = message.role,
-                    content = message.content.orEmpty(),
-                    toolCalls = message.toolCalls,
-                    toolCallId = message.toolCallId
-                )
-            )
+            messages.add(message)
 
             toolCalls.forEach { toolCall ->
                 require(toolCall is OpenAiToolCall.Function) {
                     "Unsupported OpenAI tool call type: ${toolCall::class.simpleName}"
                 }
 
-                val result = executor(
-                    ToolCall(
-                        id = toolCall.id.id,
-                        name = toolCall.function.name,
-                        arguments = json.parseToJsonElement(toolCall.function.arguments).jsonObject
+                val result = runCatching {
+                    val arguments = json.parseToJsonElement(toolCall.function.arguments).jsonObject
+                    executor(
+                        ToolCall(
+                            id = toolCall.id.id,
+                            name = toolCall.function.name,
+                            arguments = arguments
+                        )
                     )
-                )
+                }.getOrElse { error ->
+                    com.wellnesswingman.data.model.llm.ToolResult(
+                        toolCallId = toolCall.id.id,
+                        name = toolCall.function.name,
+                        content = JsonPrimitive(error.message ?: "Failed to parse tool arguments."),
+                        isError = true
+                    )
+                }
 
                 messages.add(
                     ChatMessage(

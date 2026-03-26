@@ -14,6 +14,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.encodeToString
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -146,5 +147,26 @@ class GeminiLlmClientTest {
 
         assertFalse(result.content.isBlank())
         assertEquals("Plain completion", result.content)
+    }
+
+    @Test
+    fun `gemini part round trips thought signature`() {
+        val payload = Json.encodeToString(
+            GeminiPart(
+                functionCall = GeminiFunctionCall(
+                    id = "call-1",
+                    name = "lookup_calories",
+                    args = buildJsonObject {
+                        put("food", JsonPrimitive("apple"))
+                    }
+                ),
+                thoughtSignature = "signature-1"
+            )
+        )
+
+        val decoded = Json.decodeFromString<GeminiPart>(payload)
+
+        assertEquals("signature-1", decoded.thoughtSignature)
+        assertEquals("lookup_calories", decoded.functionCall?.name)
     }
 }

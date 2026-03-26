@@ -12,6 +12,7 @@ import com.wellnesswingman.data.repository.EntryAnalysisRepository
 import com.wellnesswingman.data.repository.LlmProvider
 import com.wellnesswingman.data.repository.TrackedEntryRepository
 import com.wellnesswingman.data.repository.WeightHistoryRepository
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.test.runTest
@@ -24,6 +25,8 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertFailsWith
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class ToolRegistryTest {
@@ -46,7 +49,8 @@ class ToolRegistryTest {
                         entryType = EntryType.EXERCISE,
                         capturedAt = now,
                         processingStatus = ProcessingStatus.COMPLETED,
-                        userNotes = "run"
+                        userNotes = "run",
+                        dataPayload = """{"duration":45}"""
                     )
                 )
             ),
@@ -77,7 +81,102 @@ class ToolRegistryTest {
         val entries = payload["entries"]!!.toString()
         assertTrue(entries.contains("\"entryId\":2"))
         assertTrue(entries.contains("Tempo run"))
+        assertTrue(entries.contains(""""dataPayload":{"duration":45}"""))
+        assertTrue(entries.contains(""""latestInsightsJson":{"summary":"Tempo run"}"""))
         assertEquals(3, registry.definitions().size)
+    }
+
+    @Test
+    fun `execute rethrows cancellation exceptions`() = runTest {
+        val registry = ToolRegistry(
+            trackedEntryRepository = FakeTrackedEntryRepository(),
+            entryAnalysisRepository = FakeEntryAnalysisRepository(),
+            weightHistoryRepository = FakeWeightHistoryRepository(),
+            appSettingsRepository = FakeAppSettingsRepository()
+        )
+
+        registry.register(
+            definition = ToolDefinition(
+                name = "cancel_tool",
+                description = "Throws cancellation.",
+                parametersSchema = buildJsonObject { put("type", JsonPrimitive("object")) }
+            )
+        ) {
+            throw CancellationException("cancelled")
+        }
+
+        assertFailsWith<CancellationException> {
+            registry.execute(ToolCall(name = "cancel_tool"))
+        }
+    }
+
+    @Test
+    fun `unknown tool returns error result`() = runTest {
+        val registry = ToolRegistry(
+            trackedEntryRepository = FakeTrackedEntryRepository(),
+            entryAnalysisRepository = FakeEntryAnalysisRepository(),
+            weightHistoryRepository = FakeWeightHistoryRepository(),
+            appSettingsRepository = FakeAppSettingsRepository()
+        )
+
+        val result = registry.execute(ToolCall(name = "missing_tool"))
+
+        assertTrue(result.isError)
+        assertEquals("missing_tool", result.name)
+        assertTrue(result.content.toString().contains("not registered"))
+    }
+
+    @Test
+    fun `built in user profile tool returns structured fields`() = runTest {
+        val registry = ToolRegistry(
+            trackedEntryRepository = FakeTrackedEntryRepository(),
+            entryAnalysisRepository = FakeEntryAnalysisRepository(),
+            weightHistoryRepository = FakeWeightHistoryRepository(),
+            appSettingsRepository = FakeAppSettingsRepository()
+        )
+
+        val result = registry.execute(ToolCall(name = "get_user_profile"))
+
+        assertFalse(result.isError)
+        val payload = assertIs<JsonObject>(result.content)
+        assertEquals("male", payload["sex"]?.toString()?.trim('"'))
+        assertEquals("1990-01-01", payload["dateOfBirth"]?.toString()?.trim('"'))
+        assertEquals("moderate", payload["activityLevel"]?.toString()?.trim('"'))
+    }
+
+    @Test
+    fun `built in weight history tool returns bounded records`() = runTest {
+        val now = Clock.System.now()
+        val registry = ToolRegistry(
+            trackedEntryRepository = FakeTrackedEntryRepository(),
+            entryAnalysisRepository = FakeEntryAnalysisRepository(),
+            weightHistoryRepository = FakeWeightHistoryRepository(
+                records = listOf(
+                    WeightRecord(
+                        weightRecordId = 1L,
+                        weightValue = 80.5,
+                        weightUnit = "kg",
+                        source = "manual",
+                        recordedAt = now
+                    )
+                )
+            ),
+            appSettingsRepository = FakeAppSettingsRepository()
+        )
+
+        val result = registry.execute(
+            ToolCall(
+                name = "get_weight_history",
+                arguments = buildJsonObject {
+                    put("days", JsonPrimitive(365))
+                }
+            )
+        )
+
+        assertFalse(result.isError)
+        val payload = assertIs<JsonObject>(result.content)
+        assertEquals("90", payload["days"]?.toString())
+        assertTrue(payload["records"].toString().contains("80.5"))
     }
 
     @Test

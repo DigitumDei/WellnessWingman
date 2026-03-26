@@ -10,9 +10,11 @@ import com.wellnesswingman.data.repository.AppSettingsRepository
 import com.wellnesswingman.data.repository.EntryAnalysisRepository
 import com.wellnesswingman.data.repository.TrackedEntryRepository
 import com.wellnesswingman.data.repository.WeightHistoryRepository
+import kotlinx.coroutines.CancellationException
 import kotlinx.datetime.Clock
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.minus
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
@@ -31,6 +33,11 @@ class ToolRegistry(
     private val weightHistoryRepository: WeightHistoryRepository,
     private val appSettingsRepository: AppSettingsRepository
 ) {
+    private val json = Json {
+        ignoreUnknownKeys = true
+        isLenient = true
+    }
+
     private val definitions = linkedMapOf<String, ToolDefinition>()
     private val handlers = linkedMapOf<String, suspend (ToolCall) -> ToolResult>()
 
@@ -59,6 +66,8 @@ class ToolRegistry(
 
         return try {
             handler(toolCall)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             ToolResult(
                 toolCallId = toolCall.id,
@@ -175,8 +184,8 @@ class ToolRegistry(
         put("capturedAt", JsonPrimitive(entry.capturedAt.toString()))
         put("processingStatus", JsonPrimitive(entry.processingStatus.name))
         putNullable("userNotes", entry.userNotes)
-        putNullable("dataPayload", entry.dataPayload.takeIf { it.isNotBlank() })
-        putNullable("latestInsightsJson", latestAnalysis?.insightsJson?.takeIf { it.isNotBlank() })
+        putNullable("dataPayload", parseJsonString(entry.dataPayload))
+        putNullable("latestInsightsJson", latestAnalysis?.insightsJson?.let(::parseJsonString))
     }
 
     private fun weightRecordJson(record: WeightRecord): JsonObject = buildJsonObject {
@@ -194,5 +203,11 @@ class ToolRegistry(
 
     private fun JsonObjectBuilder.putNullable(key: String, value: JsonElement?) {
         put(key, value ?: JsonNull)
+    }
+
+    private fun parseJsonString(raw: String?): JsonElement? {
+        val value = raw?.takeIf { it.isNotBlank() } ?: return null
+        return runCatching { json.parseToJsonElement(value) }
+            .getOrElse { JsonPrimitive(value) }
     }
 }

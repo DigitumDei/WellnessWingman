@@ -13,6 +13,7 @@ import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import kotlinx.datetime.Clock
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -296,7 +297,9 @@ data class GeminiPart(
     val text: String? = null,
     val inlineData: InlineData? = null,
     val functionCall: GeminiFunctionCall? = null,
-    val functionResponse: GeminiFunctionResponse? = null
+    val functionResponse: GeminiFunctionResponse? = null,
+    @SerialName("thoughtSignature")
+    val thoughtSignature: String? = null
 ) {
     @Serializable
     data class InlineData(
