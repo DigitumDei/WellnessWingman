@@ -29,10 +29,14 @@ import com.wellnesswingman.data.model.EntryType
 import com.wellnesswingman.data.model.NutritionTotals
 import com.wellnesswingman.data.model.ProcessingStatus
 import com.wellnesswingman.data.model.TrackedEntry
+import com.wellnesswingman.domain.polar.PolarDayContext
 import com.wellnesswingman.ui.components.EmptyState
 import com.wellnesswingman.ui.components.ErrorMessage
 import com.wellnesswingman.ui.components.LoadingIndicator
 import com.wellnesswingman.ui.screens.calendar.WeekViewScreen
+import com.wellnesswingman.ui.screens.calendar.day.DailySummaryActionCard
+import com.wellnesswingman.ui.screens.calendar.day.PolarMetricsCard
+import com.wellnesswingman.ui.screens.calendar.day.daySummaryActionDescription
 import com.wellnesswingman.ui.screens.detail.EntryDetailScreen
 import com.wellnesswingman.ui.screens.photo.createPhotoReviewScreen
 import com.wellnesswingman.ui.screens.settings.PolarSettingsScreen
@@ -111,6 +115,7 @@ class MainScreen : Screen {
                     thumbnails = state.thumbnails,
                     nutritionTotals = state.nutritionTotals,
                     hasCompletedMeals = state.hasCompletedMeals,
+                    polarContext = state.polarContext,
                     summaryCardState = summaryCardState,
                     isGeneratingSummary = isGeneratingSummary,
                     onEntryClick = { entry -> navigator.push(EntryDetailScreen(entry.entryId)) },
@@ -131,6 +136,7 @@ fun EntryList(
     thumbnails: Map<Long, ByteArray>,
     nutritionTotals: NutritionTotals,
     hasCompletedMeals: Boolean,
+    polarContext: PolarDayContext,
     summaryCardState: SummaryCardState,
     isGeneratingSummary: Boolean,
     onEntryClick: (TrackedEntry) -> Unit,
@@ -145,9 +151,8 @@ fun EntryList(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // Daily Nutrition Summary Card
-        if (hasCompletedMeals) {
-            item(key = "nutrition_summary") {
+        when {
+            hasCompletedMeals -> item(key = "nutrition_summary") {
                 DailyNutritionCard(
                     nutritionTotals = nutritionTotals,
                     summaryCardState = summaryCardState,
@@ -156,15 +161,34 @@ fun EntryList(
                     onViewSummary = onViewSummary
                 )
             }
+            summaryCardState != SummaryCardState.Hidden -> item(key = "daily_summary_action") {
+                DailySummaryActionCard(
+                    description = daySummaryActionDescription(
+                        hasTrackedEntries = entries.isNotEmpty(),
+                        hasPolarData = polarContext.hasData
+                    ),
+                    summaryCardState = summaryCardState,
+                    isGeneratingSummary = isGeneratingSummary,
+                    onGenerateSummary = onGenerateSummary,
+                    onViewSummary = onViewSummary
+                )
+            }
         }
 
-        // Entries header
-        item(key = "entries_header") {
-            Text(
-                text = "Entries",
-                style = MaterialTheme.typography.titleLarge,
-                modifier = Modifier.padding(top = if (hasCompletedMeals) 8.dp else 0.dp)
-            )
+        if (polarContext.hasData) {
+            item(key = "polar_summary") {
+                PolarMetricsCard(polarContext = polarContext)
+            }
+        }
+
+        if (entries.isNotEmpty()) {
+            item(key = "entries_header") {
+                Text(
+                    text = "Entries",
+                    style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.padding(top = if (hasCompletedMeals || polarContext.hasData) 8.dp else 0.dp)
+                )
+            }
         }
 
         items(entries, key = { it.entryId }) { entry ->

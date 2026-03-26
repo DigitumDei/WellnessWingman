@@ -232,7 +232,7 @@ private fun LazyListScope.daySummarySection(
 }
 
 @Composable
-private fun DailySummaryActionCard(
+internal fun DailySummaryActionCard(
     description: String,
     summaryCardState: SummaryCardState,
     isGeneratingSummary: Boolean,
@@ -311,7 +311,7 @@ internal fun daySummaryActionDescription(hasTrackedEntries: Boolean, hasPolarDat
     }
 
 @Composable
-private fun PolarMetricsCard(
+internal fun PolarMetricsCard(
     polarContext: PolarDayContext,
     modifier: Modifier = Modifier
 ) {
