@@ -119,4 +119,39 @@ class PolarDayContextTest {
 
         assertEquals(listOf("  - Steps (Polar): 5000"), lines)
     }
+
+    @Test
+    fun `buildPromptLines rounds sleep hours and exercise minutes to one decimal place`() {
+        val context = PolarDayContext(
+            date = LocalDate(2025, 3, 3),
+            sleepResults = listOf(
+                StoredPolarSleepResult(
+                    recordId = 1,
+                    externalId = "sleep:1",
+                    source = "Polar",
+                    localDate = LocalDate(2025, 3, 3),
+                    startedAt = "2025-03-02T23:00:00Z",
+                    endedAt = "2025-03-03T05:59:42Z",
+                    syncedAt = Clock.System.now(),
+                    data = PolarSleepResult("2025-03-03", "2025-03-02T23:00:00Z", "2025-03-03T05:59:42Z", 21582, 7200, 5400, 14400, 1800, 91.0, 4.1, 2, 0, 84.0, 80.0, 82.0, 4)
+                )
+            ),
+            trainingSessions = listOf(
+                StoredPolarTrainingSession(
+                    recordId = 2,
+                    externalId = "training:2",
+                    source = "Polar",
+                    localDate = LocalDate(2025, 3, 3),
+                    startedAt = "2025-03-03T08:00:00",
+                    syncedAt = Clock.System.now(),
+                    data = PolarTrainingSession("session-2", "2025-03-03T08:00:00", 3597, "1", 430, 5000.0, 148, 172, "Tempo run")
+                )
+            )
+        )
+
+        val lines = context.buildPromptLines(includeSleep = true, includeExercise = true)
+
+        assertTrue(lines.any { it.contains("Sleep (Polar): 6.0h") })
+        assertTrue(lines.any { it.contains("Exercise (Polar): 60.0 min") })
+    }
 }

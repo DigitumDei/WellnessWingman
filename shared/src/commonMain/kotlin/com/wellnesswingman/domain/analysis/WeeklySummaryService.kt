@@ -99,7 +99,12 @@ class WeeklySummaryService(
                 .filter { it.processingStatus == ProcessingStatus.COMPLETED }
                 .sortedBy { it.capturedAt }
 
-            val polarContexts = polarInsightService.getDayContexts(weekStart, weekEnd.plus(1, DateTimeUnit.DAY))
+            val polarContexts = try {
+                polarInsightService.getDayContexts(weekStart, weekEnd.plus(1, DateTimeUnit.DAY))
+            } catch (e: Exception) {
+                Napier.w("Failed to load Polar week context for $weekStart. Continuing without Polar data.", e)
+                emptyList()
+            }
             val hasPolarData = polarContexts.any { it.hasData }
 
             if (completedEntries.isEmpty() && !hasPolarData) {

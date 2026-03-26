@@ -218,7 +218,7 @@ sealed class DayDetailUiState {
         val entries: List<TrackedEntry>,
         val nutritionTotals: NutritionTotals = NutritionTotals(),
         val hasCompletedMeals: Boolean = false,
-        val polarContext: PolarDayContext = PolarDayContext(LocalDate(1970, 1, 1)),
+        val polarContext: PolarDayContext,
         val thumbnails: Map<Long, ByteArray> = emptyMap()
     ) : DayDetailUiState()
     object Empty : DayDetailUiState()

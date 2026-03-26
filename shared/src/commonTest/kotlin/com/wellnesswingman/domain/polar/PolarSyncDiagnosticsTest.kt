@@ -31,4 +31,17 @@ class PolarSyncDiagnosticsTest {
         assertFalse(sanitized.contains("server-secret"))
         assertFalse(sanitized.contains("access-secret"))
     }
+
+    @Test
+    fun `sanitizeForLogs redacts quoted token values that contain escaped quotes`() {
+        val sanitized = PolarSyncDiagnostics.sanitizeForLogs(
+            """{"access_token":"secret-value with \"escaped\" quotes","refresh_token":"rt-1"}"""
+        )
+
+        assertTrue(sanitized.contains("\"access_token\":\"[REDACTED]\""))
+        assertTrue(sanitized.contains("\"refresh_token\":\"[REDACTED]\""))
+        assertFalse(sanitized.contains("secret-value"))
+        assertFalse(sanitized.contains("escaped"))
+        assertFalse(sanitized.contains("rt-1"))
+    }
 }

@@ -5,6 +5,7 @@ import com.wellnesswingman.data.model.polar.StoredPolarNightlyRecharge
 import com.wellnesswingman.data.model.polar.StoredPolarSleepResult
 import com.wellnesswingman.data.model.polar.StoredPolarTrainingSession
 import com.wellnesswingman.data.repository.PolarSyncRepository
+import kotlin.math.round
 import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.plus
@@ -44,11 +45,6 @@ class PolarInsightService(
             dates += current
             current = current.plus(DatePeriod(days = 1))
         }
-        dates += activities.keys
-        dates += sleepResults.keys
-        dates += trainingSessions.keys
-        dates += nightlyRecharge.keys
-
         return dates.sorted().map { date ->
             PolarDayContext(
                 date = date,
@@ -123,7 +119,9 @@ data class PolarDayContext(
         }
     }
 
-    private fun formatHours(seconds: Long): String = ((seconds / 360.0).toInt() / 10.0).toString()
+    private fun formatHours(seconds: Long): String = formatOneDecimal(seconds / 3600.0)
 
-    private fun formatMinutes(seconds: Long): String = ((seconds / 6.0).toInt() / 10.0).toString()
+    private fun formatMinutes(seconds: Long): String = formatOneDecimal(seconds / 60.0)
+
+    private fun formatOneDecimal(value: Double): String = (round(value * 10.0) / 10.0).toString()
 }

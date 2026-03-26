@@ -33,6 +33,7 @@ import com.wellnesswingman.ui.screens.detail.EntryDetailScreen
 import com.wellnesswingman.ui.screens.main.DailyNutritionCard
 import com.wellnesswingman.ui.screens.main.EntryCard
 import com.wellnesswingman.ui.screens.main.SummaryCardState
+import kotlin.math.round
 import com.wellnesswingman.ui.screens.summary.DailySummaryScreen
 import com.wellnesswingman.util.DateTimeUtil
 import kotlinx.datetime.DateTimeUnit
@@ -365,4 +366,4 @@ private fun PolarMetricsCard(
     }
 }
 
-private fun formatOneDecimal(value: Double): String = ((value * 10).toInt() / 10.0).toString()
+private fun formatOneDecimal(value: Double): String = (round(value * 10.0) / 10.0).toString()

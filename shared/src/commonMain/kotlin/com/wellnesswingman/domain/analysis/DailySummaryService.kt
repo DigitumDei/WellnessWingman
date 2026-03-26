@@ -74,9 +74,14 @@ class DailySummaryService(
                 .filter { it.processingStatus == ProcessingStatus.COMPLETED }
                 .sortedBy { it.capturedAt }
 
-            val polarContext = polarInsightService.getDayContext(date)
+            val polarContext = try {
+                polarInsightService.getDayContext(date)
+            } catch (e: Exception) {
+                Napier.w("Failed to load Polar day context for $date. Continuing without Polar data.", e)
+                null
+            }
 
-            if (completedEntries.isEmpty() && !polarContext.hasData) {
+            if (completedEntries.isEmpty() && polarContext?.hasData != true) {
                 Napier.i("No completed entries found for $date")
                 return DailySummaryResult.NoEntries
             }
@@ -156,12 +161,15 @@ class DailySummaryService(
             val mealCount = completedEntries.count { it.entryType == EntryType.MEAL }
             val exerciseCount = completedEntries.count { it.entryType == EntryType.EXERCISE }
             val sleepCount = completedEntries.count { it.entryType == EntryType.SLEEP }
-            val includePolarSleep = sleepCount == 0 && polarContext.sleepResults.isNotEmpty()
-            val includePolarExercise = exerciseCount == 0 && polarContext.trainingSessions.isNotEmpty()
-            val effectiveExerciseCount = exerciseCount + if (includePolarExercise) polarContext.exerciseSessionCount else 0
-            val effectiveSleepCount = sleepCount + if (includePolarSleep) polarContext.sleepResults.size else 0
+            val includePolarSleep = sleepCount == 0 && polarContext?.sleepResults?.isNotEmpty() == true
+            val includePolarExercise = exerciseCount == 0 && polarContext?.trainingSessions?.isNotEmpty() == true
+            val effectiveExerciseCount = exerciseCount + if (includePolarExercise) polarContext?.exerciseSessionCount ?: 0 else 0
+            val effectiveSleepCount = sleepCount + if (includePolarSleep) polarContext?.sleepResults?.size ?: 0 else 0
+            val effectiveTotalEntries = completedEntries.size +
+                if (includePolarExercise) polarContext?.exerciseSessionCount ?: 0 else 0 +
+                if (includePolarSleep) polarContext?.sleepResults?.size ?: 0 else 0
             if (includePolarSleep && totalSleepHours == null) {
-                totalSleepHours = polarContext.sleepDurationHours
+                totalSleepHours = polarContext?.sleepDurationHours
             }
 
             // Calculate balance metrics
@@ -187,14 +195,15 @@ class DailySummaryService(
                 mealCount = mealCount,
                 exerciseCount = effectiveExerciseCount,
                 sleepCount = effectiveSleepCount,
+                totalEntries = effectiveTotalEntries,
                 sleepHours = totalSleepHours,
                 weightRecords = weightRecords,
                 userComments = userComments,
                 entryDetailLines = entryDetailLines,
-                polarDetailLines = polarContext.buildPromptLines(
+                polarDetailLines = polarContext?.buildPromptLines(
                     includeSleep = includePolarSleep,
                     includeExercise = includePolarExercise
-                )
+                ).orEmpty()
             )
 
             // Generate summary using LLM
@@ -375,6 +384,7 @@ class DailySummaryService(
         mealCount: Int,
         exerciseCount: Int,
         sleepCount: Int,
+        totalEntries: Int,
         sleepHours: Double?,
         weightRecords: List<WeightRecord> = emptyList(),
         userComments: String? = null,
@@ -420,7 +430,7 @@ Generate a daily health summary for $date. Return a JSON object with the followi
 }
 
 Activity Overview:
-- Total entries logged: ${entries.size}
+- Total entries logged: $totalEntries
 - Meals logged: $mealCount
 - Exercise sessions: $exerciseCount
 - Sleep entries: $sleepCount${sleepHours?.let { "\n- Total sleep: ${it.toInt()} hours" } ?: ""}${

@@ -209,6 +209,30 @@ class WeeklySummaryServiceTest {
         )
     )
 
+    private fun throwingPolarInsightService(message: String = "Polar unavailable") = PolarInsightService(
+        object : PolarSyncRepository {
+            override suspend fun upsertActivities(activities: List<PolarDailyActivity>, syncedAt: Instant) = 0
+            override suspend fun getActivities(startDate: LocalDate, endDateExclusive: LocalDate): List<StoredPolarActivity> =
+                throw RuntimeException(message)
+            override suspend fun upsertSleepResults(results: List<PolarSleepResult>, syncedAt: Instant) = 0
+            override suspend fun getSleepResults(startDate: LocalDate, endDateExclusive: LocalDate): List<StoredPolarSleepResult> =
+                throw RuntimeException(message)
+            override suspend fun upsertTrainingSessions(sessions: List<PolarTrainingSession>, syncedAt: Instant) = 0
+            override suspend fun getTrainingSessions(startDate: LocalDate, endDateExclusive: LocalDate): List<StoredPolarTrainingSession> =
+                throw RuntimeException(message)
+            override suspend fun upsertNightlyRecharge(results: List<PolarNightlyRecharge>, syncedAt: Instant) = 0
+            override suspend fun getNightlyRecharge(startDate: LocalDate, endDateExclusive: LocalDate): List<StoredPolarNightlyRecharge> =
+                throw RuntimeException(message)
+            override suspend fun upsertUserProfile(userId: String, profile: PolarUserProfile, syncedAt: Instant) = Unit
+            override suspend fun getUserProfile(userId: String): StoredPolarUserProfile? = null
+            override suspend fun getCheckpoint(metricFamily: PolarMetricFamily): PolarSyncCheckpoint? = null
+            override suspend fun getAllCheckpoints(): List<PolarSyncCheckpoint> = emptyList()
+            override suspend fun updateCheckpoint(checkpoint: PolarSyncCheckpoint) = Unit
+            override suspend fun clearCheckpoint(metricFamily: PolarMetricFamily) = Unit
+            override suspend fun clearAll() = Unit
+        }
+    )
+
     companion object {
         val VALID_WEEKLY_JSON = """
             {
@@ -649,6 +673,28 @@ class WeeklySummaryServiceTest {
         val result = service.generateSummary(weekStart)
 
         assertIs<WeeklySummaryResult.Success>(result)
+    }
+
+    @Test
+    fun `generateSummary falls back to tracked entries when Polar week context fails`() = runTest {
+        val prompts = mutableListOf<String>()
+        val weekStart = LocalDate(2025, 3, 1)
+        val service = WeeklySummaryService(
+            trackedEntryRepository = FakeTrackedEntryRepository(
+                listOf(makeCompletedEntry(1, EntryType.MEAL))
+            ),
+            weeklySummaryRepository = FakeWeeklySummaryRepository(),
+            dailySummaryRepository = FakeDailySummaryRepository(),
+            llmClientFactory = makeCapturingLlmClientFactory(capturedPrompts = prompts),
+            weightHistoryRepository = FakeWeightHistoryRepository(),
+            polarInsightService = throwingPolarInsightService()
+        )
+
+        val result = service.generateSummary(weekStart)
+
+        assertIs<WeeklySummaryResult.Success>(result)
+        assertFalse(prompts.single().contains("Polar Sync Context"))
+        assertTrue(prompts.single().contains("Total entries logged: 1"))
     }
 
     @Test
