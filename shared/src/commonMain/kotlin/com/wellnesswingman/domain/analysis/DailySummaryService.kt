@@ -19,6 +19,7 @@ import com.wellnesswingman.data.repository.EntryAnalysisRepository
 import com.wellnesswingman.data.repository.TrackedEntryRepository
 import com.wellnesswingman.data.repository.WeightHistoryRepository
 import com.wellnesswingman.domain.llm.LlmClientFactory
+import com.wellnesswingman.domain.llm.ToolRegistry
 import com.wellnesswingman.domain.polar.PolarInsightService
 import com.wellnesswingman.util.DateTimeUtil
 import com.wellnesswingman.data.model.WeightRecord
@@ -37,6 +38,7 @@ class DailySummaryService(
     private val entryAnalysisRepository: EntryAnalysisRepository,
     private val dailySummaryRepository: DailySummaryRepository,
     private val llmClientFactory: LlmClientFactory,
+    private val toolRegistry: ToolRegistry,
     private val dailyTotalsCalculator: DailyTotalsCalculator,
     private val weightHistoryRepository: WeightHistoryRepository,
     private val polarInsightService: PolarInsightService
@@ -208,7 +210,11 @@ class DailySummaryService(
 
             // Generate summary using LLM
             val llmClient = llmClientFactory.createForCurrentProvider()
-            val result = llmClient.generateCompletion(prompt)
+            val result = llmClient.generateCompletion(
+                prompt = prompt,
+                tools = toolRegistry.definitions(),
+                toolExecutor = toolRegistry::execute
+            )
 
             // Parse the result
             val (highlights, recommendations) = parseHighlightsAndRecommendations(result.content)

@@ -175,6 +175,10 @@ class GeminiLlmClient(
                 GeminiRequest(
                     contents = contents,
                     tools = tools.takeIf { it.isNotEmpty() }?.let(::geminiTools),
+                    toolConfig = tools.takeIf { it.isNotEmpty() }?.let { GeminiToolConfig(FunctionCallingConfig("AUTO")) },
+                    systemInstruction = tools.takeIf { it.isNotEmpty() }?.let {
+                        GeminiContent(parts = listOf(GeminiPart(text = "You have tools available to fetch the user's profile, weight history, and recent tracked entries. Call them proactively before generating your analysis to personalise your response.")))
+                    },
                     generationConfig = GenerationConfig(
                         responseMimeType = if (jsonSchema != null) "application/json" else null
                     )
@@ -255,6 +259,10 @@ class GeminiLlmClient(
             GeminiRequest(
                 contents = contents,
                 tools = tools.takeIf { it.isNotEmpty() }?.let(::geminiTools),
+                toolConfig = tools.takeIf { it.isNotEmpty() }?.let { GeminiToolConfig(FunctionCallingConfig("AUTO")) },
+                systemInstruction = tools.takeIf { it.isNotEmpty() }?.let {
+                    GeminiContent(parts = listOf(GeminiPart(text = "You have tools available to fetch the user's profile, weight history, and recent tracked entries. Call them proactively before generating your analysis to personalise your response.")))
+                },
                 generationConfig = GenerationConfig(
                     responseMimeType = if (jsonSchema != null) "application/json" else null
                 )
@@ -326,7 +334,22 @@ class GeminiLlmClient(
 data class GeminiRequest(
     val contents: List<GeminiContent>,
     val tools: List<GeminiTool>? = null,
+    @SerialName("tool_config")
+    val toolConfig: GeminiToolConfig? = null,
+    @SerialName("system_instruction")
+    val systemInstruction: GeminiContent? = null,
     val generationConfig: GenerationConfig? = null
+)
+
+@Serializable
+data class GeminiToolConfig(
+    @SerialName("function_calling_config")
+    val functionCallingConfig: FunctionCallingConfig
+)
+
+@Serializable
+data class FunctionCallingConfig(
+    val mode: String
 )
 
 @Serializable

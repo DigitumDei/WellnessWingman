@@ -11,6 +11,7 @@ import com.wellnesswingman.data.repository.AppSettingsRepository
 import com.wellnesswingman.data.repository.EntryAnalysisRepository
 import com.wellnesswingman.data.repository.TrackedEntryRepository
 import com.wellnesswingman.data.repository.WeightHistoryRepository
+import io.github.aakira.napier.Napier
 import kotlinx.coroutines.CancellationException
 import kotlinx.datetime.Clock
 import kotlinx.datetime.TimeZone
@@ -57,19 +58,31 @@ class ToolRegistry(
     fun definitions(): List<ToolDefinition> = definitions.values.toList()
 
     suspend fun execute(toolCall: ToolCall): ToolResult {
+        Napier.d("Tool call: ${toolCall.name} args=${toolCall.arguments}")
+
         val handler = handlers[toolCall.name]
-            ?: return ToolResult(
-                toolCallId = toolCall.id,
-                name = toolCall.name,
-                content = JsonPrimitive("Tool '${toolCall.name}' is not registered."),
-                isError = true
-            )
+            ?: run {
+                Napier.w("Tool '${toolCall.name}' is not registered")
+                return ToolResult(
+                    toolCallId = toolCall.id,
+                    name = toolCall.name,
+                    content = JsonPrimitive("Tool '${toolCall.name}' is not registered."),
+                    isError = true
+                )
+            }
 
         return try {
-            handler(toolCall)
+            val result = handler(toolCall)
+            if (result.isError) {
+                Napier.w("Tool '${toolCall.name}' returned error: ${result.content}")
+            } else {
+                Napier.d("Tool '${toolCall.name}' completed successfully")
+            }
+            result
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
+            Napier.e("Tool '${toolCall.name}' threw exception", e)
             ToolResult(
                 toolCallId = toolCall.id,
                 name = toolCall.name,
