@@ -2,6 +2,7 @@ package com.wellnesswingman.domain.llm
 
 import com.wellnesswingman.data.model.EntryAnalysis
 import com.wellnesswingman.data.model.EntryType
+import com.wellnesswingman.data.model.NutritionalProfile
 import com.wellnesswingman.data.model.ProcessingStatus
 import com.wellnesswingman.data.model.TrackedEntry
 import com.wellnesswingman.data.model.WeightRecord
@@ -10,6 +11,7 @@ import com.wellnesswingman.data.model.llm.ToolDefinition
 import com.wellnesswingman.data.repository.AppSettingsRepository
 import com.wellnesswingman.data.repository.EntryAnalysisRepository
 import com.wellnesswingman.data.repository.LlmProvider
+import com.wellnesswingman.data.repository.NutritionalProfileRepository
 import com.wellnesswingman.data.repository.TrackedEntryRepository
 import com.wellnesswingman.data.repository.WeightHistoryRepository
 import kotlinx.coroutines.CancellationException
@@ -19,6 +21,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDate
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -264,6 +267,50 @@ class ToolRegistryTest {
         assertEquals("""{"echo":"hello"}""", result.content.toString())
     }
 
+    @Test
+    fun `lookup nutritional profile tool returns exact matches`() = runTest {
+        val now = Clock.System.now()
+        val registry = ToolRegistry(
+            trackedEntryRepository = FakeTrackedEntryRepository(),
+            entryAnalysisRepository = FakeEntryAnalysisRepository(),
+            weightHistoryRepository = FakeWeightHistoryRepository(),
+            appSettingsRepository = FakeAppSettingsRepository(),
+            nutritionalProfileRepository = FakeNutritionalProfileRepository(
+                listOf(
+                    NutritionalProfile(
+                        profileId = 7L,
+                        externalId = "quest-bar",
+                        primaryName = "Quest Protein Bar",
+                        aliases = listOf("protein bar", "quest bar"),
+                        servingSize = "1 bar",
+                        calories = 190.0,
+                        protein = 21.0,
+                        carbohydrates = 22.0,
+                        fat = 7.0,
+                        createdAt = now,
+                        updatedAt = now
+                    )
+                )
+            )
+        )
+
+        val result = registry.execute(
+            ToolCall(
+                name = "lookup_nutritional_profile",
+                arguments = buildJsonObject {
+                    put("query", JsonPrimitive("quest bar"))
+                }
+            )
+        )
+
+        assertFalse(result.isError)
+        val payload = assertIs<JsonObject>(result.content)
+        val matches = assertIs<JsonArray>(payload["matches"])
+        assertEquals(1, matches.size)
+        assertTrue(matches.toString().contains("Quest Protein Bar"))
+        assertTrue(matches.toString().contains("\"source\":\"exact\""))
+    }
+
     private class FakeTrackedEntryRepository(
         private val entries: List<TrackedEntry> = emptyList()
     ) : TrackedEntryRepository {
@@ -330,6 +377,25 @@ class ToolRegistryTest {
         override suspend fun deleteWeightRecord(recordId: Long) {}
         override suspend fun nullifyRelatedEntryId(entryId: Long) {}
         override suspend fun upsertWeightRecord(record: WeightRecord) {}
+    }
+
+    private class FakeNutritionalProfileRepository(
+        private val profiles: List<NutritionalProfile> = emptyList()
+    ) : NutritionalProfileRepository {
+        override suspend fun getAll(): List<NutritionalProfile> = profiles
+        override suspend fun getById(profileId: Long): NutritionalProfile? = profiles.find { it.profileId == profileId }
+        override suspend fun getByExternalId(externalId: String): NutritionalProfile? = profiles.find { it.externalId == externalId }
+        override suspend fun searchByName(query: String, limit: Int): List<NutritionalProfile> {
+            val normalized = query.lowercase()
+            return profiles.filter {
+                it.primaryName.lowercase().contains(normalized) ||
+                    it.aliases.any { alias -> alias.lowercase().contains(normalized) }
+            }.take(limit)
+        }
+        override suspend fun insert(profile: NutritionalProfile): Long = profile.profileId
+        override suspend fun update(profile: NutritionalProfile) {}
+        override suspend fun delete(profileId: Long) {}
+        override suspend fun upsert(profile: NutritionalProfile) {}
     }
 
     private class FakeAppSettingsRepository : AppSettingsRepository {

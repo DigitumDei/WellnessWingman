@@ -71,7 +71,19 @@ data class FoodItem(
      * Confidence in the detection of this food item (0.0 to 1.0).
      */
     @SerialName("confidence")
-    val confidence: Double = 0.0
+    val confidence: Double = 0.0,
+
+    /**
+     * Whether the item was matched to a stored exact nutritional profile.
+     */
+    @SerialName("nutritionSource")
+    val nutritionSource: String? = null,
+
+    /**
+     * Name of the saved nutritional profile used for exact matching.
+     */
+    @SerialName("matchedProfileName")
+    val matchedProfileName: String? = null
 )
 
 @Serializable
@@ -116,7 +128,19 @@ data class NutritionEstimate(
      * Sodium in milligrams.
      */
     @SerialName("sodium")
-    val sodium: Double? = null
+    val sodium: Double? = null,
+
+    /**
+     * Whether the nutrition values are exact from a saved profile or estimated by vision.
+     */
+    @SerialName("source")
+    val source: String? = null,
+
+    /**
+     * Saved nutritional profile names used to supply exact nutrition values.
+     */
+    @SerialName("matchedProfiles")
+    val matchedProfiles: List<String> = emptyList()
 )
 
 @Serializable

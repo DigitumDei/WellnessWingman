@@ -9,6 +9,7 @@ import com.wellnesswingman.data.model.llm.ToolDefinition
 import com.wellnesswingman.data.model.llm.ToolResult
 import com.wellnesswingman.data.repository.AppSettingsRepository
 import com.wellnesswingman.data.repository.EntryAnalysisRepository
+import com.wellnesswingman.data.repository.NutritionalProfileRepository
 import com.wellnesswingman.data.repository.TrackedEntryRepository
 import com.wellnesswingman.data.repository.WeightHistoryRepository
 import io.github.aakira.napier.Napier
@@ -33,7 +34,8 @@ class ToolRegistry(
     private val trackedEntryRepository: TrackedEntryRepository,
     private val entryAnalysisRepository: EntryAnalysisRepository,
     private val weightHistoryRepository: WeightHistoryRepository,
-    private val appSettingsRepository: AppSettingsRepository
+    private val appSettingsRepository: AppSettingsRepository,
+    private val nutritionalProfileRepository: NutritionalProfileRepository? = null
 ) {
     private val json = Json {
         ignoreUnknownKeys = true
@@ -45,6 +47,7 @@ class ToolRegistry(
 
     init {
         registerBuiltIns()
+        registerNutritionalProfileTools()
     }
 
     fun register(
@@ -180,6 +183,71 @@ class ToolRegistry(
                     put("entries", JsonArray(entries.map { entry ->
                         val latestAnalysis = latestAnalyses[entry.entryId]
                         entryJson(entry, latestAnalysis)
+                    }))
+                }
+            )
+        }
+    }
+
+    private fun registerNutritionalProfileTools() {
+        val repository = nutritionalProfileRepository ?: return
+
+        register(
+            definition = ToolDefinition(
+                name = "lookup_nutritional_profile",
+                description = "Look up stored nutritional information for a food item by name or alias.",
+                parametersSchema = buildJsonObject {
+                    put("type", JsonPrimitive("object"))
+                    putJsonObject("properties") {
+                        putJsonObject("query") {
+                            put("type", JsonPrimitive("string"))
+                            put("description", JsonPrimitive("Food name or alias to search for."))
+                        }
+                        putJsonObject("limit") {
+                            put("type", JsonPrimitive("integer"))
+                            put("description", JsonPrimitive("Maximum matches to return, capped at 5."))
+                        }
+                    }
+                }
+            )
+        ) { call ->
+            val query = call.arguments["query"]?.jsonPrimitive?.contentOrNull?.trim().orEmpty()
+            if (query.isBlank()) {
+                return@register ToolResult(
+                    toolCallId = call.id,
+                    name = call.name,
+                    content = JsonPrimitive("query is required"),
+                    isError = true
+                )
+            }
+
+            val limit = call.arguments["limit"]?.jsonPrimitive?.intOrNull?.coerceIn(1, 5) ?: 3
+            val matches = repository.searchByName(query, limit)
+            ToolResult(
+                toolCallId = call.id,
+                name = call.name,
+                content = buildJsonObject {
+                    put("query", JsonPrimitive(query))
+                    put("matches", JsonArray(matches.map { profile ->
+                        buildJsonObject {
+                            put("profileId", JsonPrimitive(profile.profileId))
+                            put("primaryName", JsonPrimitive(profile.primaryName))
+                            put("aliases", JsonArray(profile.aliases.map(::JsonPrimitive)))
+                            put("servingSize", profile.servingSize?.let(::JsonPrimitive) ?: JsonNull)
+                            putJsonObject("nutrition") {
+                                put("totalCalories", profile.calories?.let(::JsonPrimitive) ?: JsonNull)
+                                put("protein", profile.protein?.let(::JsonPrimitive) ?: JsonNull)
+                                put("carbohydrates", profile.carbohydrates?.let(::JsonPrimitive) ?: JsonNull)
+                                put("fat", profile.fat?.let(::JsonPrimitive) ?: JsonNull)
+                                put("fiber", profile.fiber?.let(::JsonPrimitive) ?: JsonNull)
+                                put("sugar", profile.sugar?.let(::JsonPrimitive) ?: JsonNull)
+                                put("sodium", profile.sodium?.let(::JsonPrimitive) ?: JsonNull)
+                                put("saturatedFat", profile.saturatedFat?.let(::JsonPrimitive) ?: JsonNull)
+                                put("transFat", profile.transFat?.let(::JsonPrimitive) ?: JsonNull)
+                                put("cholesterol", profile.cholesterol?.let(::JsonPrimitive) ?: JsonNull)
+                            }
+                            put("source", JsonPrimitive("exact"))
+                        }
                     }))
                 }
             )

@@ -149,13 +149,15 @@ class MealAnalysisResultTest {
             schemaVersion = "1.0",
             foodItems = listOf(
                 FoodItem("Rice", "1 cup", 200.0),
-                FoodItem("Beans", "1/2 cup", 120.0)
+                FoodItem("Beans", "1/2 cup", 120.0, nutritionSource = "exact", matchedProfileName = "Black Beans Can")
             ),
             nutrition = NutritionEstimate(
                 totalCalories = 320.0,
                 protein = 15.0,
                 carbohydrates = 58.0,
-                fat = 2.0
+                fat = 2.0,
+                source = "exact",
+                matchedProfiles = listOf("Black Beans Can")
             ),
             healthInsights = HealthInsights(
                 summary = "Good fiber source",
@@ -170,6 +172,8 @@ class MealAnalysisResultTest {
         assertEquals(original.schemaVersion, deserialized.schemaVersion)
         assertEquals(original.foodItems.size, deserialized.foodItems.size)
         assertEquals(original.nutrition?.totalCalories, deserialized.nutrition?.totalCalories)
+        assertEquals(original.nutrition?.source, deserialized.nutrition?.source)
+        assertEquals(original.foodItems[1].matchedProfileName, deserialized.foodItems[1].matchedProfileName)
         assertEquals(original.healthInsights?.summary, deserialized.healthInsights?.summary)
         assertEquals(original.confidence, deserialized.confidence)
     }

@@ -7,6 +7,7 @@ import com.wellnesswingman.domain.analysis.WeeklySummaryService
 import com.wellnesswingman.domain.analysis.DailyTotalsCalculator
 import com.wellnesswingman.domain.analysis.DefaultBackgroundAnalysisService
 import com.wellnesswingman.domain.analysis.DefaultStaleEntryRecoveryService
+import com.wellnesswingman.domain.analysis.NutritionLabelAnalyzer
 import com.wellnesswingman.domain.analysis.StaleEntryRecoveryService
 import com.wellnesswingman.domain.capture.PendingCaptureStore
 import com.wellnesswingman.domain.events.DefaultStatusChangeNotifier
@@ -40,7 +41,16 @@ val domainModule = module {
 
     // LLM
     singleOf(::LlmClientFactory)
-    singleOf(::ToolRegistry)
+    singleOf(::NutritionLabelAnalyzer)
+    single {
+        ToolRegistry(
+            trackedEntryRepository = get(),
+            entryAnalysisRepository = get(),
+            weightHistoryRepository = get(),
+            appSettingsRepository = get(),
+            nutritionalProfileRepository = get()
+        )
+    }
 
     // Event system
     single<StatusChangeNotifier> { DefaultStatusChangeNotifier() }

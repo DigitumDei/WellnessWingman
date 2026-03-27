@@ -195,6 +195,8 @@ class AnalysisOrchestrator(
         return """
 You are a health and wellness analysis assistant with vision capabilities. Analyze the provided content (image and/or text) and determine the type of health-related entry, then provide detailed analysis.
 
+If the content is a meal and one or more food items appear to be packaged foods with saved exact nutrition data, call the `lookup_nutritional_profile` tool before finalizing the meal analysis. Prefer exact saved nutrition values over visual estimation whenever a reasonable name or alias match is found.
+
 ENTRY TYPE DETECTION:
 First, determine what type of entry this is:
 - "Meal" - Food, beverages, nutrition-related content
@@ -215,7 +217,7 @@ REQUIRED JSON RESPONSE FORMAT:
   "mealAnalysis": {
     "schemaVersion": "1.0",
     "foodItems": [
-      {"name": "Food name", "portionSize": "size estimate", "calories": <number>, "confidence": <0.0-1.0>}
+      {"name": "Food name", "portionSize": "size estimate", "calories": <number>, "confidence": <0.0-1.0>, "nutritionSource": "<exact|estimated>", "matchedProfileName": "saved profile name or null"}
     ],
     "nutrition": {
       "totalCalories": <number>,
@@ -224,7 +226,9 @@ REQUIRED JSON RESPONSE FORMAT:
       "fat": <grams>,
       "fiber": <grams>,
       "sugar": <grams>,
-      "sodium": <milligrams>
+      "sodium": <milligrams>,
+      "source": "<exact|estimated>",
+      "matchedProfiles": ["saved profile name"]
     },
     "healthInsights": {
       "healthScore": <0-10>,
@@ -274,6 +278,7 @@ GUIDELINES:
 1. Set the appropriate analysis field based on detected entry type; set others to null
 2. Provide confidence scores (0.0-1.0) based on image clarity and certainty
 3. For meals: Identify all visible food items and estimate portions carefully
+4. For meals with matching saved packaged foods, use the lookup tool and mark those nutrition values as `exact`
 4. For exercise: Extract metrics from fitness tracker screenshots or estimate from images
 5. For sleep: Extract data from sleep tracker screenshots or provide estimates
 6. If a weighing scale is visible in the image, set detectedWeight to {"value": <number>, "unit": "<kg|lbs>", "confidence": <0.0-1.0>}; otherwise leave detectedWeight as null
