@@ -1,5 +1,11 @@
 package com.wellnesswingman.domain.llm
 
+import com.wellnesswingman.data.model.llm.ToolCall
+import com.wellnesswingman.data.model.llm.ToolDefinition
+import com.wellnesswingman.data.model.llm.ToolResult
+
+typealias ToolExecutor = suspend (ToolCall) -> ToolResult
+
 /**
  * Result of an LLM analysis operation.
  */
@@ -29,7 +35,9 @@ interface LlmClient {
     suspend fun analyzeImage(
         imageBytes: ByteArray,
         prompt: String,
-        jsonSchema: String? = null
+        jsonSchema: String? = null,
+        tools: List<ToolDefinition> = emptyList(),
+        toolExecutor: ToolExecutor? = null
     ): LlmAnalysisResult
 
     /**
@@ -45,6 +53,8 @@ interface LlmClient {
      */
     suspend fun generateCompletion(
         prompt: String,
-        jsonSchema: String? = null
+        jsonSchema: String? = null,
+        tools: List<ToolDefinition> = emptyList(),
+        toolExecutor: ToolExecutor? = null
     ): LlmAnalysisResult
 }

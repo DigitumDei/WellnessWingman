@@ -61,6 +61,13 @@ SELECT * FROM TrackedEntry
 WHERE entryType = ?
 ORDER BY capturedAt DESC;
 
+-- Get recent entries with optional type filter and limit
+getRecentEntries:
+SELECT * FROM TrackedEntry
+WHERE :entryType IS NULL OR entryType = :entryType
+ORDER BY capturedAt DESC
+LIMIT :limit;
+
 -- Get entries by status
 getEntriesByStatus:
 SELECT * FROM TrackedEntry

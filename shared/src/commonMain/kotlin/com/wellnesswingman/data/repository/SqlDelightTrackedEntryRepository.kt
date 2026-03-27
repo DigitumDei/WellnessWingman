@@ -29,6 +29,14 @@ class SqlDelightTrackedEntryRepository(
         queries.getAllEntries().executeAsList().map { it.toTrackedEntry() }
     }
 
+    override suspend fun getRecentEntries(limit: Int, entryType: EntryType?): List<TrackedEntry> =
+        withContext(Dispatchers.IO) {
+            queries.getRecentEntries(
+                entryType = entryType?.toStorageString(),
+                limit = limit.toLong()
+            ).executeAsList().map { it.toTrackedEntry() }
+        }
+
     override fun observeAllEntries(): Flow<List<TrackedEntry>> {
         return queries.getAllEntries()
             .asFlow()

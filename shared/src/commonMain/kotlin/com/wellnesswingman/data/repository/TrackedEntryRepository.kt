@@ -12,6 +12,7 @@ import kotlinx.datetime.LocalDate
  */
 interface TrackedEntryRepository {
     suspend fun getAllEntries(): List<TrackedEntry>
+    suspend fun getRecentEntries(limit: Int, entryType: EntryType? = null): List<TrackedEntry>
     fun observeAllEntries(): Flow<List<TrackedEntry>>
     suspend fun getEntryById(id: Long): TrackedEntry?
     suspend fun getEntryByExternalId(externalId: String): TrackedEntry?

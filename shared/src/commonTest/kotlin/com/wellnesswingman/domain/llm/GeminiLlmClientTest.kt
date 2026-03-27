@@ -1,0 +1,300 @@
+package com.wellnesswingman.domain.llm
+
+import com.wellnesswingman.data.model.llm.ToolDefinition
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.mock.MockEngine
+import io.ktor.client.engine.mock.respond
+import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.client.request.HttpRequestData
+import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpStatusCode
+import io.ktor.http.content.OutgoingContent
+import io.ktor.http.headersOf
+import io.ktor.serialization.kotlinx.json.json
+import io.ktor.utils.io.readRemaining
+import io.ktor.utils.io.core.readText
+import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.encodeToString
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
+
+class GeminiLlmClientTest {
+
+    private val jsonHeaders = headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+
+    @Test
+    fun `generateCompletion executes tool loop and returns final text`() = runTest {
+        val requests = mutableListOf<String>()
+        val responses = ArrayDeque(
+            listOf(
+                """{
+                    "candidates": [{
+                        "content": {
+                            "role": "model",
+                            "parts": [{
+                                "functionCall": {
+                                    "id": "call-1",
+                                    "name": "lookup_calories",
+                                    "args": {"food": "apple"}
+                                }
+                            }]
+                        }
+                    }],
+                    "usageMetadata": {
+                        "promptTokenCount": 10,
+                        "candidatesTokenCount": 4,
+                        "totalTokenCount": 14
+                    }
+                }""".trimIndent(),
+                """{
+                    "candidates": [{
+                        "content": {
+                            "role": "model",
+                            "parts": [{
+                                "text": "Estimated calories: 95"
+                            }]
+                        }
+                    }],
+                    "usageMetadata": {
+                        "promptTokenCount": 6,
+                        "candidatesTokenCount": 5,
+                        "totalTokenCount": 11
+                    }
+                }""".trimIndent()
+            )
+        )
+
+        val httpClient = mockGeminiClient(requests, responses)
+
+        var capturedFood: String? = null
+        val client = GeminiLlmClient(
+            apiKey = "test-key",
+            model = "gemini-1.5-flash",
+            httpClient = httpClient
+        )
+
+        val result = client.generateCompletion(
+            prompt = "How many calories are in an apple?",
+            tools = listOf(
+                ToolDefinition(
+                    name = "lookup_calories",
+                    description = "Looks up calorie estimates for a food.",
+                    parametersSchema = buildJsonObject {
+                        put("type", JsonPrimitive("object"))
+                    }
+                )
+            ),
+            toolExecutor = { toolCall ->
+                capturedFood = toolCall.arguments["food"]?.toString()?.trim('"')
+                com.wellnesswingman.data.model.llm.ToolResult(
+                    toolCallId = toolCall.id,
+                    name = toolCall.name,
+                    content = buildJsonObject {
+                        put("calories", JsonPrimitive(95))
+                    }
+                )
+            }
+        )
+
+        assertEquals("apple", capturedFood)
+        assertEquals("Estimated calories: 95", result.content)
+        assertEquals(16, result.diagnostics.promptTokens)
+        assertEquals(9, result.diagnostics.completionTokens)
+        assertEquals(25, result.diagnostics.totalTokens)
+        assertTrue(requests[1].contains("\"functionResponse\":{\"id\":\"call-1\",\"name\":\"lookup_calories\""))
+    }
+
+    @Test
+    fun `generateCompletion converts malformed tool arguments into tool error response`() = runTest {
+        val requests = mutableListOf<String>()
+        val responses = ArrayDeque(
+            listOf(
+                """{
+                    "candidates": [{
+                        "content": {
+                            "role": "model",
+                            "parts": [{
+                                "functionCall": {
+                                    "id": "call-1",
+                                    "name": "lookup_calories",
+                                    "args": "bad-args"
+                                },
+                                "thoughtSignature": "signature-1"
+                            }]
+                        }
+                    }]
+                }""".trimIndent(),
+                """{
+                    "candidates": [{
+                        "content": {
+                            "role": "model",
+                            "parts": [{"text": "Recovered"}]
+                        }
+                    }]
+                }""".trimIndent()
+            )
+        )
+
+        val httpClient = mockGeminiClient(requests, responses)
+
+        var executorCalled = false
+        val result = GeminiLlmClient(
+            apiKey = "test-key",
+            httpClient = httpClient
+        ).generateCompletion(
+            prompt = "hello",
+            tools = listOf(
+                ToolDefinition(
+                    name = "lookup_calories",
+                    description = "Looks up calories.",
+                    parametersSchema = buildJsonObject { put("type", JsonPrimitive("object")) }
+                )
+            ),
+            toolExecutor = {
+                executorCalled = true
+                error("should not be called")
+            }
+        )
+
+        assertFalse(executorCalled)
+        assertEquals("Recovered", result.content)
+        assertEquals(2, requests.size)
+        assertTrue(requests[1].contains("Tool arguments must be a JSON object"))
+        assertTrue(requests[1].contains("\"thoughtSignature\":\"signature-1\""))
+    }
+
+    @Test
+    fun `generateCompletion without tools returns plain response`() = runTest {
+        val httpClient = HttpClient(MockEngine {
+            respond(
+                content = """{
+                    "candidates": [{
+                        "content": {
+                            "role": "model",
+                            "parts": [{"text": "Plain completion"}]
+                        }
+                    }]
+                }""".trimIndent(),
+                status = HttpStatusCode.OK,
+                headers = jsonHeaders
+            )
+        }) {
+            install(ContentNegotiation) {
+                json(Json {
+                    ignoreUnknownKeys = true
+                    isLenient = true
+                })
+            }
+        }
+
+        val result = GeminiLlmClient(
+            apiKey = "test-key",
+            httpClient = httpClient
+        ).generateCompletion("hello")
+
+        assertFalse(result.content.isBlank())
+        assertEquals("Plain completion", result.content)
+    }
+
+    @Test
+    fun `gemini part round trips thought signature`() {
+        val payload = Json.encodeToString(
+            GeminiPart(
+                functionCall = GeminiFunctionCall(
+                    id = "call-1",
+                    name = "lookup_calories",
+                    args = buildJsonObject {
+                        put("food", JsonPrimitive("apple"))
+                    }
+                ),
+                thoughtSignature = "signature-1"
+            )
+        )
+
+        val decoded = Json.decodeFromString<GeminiPart>(payload)
+
+        assertEquals("signature-1", decoded.thoughtSignature)
+        assertEquals("lookup_calories", decoded.functionCall?.name)
+    }
+
+    @Test
+    fun `generateCompletion fails after exceeding max tool rounds`() = runTest {
+        val requests = mutableListOf<String>()
+        val responses = ArrayDeque(List(6) {
+            """{
+                "candidates": [{
+                    "content": {
+                        "role": "model",
+                        "parts": [{
+                            "functionCall": {
+                                "id": "call-1",
+                                "name": "lookup_calories",
+                                "args": {"food": "apple"}
+                            }
+                        }]
+                    }
+                }]
+            }""".trimIndent()
+        })
+
+        val client = GeminiLlmClient(
+            apiKey = "test-key",
+            httpClient = mockGeminiClient(requests, responses)
+        )
+
+        val error = assertFailsWith<IllegalStateException> {
+            client.generateCompletion(
+                prompt = "hello",
+                tools = listOf(
+                    ToolDefinition(
+                        name = "lookup_calories",
+                        description = "Looks up calories.",
+                        parametersSchema = buildJsonObject { put("type", JsonPrimitive("object")) }
+                    )
+                ),
+                toolExecutor = {
+                    com.wellnesswingman.data.model.llm.ToolResult(
+                        toolCallId = it.id,
+                        name = it.name,
+                        content = JsonPrimitive("ok")
+                    )
+                }
+            )
+        }
+
+        assertTrue(error.message.orEmpty().contains("exceeded 5 rounds"))
+        assertEquals(6, requests.size)
+    }
+
+    private fun mockGeminiClient(
+        requests: MutableList<String>,
+        responses: ArrayDeque<String>
+    ): HttpClient = HttpClient(MockEngine { request: HttpRequestData ->
+        requests += when (val body = request.body) {
+            is OutgoingContent.ByteArrayContent -> body.bytes().decodeToString()
+            is OutgoingContent.ReadChannelContent -> body.readFrom().readRemaining().readText()
+            is OutgoingContent.WriteChannelContent -> "<write-channel-content>"
+            is OutgoingContent.NoContent -> ""
+            else -> body.toString()
+        }
+        respond(
+            content = responses.removeFirst(),
+            status = HttpStatusCode.OK,
+            headers = jsonHeaders
+        )
+    }) {
+        install(ContentNegotiation) {
+            json(Json {
+                ignoreUnknownKeys = true
+                isLenient = true
+            })
+        }
+    }
+}
