@@ -12,7 +12,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.content.OutgoingContent
 import io.ktor.http.headersOf
 import io.ktor.serialization.kotlinx.json.json
-import io.ktor.utils.io.core.readRemaining
+import io.ktor.utils.io.readRemaining
 import io.ktor.utils.io.core.readText
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
