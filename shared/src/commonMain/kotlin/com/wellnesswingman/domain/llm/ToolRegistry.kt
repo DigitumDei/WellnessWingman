@@ -58,7 +58,7 @@ class ToolRegistry(
     fun definitions(): List<ToolDefinition> = definitions.values.toList()
 
     suspend fun execute(toolCall: ToolCall): ToolResult {
-        Napier.d("Tool call: ${toolCall.name} args=${toolCall.arguments}")
+        Napier.d("Tool call: ${toolCall.name}")
 
         val handler = handlers[toolCall.name]
             ?: run {
