@@ -170,7 +170,7 @@ class GeminiLlmClient(
         var completionTokens = 0
         var totalTokens = 0
 
-        repeat(MAX_TOOL_ROUNDS + 1) { round ->
+        repeat(MAX_TOOL_ROUNDS) { round ->
             val response = executeRequest(
                 GeminiRequest(
                     contents = contents,
@@ -238,6 +238,7 @@ class GeminiLlmClient(
                         }
                         GeminiPart(
                             functionResponse = GeminiFunctionResponse(
+                                id = functionCall.id,
                                 name = functionCall.name,
                                 response = buildJsonObject {
                                     put("ok", JsonPrimitive(!result.isError))
@@ -250,7 +251,42 @@ class GeminiLlmClient(
             )
         }
 
-        error("Gemini tool loop exceeded $MAX_TOOL_ROUNDS rounds")
+        val response = executeRequest(
+            GeminiRequest(
+                contents = contents,
+                tools = tools.takeIf { it.isNotEmpty() }?.let(::geminiTools),
+                generationConfig = GenerationConfig(
+                    responseMimeType = if (jsonSchema != null) "application/json" else null
+                )
+            )
+        )
+
+        promptTokens += response.usageMetadata?.promptTokenCount ?: 0
+        completionTokens += response.usageMetadata?.candidatesTokenCount ?: 0
+        totalTokens += response.usageMetadata?.totalTokenCount ?: 0
+
+        val candidate = response.candidates.firstOrNull()
+            ?: error("Gemini returned no completion candidates")
+        val content = candidate.content
+        if (content.parts.any { it.functionCall != null }) {
+            error("Gemini tool loop exceeded $MAX_TOOL_ROUNDS rounds")
+        }
+
+        val endTime = Clock.System.now()
+        val text = sanitize(
+            content.parts.mapNotNull { it.text }
+                .joinToString("\n")
+        )
+        return LlmAnalysisResult(
+            content = text,
+            diagnostics = LlmDiagnostics(
+                promptTokens = promptTokens,
+                completionTokens = completionTokens,
+                totalTokens = totalTokens,
+                model = model,
+                latencyMs = (endTime - startTime).inWholeMilliseconds
+            )
+        )
     }
 
     private suspend fun executeRequest(request: GeminiRequest): GeminiResponse {
@@ -336,6 +372,7 @@ data class GeminiFunctionCall(
 
 @Serializable
 data class GeminiFunctionResponse(
+    val id: String? = null,
     val name: String,
     val response: JsonObject
 )

@@ -140,7 +140,7 @@ class OpenAiLlmClient(
         var totalTokens = 0
         var resolvedModel = model
 
-        repeat(MAX_TOOL_ROUNDS + 1) { round ->
+        repeat(MAX_TOOL_ROUNDS) { round ->
             Napier.d("Sending OpenAI request, round ${round + 1}")
 
             val completion = client.chatCompletion(
@@ -211,7 +211,34 @@ class OpenAiLlmClient(
             }
         }
 
-        error("OpenAI tool loop exceeded $MAX_TOOL_ROUNDS rounds")
+        val completion = client.chatCompletion(
+            buildRequest(messages, jsonSchema, tools)
+        )
+
+        promptTokens += completion.usage?.promptTokens ?: 0
+        completionTokens += completion.usage?.completionTokens ?: 0
+        totalTokens += completion.usage?.totalTokens ?: 0
+        resolvedModel = completion.model.id
+
+        val message = completion.choices.firstOrNull()?.message
+            ?: error("OpenAI returned no completion choices")
+
+        if (message.toolCalls.orEmpty().isNotEmpty()) {
+            error("OpenAI tool loop exceeded $MAX_TOOL_ROUNDS rounds")
+        }
+
+        val endTime = Clock.System.now()
+        val content = sanitize(message.content.orEmpty())
+        return LlmAnalysisResult(
+            content = content,
+            diagnostics = LlmDiagnostics(
+                promptTokens = promptTokens,
+                completionTokens = completionTokens,
+                totalTokens = totalTokens,
+                model = resolvedModel,
+                latencyMs = (endTime - startTime).inWholeMilliseconds
+            )
+        )
     }
 
     private fun buildRequest(

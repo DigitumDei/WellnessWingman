@@ -31,6 +31,7 @@ class GeminiLlmClientTest {
 
     @Test
     fun `generateCompletion executes tool loop and returns final text`() = runTest {
+        val requests = mutableListOf<String>()
         val responses = ArrayDeque(
             listOf(
                 """{
@@ -70,20 +71,7 @@ class GeminiLlmClientTest {
             )
         )
 
-        val httpClient = HttpClient(MockEngine {
-            respond(
-                content = responses.removeFirst(),
-                status = HttpStatusCode.OK,
-                headers = jsonHeaders
-            )
-        }) {
-            install(ContentNegotiation) {
-                json(Json {
-                    ignoreUnknownKeys = true
-                    isLenient = true
-                })
-            }
-        }
+        val httpClient = mockGeminiClient(requests, responses)
 
         var capturedFood: String? = null
         val client = GeminiLlmClient(
@@ -120,6 +108,7 @@ class GeminiLlmClientTest {
         assertEquals(16, result.diagnostics.promptTokens)
         assertEquals(9, result.diagnostics.completionTokens)
         assertEquals(25, result.diagnostics.totalTokens)
+        assertTrue(requests[1].contains("\"functionResponse\":{\"id\":\"call-1\",\"name\":\"lookup_calories\""))
     }
 
     @Test
@@ -237,6 +226,7 @@ class GeminiLlmClientTest {
 
     @Test
     fun `generateCompletion fails after exceeding max tool rounds`() = runTest {
+        val requests = mutableListOf<String>()
         val responses = ArrayDeque(List(6) {
             """{
                 "candidates": [{
@@ -256,7 +246,7 @@ class GeminiLlmClientTest {
 
         val client = GeminiLlmClient(
             apiKey = "test-key",
-            httpClient = mockGeminiClient(mutableListOf(), responses)
+            httpClient = mockGeminiClient(requests, responses)
         )
 
         val error = assertFailsWith<IllegalStateException> {
@@ -280,6 +270,7 @@ class GeminiLlmClientTest {
         }
 
         assertTrue(error.message.orEmpty().contains("exceeded 5 rounds"))
+        assertEquals(6, requests.size)
     }
 
     private fun mockGeminiClient(

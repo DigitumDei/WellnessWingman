@@ -154,8 +154,9 @@ class ToolRegistry(
             val entryType = call.arguments["entryType"]?.jsonPrimitive?.contentOrNull?.trim()?.takeIf { it.isNotBlank() }
             val entries = trackedEntryRepository.getRecentEntries(
                 limit = limit,
-                entryType = entryType?.let { EntryType.fromString(it) }
+                entryType = parseEntryTypeOrNull(entryType)
             )
+            val latestAnalyses = latestAnalysesByEntryId(entries)
 
             ToolResult(
                 toolCallId = call.id,
@@ -164,11 +165,34 @@ class ToolRegistry(
                     put("limit", JsonPrimitive(limit))
                     put("entryType", entryType?.let(::JsonPrimitive) ?: JsonNull)
                     put("entries", JsonArray(entries.map { entry ->
-                        val latestAnalysis = entryAnalysisRepository.getLatestAnalysisForEntry(entry.entryId)
+                        val latestAnalysis = latestAnalyses[entry.entryId]
                         entryJson(entry, latestAnalysis)
                     }))
                 }
             )
+        }
+    }
+
+    private suspend fun latestAnalysesByEntryId(entries: List<TrackedEntry>): Map<Long, EntryAnalysis> {
+        if (entries.isEmpty()) return emptyMap()
+        val entryIds = entries.map { it.entryId }.toSet()
+        return entryAnalysisRepository.getAllAnalyses()
+            .asSequence()
+            .filter { it.entryId in entryIds }
+            .groupBy { it.entryId }
+            .mapValues { (_, analyses) -> analyses.maxBy { it.capturedAt } }
+    }
+
+    private fun parseEntryTypeOrNull(value: String?): EntryType? {
+        return when (value?.trim()?.lowercase()) {
+            null, "" -> null
+            "meal" -> EntryType.MEAL
+            "exercise" -> EntryType.EXERCISE
+            "sleep" -> EntryType.SLEEP
+            "other" -> EntryType.OTHER
+            "dailysummary" -> EntryType.DAILY_SUMMARY
+            "unknown" -> EntryType.UNKNOWN
+            else -> null
         }
     }
 

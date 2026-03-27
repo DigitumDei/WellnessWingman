@@ -34,6 +34,15 @@ class ToolRegistryTest {
     @Test
     fun `built in recent entries tool returns latest entry with analysis`() = runTest {
         val now = Clock.System.now()
+        val entryAnalysisRepository = FakeEntryAnalysisRepository(
+            mapOf(
+                2L to EntryAnalysis(
+                    entryId = 2L,
+                    capturedAt = now,
+                    insightsJson = """{"summary":"Tempo run"}"""
+                )
+            )
+        )
         val registry = ToolRegistry(
             trackedEntryRepository = FakeTrackedEntryRepository(
                 listOf(
@@ -54,15 +63,7 @@ class ToolRegistryTest {
                     )
                 )
             ),
-            entryAnalysisRepository = FakeEntryAnalysisRepository(
-                mapOf(
-                    2L to EntryAnalysis(
-                        entryId = 2L,
-                        capturedAt = now,
-                        insightsJson = """{"summary":"Tempo run"}"""
-                    )
-                )
-            ),
+            entryAnalysisRepository = entryAnalysisRepository,
             weightHistoryRepository = FakeWeightHistoryRepository(),
             appSettingsRepository = FakeAppSettingsRepository()
         )
@@ -81,9 +82,53 @@ class ToolRegistryTest {
         val entries = payload["entries"]!!.toString()
         assertTrue(entries.contains("\"entryId\":2"))
         assertTrue(entries.contains("Tempo run"))
-        assertTrue(entries.contains(""""dataPayload":{"duration":45}"""))
-        assertTrue(entries.contains(""""latestInsightsJson":{"summary":"Tempo run"}"""))
+        assertTrue(entries.contains("\"dataPayload\":{\"duration\":45}"))
+        assertTrue(entries.contains("\"latestInsightsJson\":{\"summary\":\"Tempo run\"}"))
+        assertEquals(1, entryAnalysisRepository.getAllAnalysesCalls)
+        assertEquals(0, entryAnalysisRepository.getLatestAnalysisCalls)
         assertEquals(3, registry.definitions().size)
+    }
+
+    @Test
+    fun `built in recent entries tool ignores invalid entry type filter`() = runTest {
+        val now = Clock.System.now()
+        val trackedEntryRepository = FakeTrackedEntryRepository(
+            listOf(
+                TrackedEntry(
+                    entryId = 1L,
+                    entryType = EntryType.MEAL,
+                    capturedAt = now,
+                    processingStatus = ProcessingStatus.COMPLETED
+                ),
+                TrackedEntry(
+                    entryId = 2L,
+                    entryType = EntryType.EXERCISE,
+                    capturedAt = Instant.fromEpochMilliseconds(now.toEpochMilliseconds() - 1_000L),
+                    processingStatus = ProcessingStatus.COMPLETED
+                )
+            )
+        )
+        val registry = ToolRegistry(
+            trackedEntryRepository = trackedEntryRepository,
+            entryAnalysisRepository = FakeEntryAnalysisRepository(),
+            weightHistoryRepository = FakeWeightHistoryRepository(),
+            appSettingsRepository = FakeAppSettingsRepository()
+        )
+
+        val result = registry.execute(
+            ToolCall(
+                name = "get_recent_entries",
+                arguments = buildJsonObject {
+                    put("entryType", JsonPrimitive("NotARealType"))
+                }
+            )
+        )
+
+        val payload = assertIs<JsonObject>(result.content)
+        assertFalse(result.isError)
+        assertEquals(null, trackedEntryRepository.lastRequestedEntryType)
+        assertTrue(payload["entries"].toString().contains("\"entryId\":1"))
+        assertTrue(payload["entries"].toString().contains("\"entryId\":2"))
     }
 
     @Test
@@ -222,9 +267,12 @@ class ToolRegistryTest {
     private class FakeTrackedEntryRepository(
         private val entries: List<TrackedEntry> = emptyList()
     ) : TrackedEntryRepository {
+        var lastRequestedEntryType: EntryType? = null
+
         override suspend fun getAllEntries(): List<TrackedEntry> = entries
         override suspend fun getRecentEntries(limit: Int, entryType: EntryType?): List<TrackedEntry> =
             entries
+                .also { lastRequestedEntryType = entryType }
                 .filter { entryType == null || it.entryType == entryType }
                 .sortedByDescending { it.capturedAt }
                 .take(limit)
@@ -250,8 +298,18 @@ class ToolRegistryTest {
     private class FakeEntryAnalysisRepository(
         private val analyses: Map<Long, EntryAnalysis> = emptyMap()
     ) : EntryAnalysisRepository {
-        override suspend fun getLatestAnalysisForEntry(entryId: Long): EntryAnalysis? = analyses[entryId]
-        override suspend fun getAllAnalyses(): List<EntryAnalysis> = analyses.values.toList()
+        var getAllAnalysesCalls: Int = 0
+        var getLatestAnalysisCalls: Int = 0
+
+        override suspend fun getLatestAnalysisForEntry(entryId: Long): EntryAnalysis? {
+            getLatestAnalysisCalls += 1
+            return analyses[entryId]
+        }
+
+        override suspend fun getAllAnalyses(): List<EntryAnalysis> {
+            getAllAnalysesCalls += 1
+            return analyses.values.toList()
+        }
         override suspend fun getAnalysisById(id: Long): EntryAnalysis? = null
         override suspend fun getAnalysisByExternalId(externalId: String): EntryAnalysis? = null
         override suspend fun getAnalysesForEntry(entryId: Long): List<EntryAnalysis> = listOfNotNull(analyses[entryId])

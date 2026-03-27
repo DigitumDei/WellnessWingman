@@ -188,22 +188,26 @@ class OpenAiLlmClientTest {
 
     @Test
     fun `generateCompletion fails after exceeding max tool rounds`() = runTest {
+        var requestCount = 0
         val api = mockk<OpenAI>()
-        coEvery { api.chatCompletion(any()) } returns toolCallCompletion(
-            ChatMessage(
-                role = ChatRole.Assistant,
-                content = null as String?,
-                toolCalls = listOf(
-                    OpenAiToolCall.Function(
-                        id = ToolId("call-1"),
-                        function = FunctionCall(
-                            nameOrNull = "lookup_calories",
-                            argumentsOrNull = """{"food":"apple"}"""
+        coEvery { api.chatCompletion(any()) } answers {
+            requestCount += 1
+            toolCallCompletion(
+                ChatMessage(
+                    role = ChatRole.Assistant,
+                    content = null as String?,
+                    toolCalls = listOf(
+                        OpenAiToolCall.Function(
+                            id = ToolId("call-1"),
+                            function = FunctionCall(
+                                nameOrNull = "lookup_calories",
+                                argumentsOrNull = """{"food":"apple"}"""
+                            )
                         )
                     )
                 )
             )
-        )
+        }
 
         val client = OpenAiLlmClient(
             apiKey = "test-key",
@@ -231,6 +235,7 @@ class OpenAiLlmClientTest {
         }
 
         assertTrue(error.message.orEmpty().contains("exceeded 5 rounds"))
+        assertEquals(6, requestCount)
     }
 
     private fun toolCallCompletion(message: ChatMessage) = ChatCompletion(
