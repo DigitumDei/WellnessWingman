@@ -36,16 +36,16 @@ WHERE externalId = ?;
 
 searchByName:
 SELECT * FROM NutritionalProfile
-WHERE lower(primaryName) LIKE lower(?)
-   OR lower(aliases) LIKE lower(?)
+WHERE lower(primaryName) LIKE lower(:query)
+   OR lower(aliases) LIKE lower(:aliases)
 ORDER BY
     CASE
-        WHEN lower(primaryName) = lower(?) THEN 0
-        WHEN lower(primaryName) LIKE lower(?) THEN 1
+        WHEN lower(primaryName) = lower(:exact) THEN 0
+        WHEN lower(primaryName) LIKE lower(:prefix) THEN 1
         ELSE 2
     END,
     primaryName COLLATE NOCASE ASC
-LIMIT ?;
+LIMIT :limit;
 
 insert:
 INSERT INTO NutritionalProfile(
