@@ -34,11 +34,14 @@ import com.wellnesswingman.data.repository.EntryAnalysisRepository
 import com.wellnesswingman.data.repository.PolarSyncRepository
 import com.wellnesswingman.data.repository.TrackedEntryRepository
 import com.wellnesswingman.data.repository.WeightHistoryRepository
+import com.wellnesswingman.data.repository.AppSettingsRepository
+import com.wellnesswingman.data.repository.LlmProvider
 import com.wellnesswingman.domain.llm.LlmAnalysisResult
 import com.wellnesswingman.domain.llm.LlmClient
 import com.wellnesswingman.domain.llm.LlmClientFactory
 import com.wellnesswingman.domain.llm.LlmDiagnostics
 import com.wellnesswingman.domain.llm.ToolExecutor
+import com.wellnesswingman.domain.llm.ToolRegistry
 import com.wellnesswingman.domain.polar.PolarInsightService
 import com.wellnesswingman.domain.testutil.FakePolarSyncRepository
 import io.mockk.every
@@ -133,6 +136,58 @@ class DailySummaryServiceTest {
         override suspend fun nullifyRelatedEntryId(entryId: Long) {}
         override suspend fun upsertWeightRecord(record: WeightRecord) {}
     }
+
+    private class FakeAppSettingsRepository : AppSettingsRepository {
+        override fun getApiKey(provider: LlmProvider): String? = null
+        override fun setApiKey(provider: LlmProvider, apiKey: String) {}
+        override fun removeApiKey(provider: LlmProvider) {}
+        override fun getSelectedProvider(): LlmProvider = LlmProvider.GEMINI
+        override fun setSelectedProvider(provider: LlmProvider) {}
+        override fun getModel(provider: LlmProvider): String? = null
+        override fun setModel(provider: LlmProvider, model: String) {}
+        override fun clear() {}
+        override fun getHeight(): Double? = null
+        override fun setHeight(height: Double) {}
+        override fun getHeightUnit(): String = "cm"
+        override fun setHeightUnit(unit: String) {}
+        override fun getSex(): String? = null
+        override fun setSex(sex: String) {}
+        override fun getCurrentWeight(): Double? = null
+        override fun setCurrentWeight(weight: Double) {}
+        override fun getWeightUnit(): String = "kg"
+        override fun setWeightUnit(unit: String) {}
+        override fun getDateOfBirth(): String? = null
+        override fun setDateOfBirth(dob: String) {}
+        override fun getActivityLevel(): String? = null
+        override fun setActivityLevel(level: String) {}
+        override fun clearHeight() {}
+        override fun clearCurrentWeight() {}
+        override fun clearProfileData() {}
+        override fun getImageRetentionThresholdDays(): Int = 30
+        override fun setImageRetentionThresholdDays(days: Int) {}
+        override fun getPolarAccessToken(): String? = null
+        override fun setPolarAccessToken(token: String) {}
+        override fun getPolarRefreshToken(): String? = null
+        override fun setPolarRefreshToken(token: String) {}
+        override fun getPolarTokenExpiresAt(): Long = 0L
+        override fun setPolarTokenExpiresAt(expiresAt: Long) {}
+        override fun getPolarUserId(): String? = null
+        override fun setPolarUserId(userId: String) {}
+        override fun getPendingOAuthState(): String? = null
+        override fun setPendingOAuthState(state: String) {}
+        override fun getPendingOAuthSessionId(): String? = null
+        override fun setPendingOAuthSessionId(sessionId: String) {}
+        override fun clearPendingOAuthSession() {}
+        override fun clearPolarTokens() {}
+        override fun isPolarConnected(): Boolean = false
+    }
+
+    private fun makeToolRegistry() = ToolRegistry(
+        trackedEntryRepository = FakeTrackedEntryRepository(),
+        entryAnalysisRepository = FakeEntryAnalysisRepository(),
+        weightHistoryRepository = FakeWeightHistoryRepository(),
+        appSettingsRepository = FakeAppSettingsRepository()
+    )
 
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
 
@@ -257,6 +312,50 @@ class DailySummaryServiceTest {
     // ── Tests ─────────────────────────────────────────────────────────────────
 
     @Test
+    fun `generateSummary passes tool definitions and executor to LLM`() = runTest {
+        var capturedToolNames: List<String> = emptyList()
+        var capturedExecutor: ToolExecutor? = null
+
+        val fakeLlmClient = object : LlmClient {
+            override suspend fun analyzeImage(
+                imageBytes: ByteArray, prompt: String, jsonSchema: String?,
+                tools: List<com.wellnesswingman.data.model.llm.ToolDefinition>, toolExecutor: ToolExecutor?
+            ) = LlmAnalysisResult("""{"insights":[],"recommendations":[]}""", LlmDiagnostics())
+            override suspend fun transcribeAudio(audioBytes: ByteArray, mimeType: String) = ""
+            override suspend fun generateCompletion(
+                prompt: String, jsonSchema: String?,
+                tools: List<com.wellnesswingman.data.model.llm.ToolDefinition>, toolExecutor: ToolExecutor?
+            ): LlmAnalysisResult {
+                capturedToolNames = tools.map { it.name }
+                capturedExecutor = toolExecutor
+                return LlmAnalysisResult("""{"insights":[],"recommendations":[]}""", LlmDiagnostics())
+            }
+        }
+        val factory = mockk<LlmClientFactory>()
+        every { factory.hasCurrentApiKey() } returns true
+        every { factory.createForCurrentProvider() } returns fakeLlmClient
+
+        val entry = makeCompletedEntry(1L, EntryType.MEAL)
+        val service = DailySummaryService(
+            trackedEntryRepository = FakeTrackedEntryRepository(listOf(entry)),
+            entryAnalysisRepository = FakeEntryAnalysisRepository(),
+            dailySummaryRepository = FakeDailySummaryRepository(),
+            llmClientFactory = factory,
+            toolRegistry = makeToolRegistry(),
+            dailyTotalsCalculator = DailyTotalsCalculator(),
+            weightHistoryRepository = FakeWeightHistoryRepository(),
+            polarInsightService = polarInsightService()
+        )
+
+        service.generateSummary(LocalDate(2025, 3, 1))
+
+        assertTrue(capturedToolNames.contains("get_user_profile"))
+        assertTrue(capturedToolNames.contains("get_weight_history"))
+        assertTrue(capturedToolNames.contains("get_recent_entries"))
+        assertNotNull(capturedExecutor)
+    }
+
+    @Test
     fun `generateSummary returns Error when no API key`() = runTest {
         val service = DailySummaryService(
             trackedEntryRepository = FakeTrackedEntryRepository(),
@@ -265,6 +364,7 @@ class DailySummaryServiceTest {
             llmClientFactory = makeLlmClientFactory(hasKey = false),
             dailyTotalsCalculator = DailyTotalsCalculator(),
             weightHistoryRepository = FakeWeightHistoryRepository(),
+            toolRegistry = makeToolRegistry(),
             polarInsightService = polarInsightService()
         )
 
@@ -283,6 +383,7 @@ class DailySummaryServiceTest {
             llmClientFactory = makeLlmClientFactory(hasKey = true),
             dailyTotalsCalculator = DailyTotalsCalculator(),
             weightHistoryRepository = FakeWeightHistoryRepository(),
+            toolRegistry = makeToolRegistry(),
             polarInsightService = polarInsightService()
         )
 
@@ -302,6 +403,7 @@ class DailySummaryServiceTest {
             llmClientFactory = makeCapturingLlmClientFactory(capturedPrompts = prompts),
             dailyTotalsCalculator = DailyTotalsCalculator(),
             weightHistoryRepository = FakeWeightHistoryRepository(),
+            toolRegistry = makeToolRegistry(),
             polarInsightService = polarInsightService(
                 activities = listOf(
                     StoredPolarActivity(1, "activity:2025-03-01", "Polar", date, null, Clock.System.now(), PolarDailyActivity("2025-03-01", 8123, "00:00:00", 60000, listOf(8123)))
@@ -341,6 +443,7 @@ class DailySummaryServiceTest {
             llmClientFactory = makeCapturingLlmClientFactory(capturedPrompts = prompts),
             dailyTotalsCalculator = DailyTotalsCalculator(),
             weightHistoryRepository = FakeWeightHistoryRepository(),
+            toolRegistry = makeToolRegistry(),
             polarInsightService = polarInsightService(
                 sleepResults = listOf(
                     StoredPolarSleepResult(2, "sleep:2025-03-01", "Polar", date, null, null, Clock.System.now(), PolarSleepResult("2025-03-01", "2025-02-28T23:00:00Z", "2025-03-01T06:00:00Z", 25200, 7200, 5400, 10800, 1800, 91.0, 4.2, 2, 0, 85.0, 80.0, 82.0, 4))
@@ -370,6 +473,7 @@ class DailySummaryServiceTest {
             llmClientFactory = makeLlmClientFactory(hasKey = true),
             dailyTotalsCalculator = DailyTotalsCalculator(),
             weightHistoryRepository = FakeWeightHistoryRepository(),
+            toolRegistry = makeToolRegistry(),
             polarInsightService = polarInsightService()
         )
 
@@ -393,6 +497,7 @@ class DailySummaryServiceTest {
             llmClientFactory = makeLlmClientFactory(hasKey = true),
             dailyTotalsCalculator = DailyTotalsCalculator(),
             weightHistoryRepository = FakeWeightHistoryRepository(),
+            toolRegistry = makeToolRegistry(),
             polarInsightService = polarInsightService()
         )
 
@@ -433,6 +538,7 @@ class DailySummaryServiceTest {
             llmClientFactory = makeCapturingLlmClientFactory(response = llmResponse, capturedPrompts = capturedPrompts),
             dailyTotalsCalculator = DailyTotalsCalculator(),
             weightHistoryRepository = FakeWeightHistoryRepository(),
+            toolRegistry = makeToolRegistry(),
             polarInsightService = polarInsightService()
         )
 
@@ -478,6 +584,7 @@ class DailySummaryServiceTest {
             llmClientFactory = makeCapturingLlmClientFactory(response = llmResponse, capturedPrompts = capturedPrompts),
             dailyTotalsCalculator = DailyTotalsCalculator(),
             weightHistoryRepository = FakeWeightHistoryRepository(),
+            toolRegistry = makeToolRegistry(),
             polarInsightService = polarInsightService()
         )
 
@@ -513,6 +620,7 @@ class DailySummaryServiceTest {
             llmClientFactory = makeCapturingLlmClientFactory(response = llmResponse, capturedPrompts = capturedPrompts),
             dailyTotalsCalculator = DailyTotalsCalculator(),
             weightHistoryRepository = FakeWeightHistoryRepository(),
+            toolRegistry = makeToolRegistry(),
             polarInsightService = polarInsightService()
         )
 
@@ -547,6 +655,7 @@ class DailySummaryServiceTest {
             llmClientFactory = makeCapturingLlmClientFactory(response = llmResponse, capturedPrompts = capturedPrompts),
             dailyTotalsCalculator = DailyTotalsCalculator(),
             weightHistoryRepository = FakeWeightHistoryRepository(),
+            toolRegistry = makeToolRegistry(),
             polarInsightService = polarInsightService()
         )
 
@@ -578,6 +687,7 @@ class DailySummaryServiceTest {
             llmClientFactory = makeCapturingLlmClientFactory(response = llmResponse, capturedPrompts = capturedPrompts),
             dailyTotalsCalculator = DailyTotalsCalculator(),
             weightHistoryRepository = FakeWeightHistoryRepository(),
+            toolRegistry = makeToolRegistry(),
             polarInsightService = polarInsightService()
         )
 
@@ -611,6 +721,7 @@ class DailySummaryServiceTest {
             llmClientFactory = makeLlmClientFactory(hasKey = true, response = altFormatResponse),
             dailyTotalsCalculator = DailyTotalsCalculator(),
             weightHistoryRepository = FakeWeightHistoryRepository(),
+            toolRegistry = makeToolRegistry(),
             polarInsightService = polarInsightService()
         )
 
@@ -645,6 +756,7 @@ class DailySummaryServiceTest {
             llmClientFactory = makeLlmClientFactory(hasKey = true, response = textResponse),
             dailyTotalsCalculator = DailyTotalsCalculator(),
             weightHistoryRepository = FakeWeightHistoryRepository(),
+            toolRegistry = makeToolRegistry(),
             polarInsightService = polarInsightService()
         )
 
@@ -677,6 +789,7 @@ class DailySummaryServiceTest {
             llmClientFactory = makeCapturingLlmClientFactory(response = llmResponse, capturedPrompts = capturedPrompts),
             dailyTotalsCalculator = DailyTotalsCalculator(),
             weightHistoryRepository = FakeWeightHistoryRepository(listOf(weightRecord)),
+            toolRegistry = makeToolRegistry(),
             polarInsightService = polarInsightService()
         )
 
@@ -710,6 +823,7 @@ class DailySummaryServiceTest {
             llmClientFactory = makeLlmClientFactory(hasKey = true, response = llmResponse),
             dailyTotalsCalculator = DailyTotalsCalculator(),
             weightHistoryRepository = FakeWeightHistoryRepository(),
+            toolRegistry = makeToolRegistry(),
             polarInsightService = polarInsightService()
         )
 
@@ -737,6 +851,7 @@ class DailySummaryServiceTest {
             llmClientFactory = makeLlmClientFactory(hasKey = true, response = llmResponse),
             dailyTotalsCalculator = DailyTotalsCalculator(),
             weightHistoryRepository = FakeWeightHistoryRepository(),
+            toolRegistry = makeToolRegistry(),
             polarInsightService = polarInsightService()
         )
 
@@ -785,6 +900,7 @@ class DailySummaryServiceTest {
             llmClientFactory = makeLlmClientFactory(hasKey = true, response = llmResponse),
             dailyTotalsCalculator = DailyTotalsCalculator(),
             weightHistoryRepository = FakeWeightHistoryRepository(),
+            toolRegistry = makeToolRegistry(),
             polarInsightService = polarInsightService()
         )
 
@@ -806,6 +922,7 @@ class DailySummaryServiceTest {
             llmClientFactory = makeLlmClientFactory(hasKey = true, response = llmResponse),
             dailyTotalsCalculator = DailyTotalsCalculator(),
             weightHistoryRepository = FakeWeightHistoryRepository(),
+            toolRegistry = makeToolRegistry(),
             polarInsightService = polarInsightService()
         )
 
@@ -838,6 +955,7 @@ class DailySummaryServiceTest {
             llmClientFactory = makeLlmClientFactory(hasKey = true, response = llmResponse),
             dailyTotalsCalculator = DailyTotalsCalculator(),
             weightHistoryRepository = FakeWeightHistoryRepository(),
+            toolRegistry = makeToolRegistry(),
             polarInsightService = polarInsightService()
         )
 
@@ -876,6 +994,7 @@ class DailySummaryServiceTest {
             llmClientFactory = makeLlmClientFactory(hasKey = true, response = llmResponse),
             dailyTotalsCalculator = DailyTotalsCalculator(),
             weightHistoryRepository = FakeWeightHistoryRepository(),
+            toolRegistry = makeToolRegistry(),
             polarInsightService = polarInsightService()
         )
 
@@ -910,6 +1029,7 @@ class DailySummaryServiceTest {
             llmClientFactory = makeLlmClientFactory(hasKey = true, response = llmResponse),
             dailyTotalsCalculator = DailyTotalsCalculator(),
             weightHistoryRepository = FakeWeightHistoryRepository(),
+            toolRegistry = makeToolRegistry(),
             polarInsightService = polarInsightService()
         )
 
@@ -942,6 +1062,7 @@ class DailySummaryServiceTest {
             llmClientFactory = makeLlmClientFactory(hasKey = true, response = llmResponse),
             dailyTotalsCalculator = DailyTotalsCalculator(),
             weightHistoryRepository = FakeWeightHistoryRepository(),
+            toolRegistry = makeToolRegistry(),
             polarInsightService = polarInsightService()
         )
 
@@ -971,6 +1092,7 @@ class DailySummaryServiceTest {
             llmClientFactory = makeLlmClientFactory(hasKey = true, response = llmResponse),
             dailyTotalsCalculator = DailyTotalsCalculator(),
             weightHistoryRepository = FakeWeightHistoryRepository(),
+            toolRegistry = makeToolRegistry(),
             polarInsightService = polarInsightService()
         )
 
@@ -1000,6 +1122,7 @@ class DailySummaryServiceTest {
             llmClientFactory = makeLlmClientFactory(hasKey = true, response = llmResponse),
             dailyTotalsCalculator = DailyTotalsCalculator(),
             weightHistoryRepository = FakeWeightHistoryRepository(),
+            toolRegistry = makeToolRegistry(),
             polarInsightService = polarInsightService()
         )
 
@@ -1029,6 +1152,7 @@ class DailySummaryServiceTest {
             llmClientFactory = makeLlmClientFactory(hasKey = true, response = llmResponse),
             dailyTotalsCalculator = DailyTotalsCalculator(),
             weightHistoryRepository = FakeWeightHistoryRepository(),
+            toolRegistry = makeToolRegistry(),
             polarInsightService = polarInsightService()
         )
 
@@ -1061,6 +1185,7 @@ class DailySummaryServiceTest {
             llmClientFactory = makeLlmClientFactory(hasKey = true, response = llmResponse),
             dailyTotalsCalculator = DailyTotalsCalculator(),
             weightHistoryRepository = FakeWeightHistoryRepository(),
+            toolRegistry = makeToolRegistry(),
             polarInsightService = polarInsightService()
         )
 
@@ -1085,6 +1210,7 @@ class DailySummaryServiceTest {
             llmClientFactory = makeLlmClientFactory(hasKey = true, response = llmResponse),
             dailyTotalsCalculator = DailyTotalsCalculator(),
             weightHistoryRepository = FakeWeightHistoryRepository(),
+            toolRegistry = makeToolRegistry(),
             polarInsightService = polarInsightService()
         )
 
@@ -1116,6 +1242,7 @@ class DailySummaryServiceTest {
             llmClientFactory = makeLlmClientFactory(hasKey = true, response = llmResponse),
             dailyTotalsCalculator = DailyTotalsCalculator(),
             weightHistoryRepository = FakeWeightHistoryRepository(),
+            toolRegistry = makeToolRegistry(),
             polarInsightService = polarInsightService()
         )
 
@@ -1149,6 +1276,7 @@ class DailySummaryServiceTest {
             llmClientFactory = makeLlmClientFactory(hasKey = true, response = llmResponse),
             dailyTotalsCalculator = DailyTotalsCalculator(),
             weightHistoryRepository = FakeWeightHistoryRepository(),
+            toolRegistry = makeToolRegistry(),
             polarInsightService = polarInsightService()
         )
 
@@ -1185,6 +1313,7 @@ class DailySummaryServiceTest {
             llmClientFactory = makeLlmClientFactory(hasKey = true, response = llmResponse),
             dailyTotalsCalculator = DailyTotalsCalculator(),
             weightHistoryRepository = throwingWeightRepo,
+            toolRegistry = makeToolRegistry(),
             polarInsightService = polarInsightService()
         )
 
@@ -1210,6 +1339,7 @@ class DailySummaryServiceTest {
             llmClientFactory = makeCapturingLlmClientFactory(capturedPrompts = prompts),
             dailyTotalsCalculator = DailyTotalsCalculator(),
             weightHistoryRepository = FakeWeightHistoryRepository(),
+            toolRegistry = makeToolRegistry(),
             polarInsightService = throwingPolarInsightService()
         )
 
@@ -1240,6 +1370,7 @@ class DailySummaryServiceTest {
             llmClientFactory = makeLlmClientFactory(hasKey = true, response = unstructuredResponse),
             dailyTotalsCalculator = DailyTotalsCalculator(),
             weightHistoryRepository = FakeWeightHistoryRepository(),
+            toolRegistry = makeToolRegistry(),
             polarInsightService = polarInsightService()
         )
 
@@ -1267,6 +1398,7 @@ class DailySummaryServiceTest {
             llmClientFactory = makeLlmClientFactory(hasKey = true, response = llmResponse),
             dailyTotalsCalculator = DailyTotalsCalculator(),
             weightHistoryRepository = FakeWeightHistoryRepository(),
+            toolRegistry = makeToolRegistry(),
             polarInsightService = polarInsightService()
         )
 
@@ -1298,6 +1430,7 @@ class DailySummaryServiceTest {
             llmClientFactory = makeCapturingLlmClientFactory(capturedPrompts = prompts),
             dailyTotalsCalculator = DailyTotalsCalculator(),
             weightHistoryRepository = FakeWeightHistoryRepository(),
+            toolRegistry = makeToolRegistry(),
             polarInsightService = polarInsightService(
                 trainingSessions = listOf(
                     StoredPolarTrainingSession(2, "session-1", "Polar", date, "2025-03-01T08:00:00", Clock.System.now(), PolarTrainingSession("session-1", "2025-03-01T08:00:00", 3600, "1", 430, 5000.0, 148, 172, "Tempo run"))
@@ -1332,6 +1465,7 @@ class DailySummaryServiceTest {
             llmClientFactory = makeCapturingLlmClientFactory(capturedPrompts = prompts),
             dailyTotalsCalculator = DailyTotalsCalculator(),
             weightHistoryRepository = FakeWeightHistoryRepository(),
+            toolRegistry = makeToolRegistry(),
             polarInsightService = polarInsightService(
                 trainingSessions = listOf(
                     StoredPolarTrainingSession(2, "session-1", "Polar", date, "2025-03-01T08:00:00", Clock.System.now(), PolarTrainingSession("session-1", "2025-03-01T08:00:00", 3600, "1", 430, 5000.0, 148, 172, "Tempo run"))

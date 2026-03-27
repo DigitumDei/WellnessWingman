@@ -22,7 +22,11 @@ import com.wellnesswingman.data.model.polar.StoredPolarNightlyRecharge
 import com.wellnesswingman.data.model.polar.StoredPolarSleepResult
 import com.wellnesswingman.data.model.polar.StoredPolarTrainingSession
 import com.wellnesswingman.data.model.polar.StoredPolarUserProfile
+import com.wellnesswingman.data.model.EntryAnalysis
+import com.wellnesswingman.data.repository.AppSettingsRepository
 import com.wellnesswingman.data.repository.DailySummaryRepository
+import com.wellnesswingman.data.repository.EntryAnalysisRepository
+import com.wellnesswingman.data.repository.LlmProvider
 import com.wellnesswingman.data.repository.PolarSyncRepository
 import com.wellnesswingman.data.repository.TrackedEntryRepository
 import com.wellnesswingman.data.repository.WeightHistoryRepository
@@ -32,6 +36,7 @@ import com.wellnesswingman.domain.llm.LlmClient
 import com.wellnesswingman.domain.llm.LlmClientFactory
 import com.wellnesswingman.domain.llm.LlmDiagnostics
 import com.wellnesswingman.domain.llm.ToolExecutor
+import com.wellnesswingman.domain.llm.ToolRegistry
 import com.wellnesswingman.domain.polar.PolarInsightService
 import com.wellnesswingman.domain.testutil.FakePolarSyncRepository
 import io.mockk.every
@@ -138,6 +143,71 @@ class WeeklySummaryServiceTest {
         override suspend fun nullifyRelatedEntryId(entryId: Long) {}
         override suspend fun upsertWeightRecord(record: WeightRecord) {}
     }
+
+    private class FakeEntryAnalysisRepository : EntryAnalysisRepository {
+        override suspend fun getLatestAnalysisForEntry(entryId: Long): EntryAnalysis? = null
+        override suspend fun getAllAnalyses(): List<EntryAnalysis> = emptyList()
+        override suspend fun getAnalysisById(id: Long): EntryAnalysis? = null
+        override suspend fun getAnalysisByExternalId(externalId: String): EntryAnalysis? = null
+        override suspend fun getAnalysesForEntry(entryId: Long): List<EntryAnalysis> = emptyList()
+        override suspend fun insertAnalysis(analysis: EntryAnalysis): Long = 0L
+        override suspend fun updateAnalysis(id: Long, insightsJson: String, schemaVersion: String) {}
+        override suspend fun deleteAnalysis(id: Long) {}
+        override suspend fun deleteAnalysesForEntry(entryId: Long) {}
+        override suspend fun upsertAnalysis(analysis: EntryAnalysis) {}
+    }
+
+    private class FakeAppSettingsRepository : AppSettingsRepository {
+        override fun getApiKey(provider: LlmProvider): String? = null
+        override fun setApiKey(provider: LlmProvider, apiKey: String) {}
+        override fun removeApiKey(provider: LlmProvider) {}
+        override fun getSelectedProvider(): LlmProvider = LlmProvider.GEMINI
+        override fun setSelectedProvider(provider: LlmProvider) {}
+        override fun getModel(provider: LlmProvider): String? = null
+        override fun setModel(provider: LlmProvider, model: String) {}
+        override fun clear() {}
+        override fun getHeight(): Double? = null
+        override fun setHeight(height: Double) {}
+        override fun getHeightUnit(): String = "cm"
+        override fun setHeightUnit(unit: String) {}
+        override fun getSex(): String? = null
+        override fun setSex(sex: String) {}
+        override fun getCurrentWeight(): Double? = null
+        override fun setCurrentWeight(weight: Double) {}
+        override fun getWeightUnit(): String = "kg"
+        override fun setWeightUnit(unit: String) {}
+        override fun getDateOfBirth(): String? = null
+        override fun setDateOfBirth(dob: String) {}
+        override fun getActivityLevel(): String? = null
+        override fun setActivityLevel(level: String) {}
+        override fun clearHeight() {}
+        override fun clearCurrentWeight() {}
+        override fun clearProfileData() {}
+        override fun getImageRetentionThresholdDays(): Int = 30
+        override fun setImageRetentionThresholdDays(days: Int) {}
+        override fun getPolarAccessToken(): String? = null
+        override fun setPolarAccessToken(token: String) {}
+        override fun getPolarRefreshToken(): String? = null
+        override fun setPolarRefreshToken(token: String) {}
+        override fun getPolarTokenExpiresAt(): Long = 0L
+        override fun setPolarTokenExpiresAt(expiresAt: Long) {}
+        override fun getPolarUserId(): String? = null
+        override fun setPolarUserId(userId: String) {}
+        override fun getPendingOAuthState(): String? = null
+        override fun setPendingOAuthState(state: String) {}
+        override fun getPendingOAuthSessionId(): String? = null
+        override fun setPendingOAuthSessionId(sessionId: String) {}
+        override fun clearPendingOAuthSession() {}
+        override fun clearPolarTokens() {}
+        override fun isPolarConnected(): Boolean = false
+    }
+
+    private fun makeToolRegistry() = ToolRegistry(
+        trackedEntryRepository = FakeTrackedEntryRepository(),
+        entryAnalysisRepository = FakeEntryAnalysisRepository(),
+        weightHistoryRepository = FakeWeightHistoryRepository(),
+        appSettingsRepository = FakeAppSettingsRepository()
+    )
 
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
 
@@ -288,6 +358,49 @@ class WeeklySummaryServiceTest {
     // ── Tests ─────────────────────────────────────────────────────────────────
 
     @Test
+    fun `generateSummary passes tool definitions and executor to LLM`() = runTest {
+        var capturedToolNames: List<String> = emptyList()
+        var capturedExecutor: ToolExecutor? = null
+
+        val fakeLlmClient = object : LlmClient {
+            override suspend fun analyzeImage(
+                imageBytes: ByteArray, prompt: String, jsonSchema: String?,
+                tools: List<com.wellnesswingman.data.model.llm.ToolDefinition>, toolExecutor: ToolExecutor?
+            ) = LlmAnalysisResult(VALID_WEEKLY_JSON, LlmDiagnostics())
+            override suspend fun transcribeAudio(audioBytes: ByteArray, mimeType: String) = ""
+            override suspend fun generateCompletion(
+                prompt: String, jsonSchema: String?,
+                tools: List<com.wellnesswingman.data.model.llm.ToolDefinition>, toolExecutor: ToolExecutor?
+            ): LlmAnalysisResult {
+                capturedToolNames = tools.map { it.name }
+                capturedExecutor = toolExecutor
+                return LlmAnalysisResult(VALID_WEEKLY_JSON, LlmDiagnostics())
+            }
+        }
+        val factory = mockk<LlmClientFactory>()
+        every { factory.hasCurrentApiKey() } returns true
+        every { factory.createForCurrentProvider() } returns fakeLlmClient
+
+        val weekStart = LocalDate(2025, 3, 1)
+        val service = WeeklySummaryService(
+            trackedEntryRepository = FakeTrackedEntryRepository(listOf(makeCompletedEntry(1L, EntryType.MEAL))),
+            weeklySummaryRepository = FakeWeeklySummaryRepository(),
+            dailySummaryRepository = FakeDailySummaryRepository(),
+            llmClientFactory = factory,
+            toolRegistry = makeToolRegistry(),
+            weightHistoryRepository = FakeWeightHistoryRepository(),
+            polarInsightService = polarInsightService()
+        )
+
+        service.generateSummary(weekStart)
+
+        assertTrue(capturedToolNames.contains("get_user_profile"))
+        assertTrue(capturedToolNames.contains("get_weight_history"))
+        assertTrue(capturedToolNames.contains("get_recent_entries"))
+        assertNotNull(capturedExecutor)
+    }
+
+    @Test
     fun `getSummaryForWeek delegates to repository`() = runTest {
         val weekStart = LocalDate(2025, 3, 1)
         val existingSummary = WeeklySummary(
@@ -301,6 +414,7 @@ class WeeklySummaryServiceTest {
             dailySummaryRepository = FakeDailySummaryRepository(),
             llmClientFactory = makeLlmClientFactory(hasKey = false),
             weightHistoryRepository = FakeWeightHistoryRepository(),
+            toolRegistry = makeToolRegistry(),
             polarInsightService = polarInsightService()
         )
 
@@ -324,6 +438,7 @@ class WeeklySummaryServiceTest {
             dailySummaryRepository = FakeDailySummaryRepository(),
             llmClientFactory = makeLlmClientFactory(hasKey = false),
             weightHistoryRepository = FakeWeightHistoryRepository(),
+            toolRegistry = makeToolRegistry(),
             polarInsightService = polarInsightService()
         )
 
@@ -345,6 +460,7 @@ class WeeklySummaryServiceTest {
             dailySummaryRepository = FakeDailySummaryRepository(),
             llmClientFactory = makeLlmClientFactory(hasKey = false),
             weightHistoryRepository = FakeWeightHistoryRepository(),
+            toolRegistry = makeToolRegistry(),
             polarInsightService = polarInsightService()
         )
 
@@ -364,6 +480,7 @@ class WeeklySummaryServiceTest {
             dailySummaryRepository = FakeDailySummaryRepository(),
             llmClientFactory = makeCapturingLlmClientFactory(capturedPrompts = prompts),
             weightHistoryRepository = FakeWeightHistoryRepository(),
+            toolRegistry = makeToolRegistry(),
             polarInsightService = polarInsightService(
                 activities = listOf(
                     StoredPolarActivity(1, "activity:2025-03-01", "Polar", weekStart, null, Clock.System.now(), PolarDailyActivity("2025-03-01", 9200, "00:00:00", 60000, listOf(9200)))
@@ -391,6 +508,7 @@ class WeeklySummaryServiceTest {
             dailySummaryRepository = FakeDailySummaryRepository(),
             llmClientFactory = makeLlmClientFactory(hasKey = true),
             weightHistoryRepository = FakeWeightHistoryRepository(),
+            toolRegistry = makeToolRegistry(),
             polarInsightService = polarInsightService()
         )
 
@@ -408,6 +526,7 @@ class WeeklySummaryServiceTest {
             dailySummaryRepository = FakeDailySummaryRepository(),
             llmClientFactory = makeLlmClientFactory(hasKey = true),
             weightHistoryRepository = FakeWeightHistoryRepository(),
+            toolRegistry = makeToolRegistry(),
             polarInsightService = polarInsightService()
         )
 
@@ -428,6 +547,7 @@ class WeeklySummaryServiceTest {
             dailySummaryRepository = FakeDailySummaryRepository(),
             llmClientFactory = makeLlmClientFactory(hasKey = true),
             weightHistoryRepository = FakeWeightHistoryRepository(),
+            toolRegistry = makeToolRegistry(),
             polarInsightService = polarInsightService()
         )
 
@@ -464,6 +584,7 @@ class WeeklySummaryServiceTest {
             dailySummaryRepository = FakeDailySummaryRepository(),
             llmClientFactory = makeLlmClientFactory(hasKey = true),
             weightHistoryRepository = FakeWeightHistoryRepository(weightRecords),
+            toolRegistry = makeToolRegistry(),
             polarInsightService = polarInsightService()
         )
 
@@ -485,6 +606,7 @@ class WeeklySummaryServiceTest {
             dailySummaryRepository = FakeDailySummaryRepository(),
             llmClientFactory = makeCapturingLlmClientFactory(capturedPrompts = capturedPrompts),
             weightHistoryRepository = FakeWeightHistoryRepository(),
+            toolRegistry = makeToolRegistry(),
             polarInsightService = polarInsightService()
         )
 
@@ -510,6 +632,7 @@ class WeeklySummaryServiceTest {
             dailySummaryRepository = FakeDailySummaryRepository(),
             llmClientFactory = makeLlmClientFactory(hasKey = true),
             weightHistoryRepository = FakeWeightHistoryRepository(),
+            toolRegistry = makeToolRegistry(),
             polarInsightService = polarInsightService()
         )
 
@@ -549,6 +672,7 @@ class WeeklySummaryServiceTest {
             dailySummaryRepository = FakeDailySummaryRepository(listOf(dailySummary)),
             llmClientFactory = makeCapturingLlmClientFactory(capturedPrompts = capturedPrompts),
             weightHistoryRepository = FakeWeightHistoryRepository(),
+            toolRegistry = makeToolRegistry(),
             polarInsightService = polarInsightService()
         )
 
@@ -574,6 +698,7 @@ class WeeklySummaryServiceTest {
             dailySummaryRepository = FakeDailySummaryRepository(),
             llmClientFactory = makeLlmClientFactory(hasKey = true, response = VALID_WEEKLY_JSON),
             weightHistoryRepository = FakeWeightHistoryRepository(),
+            toolRegistry = makeToolRegistry(),
             polarInsightService = polarInsightService()
         )
 
@@ -608,6 +733,7 @@ class WeeklySummaryServiceTest {
             dailySummaryRepository = FakeDailySummaryRepository(),
             llmClientFactory = makeLlmClientFactory(hasKey = true, response = textResponse),
             weightHistoryRepository = FakeWeightHistoryRepository(),
+            toolRegistry = makeToolRegistry(),
             polarInsightService = polarInsightService()
         )
 
@@ -628,6 +754,7 @@ class WeeklySummaryServiceTest {
             dailySummaryRepository = FakeDailySummaryRepository(),
             llmClientFactory = makeLlmClientFactory(hasKey = true),
             weightHistoryRepository = FakeWeightHistoryRepository(),
+            toolRegistry = makeToolRegistry(),
             polarInsightService = polarInsightService()
         )
 
@@ -654,6 +781,7 @@ class WeeklySummaryServiceTest {
             dailySummaryRepository = FakeDailySummaryRepository(),
             llmClientFactory = makeLlmClientFactory(hasKey = true),
             weightHistoryRepository = FakeWeightHistoryRepository(),
+            toolRegistry = makeToolRegistry(),
             polarInsightService = polarInsightService()
         )
 
@@ -691,6 +819,7 @@ class WeeklySummaryServiceTest {
             dailySummaryRepository = FakeDailySummaryRepository(),
             llmClientFactory = makeLlmClientFactory(hasKey = true),
             weightHistoryRepository = throwingWeightRepo,
+            toolRegistry = makeToolRegistry(),
             polarInsightService = polarInsightService()
         )
 
@@ -711,6 +840,7 @@ class WeeklySummaryServiceTest {
             dailySummaryRepository = FakeDailySummaryRepository(),
             llmClientFactory = makeCapturingLlmClientFactory(capturedPrompts = prompts),
             weightHistoryRepository = FakeWeightHistoryRepository(),
+            toolRegistry = makeToolRegistry(),
             polarInsightService = throwingPolarInsightService()
         )
 
@@ -740,6 +870,7 @@ class WeeklySummaryServiceTest {
             dailySummaryRepository = FakeDailySummaryRepository(listOf(blankSummary)),
             llmClientFactory = makeLlmClientFactory(hasKey = true),
             weightHistoryRepository = FakeWeightHistoryRepository(),
+            toolRegistry = makeToolRegistry(),
             polarInsightService = polarInsightService()
         )
 
@@ -770,6 +901,7 @@ class WeeklySummaryServiceTest {
             dailySummaryRepository = FakeDailySummaryRepository(),
             llmClientFactory = makeLlmClientFactory(hasKey = true, response = response),
             weightHistoryRepository = FakeWeightHistoryRepository(),
+            toolRegistry = makeToolRegistry(),
             polarInsightService = polarInsightService()
         )
 
@@ -797,6 +929,7 @@ class WeeklySummaryServiceTest {
             dailySummaryRepository = FakeDailySummaryRepository(),
             llmClientFactory = makeLlmClientFactory(hasKey = true, response = response),
             weightHistoryRepository = FakeWeightHistoryRepository(),
+            toolRegistry = makeToolRegistry(),
             polarInsightService = polarInsightService()
         )
 
@@ -852,6 +985,7 @@ class WeeklySummaryServiceTest {
             dailySummaryRepository = FakeDailySummaryRepository(),
             llmClientFactory = makeLlmClientFactory(hasKey = true, response = responseWithWeight),
             weightHistoryRepository = FakeWeightHistoryRepository(records),
+            toolRegistry = makeToolRegistry(),
             polarInsightService = polarInsightService()
         )
 
@@ -870,6 +1004,7 @@ class WeeklySummaryServiceTest {
             dailySummaryRepository = FakeDailySummaryRepository(),
             llmClientFactory = makeLlmClientFactory(hasKey = true),
             weightHistoryRepository = FakeWeightHistoryRepository(),
+            toolRegistry = makeToolRegistry(),
             polarInsightService = polarInsightService(
                 activities = listOf(
                     StoredPolarActivity(1, "activity:2025-03-03", "Polar", LocalDate(2025, 3, 3), null, Clock.System.now(), PolarDailyActivity("2025-03-03", 8000, "00:00:00", 60000, listOf(8000))),
@@ -909,6 +1044,7 @@ class WeeklySummaryServiceTest {
             dailySummaryRepository = FakeDailySummaryRepository(),
             llmClientFactory = makeCapturingLlmClientFactory(capturedPrompts = prompts),
             weightHistoryRepository = FakeWeightHistoryRepository(),
+            toolRegistry = makeToolRegistry(),
             polarInsightService = polarInsightService(
                 sleepResults = listOf(
                     StoredPolarSleepResult(2, "sleep:2025-03-03", "Polar", LocalDate(2025, 3, 3), null, null, Clock.System.now(), PolarSleepResult("2025-03-03", "2025-03-02T23:00:00Z", "2025-03-03T07:00:00Z", 28800, 7200, 5400, 14400, 1800, 91.0, 4.2, 2, 0, 85.0, 80.0, 82.0, 4))
@@ -939,6 +1075,7 @@ class WeeklySummaryServiceTest {
             dailySummaryRepository = FakeDailySummaryRepository(),
             llmClientFactory = makeCapturingLlmClientFactory(capturedPrompts = prompts),
             weightHistoryRepository = FakeWeightHistoryRepository(),
+            toolRegistry = makeToolRegistry(),
             polarInsightService = polarInsightService(
                 trainingSessions = listOf(
                     StoredPolarTrainingSession(2, "session-1", "Polar", LocalDate(2025, 3, 3), "2025-03-03T08:00:00", Clock.System.now(), PolarTrainingSession("session-1", "2025-03-03T08:00:00", 3600, "1", 430, 5000.0, 148, 172, "Tempo run"))

@@ -66,6 +66,7 @@ val domainModule = module {
             entryAnalysisRepository = get(),
             dailySummaryRepository = get(),
             llmClientFactory = get(),
+            toolRegistry = get(),
             dailyTotalsCalculator = get(),
             weightHistoryRepository = get(),
             polarInsightService = get()
@@ -77,6 +78,7 @@ val domainModule = module {
             weeklySummaryRepository = get(),
             dailySummaryRepository = get(),
             llmClientFactory = get(),
+            toolRegistry = get(),
             weightHistoryRepository = get(),
             polarInsightService = get()
         )
