@@ -14,6 +14,7 @@ import com.wellnesswingman.domain.llm.ToolRegistry
 import com.wellnesswingman.platform.FileSystem
 import com.wellnesswingman.util.formatDecimal
 import io.github.aakira.napier.Napier
+import kotlinx.coroutines.CancellationException
 import kotlinx.datetime.Clock
 import kotlinx.serialization.json.Json
 
@@ -146,6 +147,7 @@ class AnalysisOrchestrator(
             )
 
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             Napier.e("Analysis failed for entry ${entry.entryId}", e)
             trackedEntryRepository.updateEntryStatus(entry.entryId, ProcessingStatus.FAILED)
             return AnalysisInvocationResult.error(e.message ?: "Unknown error")

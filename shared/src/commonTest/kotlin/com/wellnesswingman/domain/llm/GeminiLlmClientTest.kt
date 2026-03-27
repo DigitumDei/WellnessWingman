@@ -5,11 +5,15 @@ import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.client.request.HttpRequestData
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.content.OutgoingContent
 import io.ktor.http.headersOf
 import io.ktor.serialization.kotlinx.json.json
+import io.ktor.utils.io.core.readRemaining
+import io.ktor.utils.io.core.readText
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
@@ -17,7 +21,9 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.encodeToString
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class GeminiLlmClientTest {
 
@@ -117,6 +123,65 @@ class GeminiLlmClientTest {
     }
 
     @Test
+    fun `generateCompletion converts malformed tool arguments into tool error response`() = runTest {
+        val requests = mutableListOf<String>()
+        val responses = ArrayDeque(
+            listOf(
+                """{
+                    "candidates": [{
+                        "content": {
+                            "role": "model",
+                            "parts": [{
+                                "functionCall": {
+                                    "id": "call-1",
+                                    "name": "lookup_calories",
+                                    "args": "bad-args"
+                                },
+                                "thoughtSignature": "signature-1"
+                            }]
+                        }
+                    }]
+                }""".trimIndent(),
+                """{
+                    "candidates": [{
+                        "content": {
+                            "role": "model",
+                            "parts": [{"text": "Recovered"}]
+                        }
+                    }]
+                }""".trimIndent()
+            )
+        )
+
+        val httpClient = mockGeminiClient(requests, responses)
+
+        var executorCalled = false
+        val result = GeminiLlmClient(
+            apiKey = "test-key",
+            httpClient = httpClient
+        ).generateCompletion(
+            prompt = "hello",
+            tools = listOf(
+                ToolDefinition(
+                    name = "lookup_calories",
+                    description = "Looks up calories.",
+                    parametersSchema = buildJsonObject { put("type", JsonPrimitive("object")) }
+                )
+            ),
+            toolExecutor = {
+                executorCalled = true
+                error("should not be called")
+            }
+        )
+
+        assertFalse(executorCalled)
+        assertEquals("Recovered", result.content)
+        assertEquals(2, requests.size)
+        assertTrue(requests[1].contains("Tool arguments must be a JSON object"))
+        assertTrue(requests[1].contains("\"thoughtSignature\":\"signature-1\""))
+    }
+
+    @Test
     fun `generateCompletion without tools returns plain response`() = runTest {
         val httpClient = HttpClient(MockEngine {
             respond(
@@ -168,5 +233,77 @@ class GeminiLlmClientTest {
 
         assertEquals("signature-1", decoded.thoughtSignature)
         assertEquals("lookup_calories", decoded.functionCall?.name)
+    }
+
+    @Test
+    fun `generateCompletion fails after exceeding max tool rounds`() = runTest {
+        val responses = ArrayDeque(List(6) {
+            """{
+                "candidates": [{
+                    "content": {
+                        "role": "model",
+                        "parts": [{
+                            "functionCall": {
+                                "id": "call-1",
+                                "name": "lookup_calories",
+                                "args": {"food": "apple"}
+                            }
+                        }]
+                    }
+                }]
+            }""".trimIndent()
+        })
+
+        val client = GeminiLlmClient(
+            apiKey = "test-key",
+            httpClient = mockGeminiClient(mutableListOf(), responses)
+        )
+
+        val error = assertFailsWith<IllegalStateException> {
+            client.generateCompletion(
+                prompt = "hello",
+                tools = listOf(
+                    ToolDefinition(
+                        name = "lookup_calories",
+                        description = "Looks up calories.",
+                        parametersSchema = buildJsonObject { put("type", JsonPrimitive("object")) }
+                    )
+                ),
+                toolExecutor = {
+                    com.wellnesswingman.data.model.llm.ToolResult(
+                        toolCallId = it.id,
+                        name = it.name,
+                        content = JsonPrimitive("ok")
+                    )
+                }
+            )
+        }
+
+        assertTrue(error.message.orEmpty().contains("exceeded 5 rounds"))
+    }
+
+    private fun mockGeminiClient(
+        requests: MutableList<String>,
+        responses: ArrayDeque<String>
+    ): HttpClient = HttpClient(MockEngine { request: HttpRequestData ->
+        requests += when (val body = request.body) {
+            is OutgoingContent.ByteArrayContent -> body.bytes().decodeToString()
+            is OutgoingContent.ReadChannelContent -> body.readFrom().readRemaining().readText()
+            is OutgoingContent.WriteChannelContent -> "<write-channel-content>"
+            is OutgoingContent.NoContent -> ""
+            else -> body.toString()
+        }
+        respond(
+            content = responses.removeFirst(),
+            status = HttpStatusCode.OK,
+            headers = jsonHeaders
+        )
+    }) {
+        install(ContentNegotiation) {
+            json(Json {
+                ignoreUnknownKeys = true
+                isLenient = true
+            })
+        }
     }
 }

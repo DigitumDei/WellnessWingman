@@ -24,6 +24,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
+import kotlinx.coroutines.CancellationException
 import kotlinx.datetime.Clock
 import io.github.aakira.napier.Napier
 import okio.Buffer
@@ -190,6 +191,7 @@ class OpenAiLlmClient(
                         )
                     )
                 }.getOrElse { error ->
+                    if (error is CancellationException) throw error
                     com.wellnesswingman.data.model.llm.ToolResult(
                         toolCallId = toolCall.id.id,
                         name = toolCall.function.name,

@@ -19,6 +19,7 @@ import com.wellnesswingman.platform.FileSystem
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.test.runTest
@@ -27,6 +28,7 @@ import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
@@ -113,6 +115,50 @@ class AnalysisOrchestratorTest {
         assertTrue(toolResult.content.toString().contains("currentWeight"))
         assertEquals(1, entryAnalysisRepository.inserted.size)
         assertEquals(success.analysis, entryAnalysisRepository.inserted.first())
+    }
+
+    @Test
+    fun `processEntry rethrows cancellation instead of marking entry failed`() = runTest {
+        val trackedEntryRepository = FakeTrackedEntryRepository()
+        val llmClient = mockk<LlmClient>()
+        val llmClientFactory = mockk<LlmClientFactory>()
+
+        every { llmClientFactory.hasCurrentApiKey() } returns true
+        every { llmClientFactory.createForCurrentProvider() } returns llmClient
+        coEvery {
+            llmClient.generateCompletion(
+                prompt = any(),
+                jsonSchema = null,
+                tools = any(),
+                toolExecutor = any()
+            )
+        } throws CancellationException("cancelled")
+
+        val orchestrator = AnalysisOrchestrator(
+            trackedEntryRepository = trackedEntryRepository,
+            entryAnalysisRepository = FakeEntryAnalysisRepository(),
+            llmClientFactory = llmClientFactory,
+            toolRegistry = ToolRegistry(
+                trackedEntryRepository = trackedEntryRepository,
+                entryAnalysisRepository = FakeEntryAnalysisRepository(),
+                weightHistoryRepository = FakeWeightHistoryRepository(),
+                appSettingsRepository = FakeAppSettingsRepository()
+            ),
+            fileSystem = mockk<FileSystem>(),
+            appSettingsRepository = FakeAppSettingsRepository()
+        )
+
+        val entry = TrackedEntry(
+            entryId = 9L,
+            entryType = EntryType.UNKNOWN,
+            capturedAt = Clock.System.now(),
+            processingStatus = ProcessingStatus.PENDING
+        )
+
+        assertFailsWith<CancellationException> {
+            orchestrator.processEntry(entry)
+        }
+        assertEquals(ProcessingStatus.PROCESSING, trackedEntryRepository.statusById[9L])
     }
 
     private class FakeTrackedEntryRepository : TrackedEntryRepository {

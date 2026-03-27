@@ -15,11 +15,13 @@ import com.aallam.openai.client.OpenAI
 import com.wellnesswingman.data.model.llm.ToolDefinition
 import io.mockk.coEvery
 import io.mockk.mockk
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -141,6 +143,94 @@ class OpenAiLlmClientTest {
         assertEquals("done", result.content)
         assertEquals(2, requests.size)
         assertTrue(requests[1].messages[2].content.orEmpty().contains("\"ok\":false"))
+    }
+
+    @Test
+    fun `generateCompletion rethrows cancellation from tool executor`() = runTest {
+        val api = mockk<OpenAI>()
+        coEvery { api.chatCompletion(any()) } returns toolCallCompletion(
+            ChatMessage(
+                role = ChatRole.Assistant,
+                content = null as String?,
+                toolCalls = listOf(
+                    OpenAiToolCall.Function(
+                        id = ToolId("call-1"),
+                        function = FunctionCall(
+                            nameOrNull = "lookup_calories",
+                            argumentsOrNull = """{"food":"apple"}"""
+                        )
+                    )
+                )
+            )
+        )
+
+        val client = OpenAiLlmClient(
+            apiKey = "test-key",
+            client = api
+        )
+
+        assertFailsWith<CancellationException> {
+            client.generateCompletion(
+                prompt = "hello",
+                tools = listOf(
+                    ToolDefinition(
+                        name = "lookup_calories",
+                        description = "Looks up calories.",
+                        parametersSchema = buildJsonObject { put("type", JsonPrimitive("object")) }
+                    )
+                ),
+                toolExecutor = {
+                    throw CancellationException("cancelled")
+                }
+            )
+        }
+    }
+
+    @Test
+    fun `generateCompletion fails after exceeding max tool rounds`() = runTest {
+        val api = mockk<OpenAI>()
+        coEvery { api.chatCompletion(any()) } returns toolCallCompletion(
+            ChatMessage(
+                role = ChatRole.Assistant,
+                content = null as String?,
+                toolCalls = listOf(
+                    OpenAiToolCall.Function(
+                        id = ToolId("call-1"),
+                        function = FunctionCall(
+                            nameOrNull = "lookup_calories",
+                            argumentsOrNull = """{"food":"apple"}"""
+                        )
+                    )
+                )
+            )
+        )
+
+        val client = OpenAiLlmClient(
+            apiKey = "test-key",
+            client = api
+        )
+
+        val error = assertFailsWith<IllegalStateException> {
+            client.generateCompletion(
+                prompt = "hello",
+                tools = listOf(
+                    ToolDefinition(
+                        name = "lookup_calories",
+                        description = "Looks up calories.",
+                        parametersSchema = buildJsonObject { put("type", JsonPrimitive("object")) }
+                    )
+                ),
+                toolExecutor = {
+                    com.wellnesswingman.data.model.llm.ToolResult(
+                        toolCallId = it.id,
+                        name = it.name,
+                        content = JsonPrimitive("ok")
+                    )
+                }
+            )
+        }
+
+        assertTrue(error.message.orEmpty().contains("exceeded 5 rounds"))
     }
 
     private fun toolCallCompletion(message: ChatMessage) = ChatCompletion(

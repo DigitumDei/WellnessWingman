@@ -11,10 +11,12 @@ import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
+import kotlinx.coroutines.CancellationException
 import kotlinx.datetime.Clock
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -30,6 +32,11 @@ class GeminiLlmClient(
     private val model: String = "gemini-1.5-flash",
     private val httpClient: HttpClient = createDefaultHttpClient()
 ) : LlmClient {
+    private val json = Json {
+        ignoreUnknownKeys = true
+        isLenient = true
+    }
+
     companion object {
         private const val BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
         private const val MAX_TOOL_ROUNDS = 5
@@ -210,13 +217,25 @@ class GeminiLlmClient(
                 GeminiContent(
                     role = "user",
                     parts = functionCalls.map { functionCall ->
-                        val result = executor(
-                            ToolCall(
-                                id = functionCall.id,
-                                name = functionCall.name,
-                                arguments = functionCall.args
+                        val result = runCatching {
+                            val arguments = functionCall.args.asJsonObjectOrNull()
+                                ?: throw IllegalArgumentException("Tool arguments must be a JSON object.")
+                            executor(
+                                ToolCall(
+                                    id = functionCall.id,
+                                    name = functionCall.name,
+                                    arguments = arguments
+                                )
                             )
-                        )
+                        }.getOrElse { error ->
+                            if (error is CancellationException) throw error
+                            com.wellnesswingman.data.model.llm.ToolResult(
+                                toolCallId = functionCall.id,
+                                name = functionCall.name,
+                                content = JsonPrimitive(error.message ?: "Tool execution failed."),
+                                isError = true
+                            )
+                        }
                         GeminiPart(
                             functionResponse = GeminiFunctionResponse(
                                 name = functionCall.name,
@@ -249,7 +268,7 @@ class GeminiLlmClient(
             throw Exception("Gemini API error ${httpResponse.status}: $errorBody")
         }
 
-        return httpResponse.body()
+        return json.decodeFromString(httpResponse.bodyAsText())
     }
 
     private fun geminiTools(tools: List<ToolDefinition>): List<GeminiTool> = listOf(
@@ -312,7 +331,7 @@ data class GeminiPart(
 data class GeminiFunctionCall(
     val id: String? = null,
     val name: String,
-    val args: JsonObject = JsonObject(emptyMap())
+    val args: JsonElement = JsonObject(emptyMap())
 )
 
 @Serializable
@@ -337,6 +356,8 @@ data class GeminiCandidate(
     val content: GeminiContent,
     val finishReason: String? = null
 )
+
+private fun JsonElement?.asJsonObjectOrNull(): JsonObject? = this as? JsonObject
 
 @Serializable
 data class UsageMetadata(
