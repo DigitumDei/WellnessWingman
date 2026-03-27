@@ -175,10 +175,8 @@ class GeminiLlmClient(
                 GeminiRequest(
                     contents = contents,
                     tools = tools.takeIf { it.isNotEmpty() }?.let(::geminiTools),
-                    toolConfig = tools.takeIf { it.isNotEmpty() }?.let { GeminiToolConfig(FunctionCallingConfig("AUTO")) },
-                    systemInstruction = tools.takeIf { it.isNotEmpty() }?.let {
-                        GeminiContent(parts = listOf(GeminiPart(text = "You have tools available to fetch the user's profile, weight history, and recent tracked entries. Call them proactively before generating your analysis to personalise your response.")))
-                    },
+                    toolConfig = toolConfig(tools),
+                    systemInstruction = systemInstruction(tools),
                     generationConfig = GenerationConfig(
                         responseMimeType = if (jsonSchema != null) "application/json" else null
                     )
@@ -259,10 +257,8 @@ class GeminiLlmClient(
             GeminiRequest(
                 contents = contents,
                 tools = tools.takeIf { it.isNotEmpty() }?.let(::geminiTools),
-                toolConfig = tools.takeIf { it.isNotEmpty() }?.let { GeminiToolConfig(FunctionCallingConfig("AUTO")) },
-                systemInstruction = tools.takeIf { it.isNotEmpty() }?.let {
-                    GeminiContent(parts = listOf(GeminiPart(text = "You have tools available to fetch the user's profile, weight history, and recent tracked entries. Call them proactively before generating your analysis to personalise your response.")))
-                },
+                toolConfig = toolConfig(tools),
+                systemInstruction = systemInstruction(tools),
                 generationConfig = GenerationConfig(
                     responseMimeType = if (jsonSchema != null) "application/json" else null
                 )
@@ -326,6 +322,14 @@ class GeminiLlmClient(
             }
         )
     )
+
+    private fun toolConfig(tools: List<ToolDefinition>): GeminiToolConfig? =
+        tools.takeIf { it.isNotEmpty() }?.let { GeminiToolConfig(FunctionCallingConfig("AUTO")) }
+
+    private fun systemInstruction(tools: List<ToolDefinition>): GeminiContent? =
+        tools.takeIf { it.isNotEmpty() }?.let {
+            GeminiContent(parts = listOf(GeminiPart(text = "You have tools available to fetch the user's profile, weight history, and recent tracked entries. Call them proactively before generating your analysis to personalise your response.")))
+        }
 }
 
 // Gemini API request/response models
