@@ -10,6 +10,7 @@ import com.wellnesswingman.data.db.DriverFactory
 import com.wellnesswingman.platform.AndroidBackgroundExecutionService
 import com.wellnesswingman.platform.AudioRecordingService
 import com.wellnesswingman.platform.BackgroundExecutionService
+import com.wellnesswingman.platform.CameraCaptureOperations
 import com.wellnesswingman.platform.CameraCaptureService
 import com.wellnesswingman.platform.DiagnosticLogger
 import com.wellnesswingman.platform.DiagnosticShare
@@ -44,7 +45,7 @@ val platformModule = module {
 
     // Platform services
     single { FileSystem(get<Context>()) } bind FileSystemOperations::class
-    single { CameraCaptureService(get<Context>()) }
+    single { CameraCaptureService(get<Context>()) } bind CameraCaptureOperations::class
     single { AudioRecordingService(get<Context>()) }
     single { PhotoResizer() }
     single { DiagnosticLogger(get<Context>()) }

@@ -28,6 +28,7 @@ import kotlinx.serialization.json.JsonObjectBuilder
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.putJsonObject
 
 class ToolRegistry(
@@ -228,11 +229,12 @@ class ToolRegistry(
                             }
                         }
                     }
+                    put("required", JsonArray(listOf(JsonPrimitive("profileIds"))))
                 }
             )
         ) { call ->
             val requestedIds = (call.arguments["profileIds"] as? JsonArray)
-                ?.mapNotNull { it.jsonPrimitive.intOrNull?.toLong() }
+                ?.mapNotNull { it.jsonPrimitive.longOrNull }
                 ?.distinct()
                 .orEmpty()
             if (requestedIds.isEmpty()) {

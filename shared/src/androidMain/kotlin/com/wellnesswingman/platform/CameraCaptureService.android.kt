@@ -11,13 +11,13 @@ import android.content.Context
  *
  * See: composeApp/src/androidMain/kotlin/com/wellnesswingman/ui/screens/photo/PhotoReviewScreen.android.kt
  */
-actual class CameraCaptureService(private val context: Context) {
+actual class CameraCaptureService(private val context: Context) : CameraCaptureOperations {
 
-    actual suspend fun capturePhoto(): CaptureResult {
+    actual override suspend fun capturePhoto(): CaptureResult {
         return CaptureResult.Error("Camera capture not implemented in service layer. Use PhotoReviewScreen UI instead.")
     }
 
-    actual suspend fun pickFromGallery(): CaptureResult? {
+    actual override suspend fun pickFromGallery(): CaptureResult? {
         return CaptureResult.Error("Gallery picker not implemented in service layer. Use PhotoReviewScreen UI instead.")
     }
 }

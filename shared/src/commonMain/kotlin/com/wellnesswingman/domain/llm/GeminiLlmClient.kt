@@ -328,7 +328,13 @@ class GeminiLlmClient(
 
     private fun systemInstruction(tools: List<ToolDefinition>): GeminiContent? =
         tools.takeIf { it.isNotEmpty() }?.let {
-            GeminiContent(parts = listOf(GeminiPart(text = "You have tools available to fetch the user's profile, weight history, and recent tracked entries. Call them proactively before generating your analysis to personalise your response.")))
+            GeminiContent(
+                parts = listOf(
+                    GeminiPart(
+                        text = "You have tool access for user profile, weight history, recent tracked entries, and saved nutritional profiles. Call relevant tools proactively before generating your analysis, and use the nutritional profile list-then-get flow when packaged foods may match saved profiles."
+                    )
+                )
+            )
         }
 }
 

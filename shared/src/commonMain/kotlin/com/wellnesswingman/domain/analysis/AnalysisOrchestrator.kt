@@ -278,12 +278,12 @@ GUIDELINES:
 1. Set the appropriate analysis field based on detected entry type; set others to null
 2. Provide confidence scores (0.0-1.0) based on image clarity and certainty
 3. For meals: Identify all visible food items and estimate portions carefully
-4. For meals with matching saved packaged foods, use the lookup tool and mark those nutrition values as `exact`
-4. For exercise: Extract metrics from fitness tracker screenshots or estimate from images
-5. For sleep: Extract data from sleep tracker screenshots or provide estimates
-6. If a weighing scale is visible in the image, set detectedWeight to {"value": <number>, "unit": "<kg|lbs>", "confidence": <0.0-1.0>}; otherwise leave detectedWeight as null
-7. Add warnings array if there are any issues with the analysis
-8. Health score (0-10): 10 = excellent, 7-9 = good, 5-6 = moderate, below 5 = needs improvement
+4. For meals with matching saved packaged foods, use the nutritional profile tools and mark those nutrition values as `exact`
+5. For exercise: Extract metrics from fitness tracker screenshots or estimate from images
+6. For sleep: Extract data from sleep tracker screenshots or provide estimates
+7. If a weighing scale is visible in the image, set detectedWeight to {"value": <number>, "unit": "<kg|lbs>", "confidence": <0.0-1.0>}; otherwise leave detectedWeight as null
+8. Add warnings array if there are any issues with the analysis
+9. Health score (0-10): 10 = excellent, 7-9 = good, 5-6 = moderate, below 5 = needs improvement
 
 ONLY return the JSON object, no other text.
         """.trimIndent()

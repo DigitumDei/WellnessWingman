@@ -5,11 +5,11 @@ import cafe.adriel.voyager.core.model.screenModelScope
 import com.wellnesswingman.data.model.NutritionalProfile
 import com.wellnesswingman.data.repository.NutritionalProfileRepository
 import com.wellnesswingman.domain.analysis.ExtractedNutrition
-import com.wellnesswingman.domain.analysis.NutritionLabelAnalyzer
+import com.wellnesswingman.domain.analysis.NutritionLabelAnalyzing
 import com.wellnesswingman.domain.analysis.NutritionLabelExtraction
-import com.wellnesswingman.platform.CameraCaptureService
+import com.wellnesswingman.platform.CameraCaptureOperations
 import com.wellnesswingman.platform.CaptureResult
-import com.wellnesswingman.platform.FileSystem
+import com.wellnesswingman.platform.FileSystemOperations
 import io.github.aakira.napier.Napier
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -20,13 +20,13 @@ import kotlinx.datetime.Instant
 
 class NutritionLabelScanViewModel(
     private val profileId: Long?,
-    private val cameraService: CameraCaptureService,
-    private val fileSystem: FileSystem,
-    private val analyzer: NutritionLabelAnalyzer,
+    private val cameraService: CameraCaptureOperations,
+    private val fileSystem: FileSystemOperations,
+    private val analyzer: NutritionLabelAnalyzing,
     private val repository: NutritionalProfileRepository
 ) : ScreenModel {
 
-    private val _uiState = MutableStateFlow(NutritionLabelScanUiState())
+    private val _uiState = MutableStateFlow(NutritionLabelScanUiState(isLoading = profileId != null))
     val uiState: StateFlow<NutritionLabelScanUiState> = _uiState.asStateFlow()
 
     init {
@@ -38,7 +38,14 @@ class NutritionLabelScanViewModel(
     private fun loadExistingProfile(profileId: Long) {
         screenModelScope.launch {
             try {
-                val profile = repository.getById(profileId) ?: return@launch
+                val profile = repository.getById(profileId)
+                if (profile == null) {
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        error = "This nutritional profile no longer exists."
+                    )
+                    return@launch
+                }
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     profileId = profile.profileId,
@@ -88,7 +95,10 @@ class NutritionLabelScanViewModel(
                             isCapturing = false,
                             sourceImagePath = result.photoPath,
                             photoBytes = result.bytes,
-                            extractionWarnings = emptyList()
+                            servingSize = "",
+                            nutrition = ExtractedNutrition(),
+                            extractionWarnings = emptyList(),
+                            rawJson = null
                         )
                     }
                     is CaptureResult.Error -> {
@@ -112,8 +122,21 @@ class NutritionLabelScanViewModel(
         screenModelScope.launch {
             val state = _uiState.value
             val imageBytes = state.photoBytes ?: return@launch
+            if (!analyzer.hasConfiguredApiKey()) {
+                _uiState.value = state.copy(
+                    error = "Missing API Key. Go to Settings to add your OpenAI or Gemini API key to extract nutrition facts."
+                )
+                return@launch
+            }
             try {
-                _uiState.value = state.copy(isAnalyzing = true, error = null)
+                _uiState.value = state.copy(
+                    isAnalyzing = true,
+                    error = null,
+                    servingSize = "",
+                    nutrition = ExtractedNutrition(),
+                    extractionWarnings = emptyList(),
+                    rawJson = null
+                )
                 val extraction = analyzer.analyzeLabelImage(imageBytes, state.sourceImagePath)
                 applyExtraction(extraction)
             } catch (error: Exception) {

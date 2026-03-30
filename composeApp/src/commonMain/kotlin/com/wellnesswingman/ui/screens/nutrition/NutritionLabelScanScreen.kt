@@ -17,9 +17,15 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.koin.getScreenModel
@@ -29,7 +35,10 @@ import com.wellnesswingman.domain.analysis.ExtractedNutrition
 import com.wellnesswingman.ui.screens.detail.ImageDisplay
 import org.koin.core.parameter.parametersOf
 
-data class NutritionLabelScanScreen(val profileId: Long? = null) : Screen {
+data class NutritionLabelScanScreen(
+    val profileId: Long? = null,
+    val onSaved: (() -> Unit)? = null
+) : Screen {
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
@@ -161,7 +170,12 @@ data class NutritionLabelScanScreen(val profileId: Long? = null) : Screen {
                 )
 
                 Button(
-                    onClick = { viewModel.save { navigator.pop() } },
+                    onClick = {
+                        viewModel.save {
+                            onSaved?.invoke()
+                            navigator.pop()
+                        }
+                    },
                     modifier = Modifier.fillMaxWidth(),
                     enabled = !uiState.isSaving
                 ) {
@@ -201,10 +215,25 @@ private fun NumericField(
     field: String,
     onValueChange: (String, String) -> Unit
 ) {
+    var text by remember(field) { mutableStateOf(value?.toString().orEmpty()) }
+
+    LaunchedEffect(value) {
+        val normalizedValue = value?.toString().orEmpty()
+        if (text.toDoubleOrNull() != value) {
+            text = normalizedValue
+        }
+    }
+
     OutlinedTextField(
-        value = value?.toString().orEmpty(),
-        onValueChange = { onValueChange(field, it) },
+        value = text,
+        onValueChange = {
+            if (it.isEmpty() || it.matches(Regex("""\d*\.?\d*"""))) {
+                text = it
+                onValueChange(field, it)
+            }
+        },
         label = { Text(label) },
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier.fillMaxWidth(),
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
     )
 }

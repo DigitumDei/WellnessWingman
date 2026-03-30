@@ -204,6 +204,40 @@ class GeminiLlmClientTest {
     }
 
     @Test
+    fun `generateCompletion includes nutritional profile tool guidance in system instruction`() = runTest {
+        val requests = mutableListOf<String>()
+        val responses = ArrayDeque(
+            listOf(
+                """{
+                    "candidates": [{
+                        "content": {
+                            "role": "model",
+                            "parts": [{"text": "ok"}]
+                        }
+                    }]
+                }""".trimIndent()
+            )
+        )
+
+        GeminiLlmClient(
+            apiKey = "test-key",
+            httpClient = mockGeminiClient(requests, responses)
+        ).generateCompletion(
+            prompt = "hello",
+            tools = listOf(
+                ToolDefinition(
+                    name = "list_nutritional_profiles",
+                    description = "Lists saved nutritional profiles.",
+                    parametersSchema = buildJsonObject { put("type", JsonPrimitive("object")) }
+                )
+            )
+        )
+
+        assertTrue(requests.single().contains("saved nutritional profiles"))
+        assertTrue(requests.single().contains("list-then-get flow"))
+    }
+
+    @Test
     fun `gemini part round trips thought signature`() {
         val payload = Json.encodeToString(
             GeminiPart(

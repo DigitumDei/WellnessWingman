@@ -10,14 +10,14 @@ import kotlinx.coroutines.withContext
  * Desktop implementation of CameraCaptureService.
  * Desktop doesn't have camera, so only file picker is supported.
  */
-actual class CameraCaptureService {
+actual class CameraCaptureService : CameraCaptureOperations {
 
-    actual suspend fun capturePhoto(): CaptureResult {
+    actual override suspend fun capturePhoto(): CaptureResult {
         // Desktop doesn't have camera, fallback to file picker
         return pickFromGallery() ?: CaptureResult.Cancelled
     }
 
-    actual suspend fun pickFromGallery(): CaptureResult? = withContext(Dispatchers.IO) {
+    actual override suspend fun pickFromGallery(): CaptureResult? = withContext(Dispatchers.IO) {
         val fileDialog = FileDialog(null as Frame?, "Select Image", FileDialog.LOAD)
         fileDialog.setFilenameFilter { _, name ->
             name.lowercase().let {

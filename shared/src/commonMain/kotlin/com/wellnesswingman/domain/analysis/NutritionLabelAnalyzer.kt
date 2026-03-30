@@ -11,16 +11,21 @@ import kotlinx.serialization.json.Json
 
 class NutritionLabelAnalyzer(
     private val llmClientFactory: LlmClientFactory
-) {
+) : NutritionLabelAnalyzing {
     private val json = Json {
         ignoreUnknownKeys = true
         isLenient = true
     }
 
-    suspend fun analyzeLabelImage(
+    override fun hasConfiguredApiKey(): Boolean = llmClientFactory.hasCurrentApiKey()
+
+    override suspend fun analyzeLabelImage(
         imageBytes: ByteArray,
         sourceImagePath: String? = null
     ): NutritionLabelExtraction {
+        check(hasConfiguredApiKey()) {
+            "Missing API Key. Go to Settings to add your OpenAI or Gemini API key to extract nutrition facts."
+        }
         val llmClient = llmClientFactory.createForCurrentProvider()
         val response = llmClient.analyzeImage(
             imageBytes = imageBytes,

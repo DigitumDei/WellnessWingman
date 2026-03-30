@@ -12,14 +12,14 @@ sealed class CaptureResult {
 /**
  * Platform-specific camera and photo picker service.
  */
-expect class CameraCaptureService {
+expect class CameraCaptureService : CameraCaptureOperations {
     /**
      * Captures a photo using the device camera.
      */
-    suspend fun capturePhoto(): CaptureResult
+    override suspend fun capturePhoto(): CaptureResult
 
     /**
      * Picks a photo from the device gallery/photos.
      */
-    suspend fun pickFromGallery(): CaptureResult?
+    override suspend fun pickFromGallery(): CaptureResult?
 }

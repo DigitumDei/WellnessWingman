@@ -5,6 +5,8 @@ import com.russhwolf.settings.Settings
 import com.wellnesswingman.data.db.DriverFactory
 import com.wellnesswingman.platform.AudioRecordingService
 import com.wellnesswingman.platform.BackgroundExecutionService
+import com.wellnesswingman.platform.CameraCaptureOperations
+import com.wellnesswingman.platform.CameraCaptureService
 import com.wellnesswingman.platform.DiagnosticShare
 import com.wellnesswingman.platform.FileSystem
 import com.wellnesswingman.platform.FileSystemOperations
@@ -31,6 +33,7 @@ val platformModule = module {
 
     // Platform services
     single { FileSystem() } bind FileSystemOperations::class
+    single { CameraCaptureService() } bind CameraCaptureOperations::class
     single { AudioRecordingService() }
     single { DiagnosticShare() }
     single { ZipUtil() } bind ZipOperations::class

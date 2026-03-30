@@ -61,7 +61,13 @@ class NutritionalProfilesScreen : Screen {
                 )
             },
             floatingActionButton = {
-                FloatingActionButton(onClick = { navigator.push(NutritionLabelScanScreen()) }) {
+                FloatingActionButton(
+                    onClick = {
+                        navigator.push(
+                            NutritionLabelScanScreen(onSaved = viewModel::loadProfiles)
+                        )
+                    }
+                ) {
                     Icon(Icons.Default.Add, contentDescription = "Scan nutrition label")
                 }
             }
@@ -93,7 +99,14 @@ class NutritionalProfilesScreen : Screen {
                             items(state.profiles, key = { it.profileId }) { profile ->
                                 NutritionalProfileRow(
                                     profile = profile,
-                                    onClick = { navigator.push(NutritionLabelScanScreen(profile.profileId)) },
+                                    onClick = {
+                                        navigator.push(
+                                            NutritionLabelScanScreen(
+                                                profileId = profile.profileId,
+                                                onSaved = viewModel::loadProfiles
+                                            )
+                                        )
+                                    },
                                     onDelete = { deleteTarget = profile }
                                 )
                             }

@@ -317,6 +317,23 @@ class ToolRegistryTest {
     }
 
     @Test
+    fun `list nutritional profiles tool returns empty list when no profiles exist`() = runTest {
+        val registry = ToolRegistry(
+            trackedEntryRepository = FakeTrackedEntryRepository(),
+            entryAnalysisRepository = FakeEntryAnalysisRepository(),
+            weightHistoryRepository = FakeWeightHistoryRepository(),
+            appSettingsRepository = FakeAppSettingsRepository(),
+            nutritionalProfileRepository = FakeNutritionalProfileRepository()
+        )
+
+        val result = registry.execute(ToolCall(name = "list_nutritional_profiles"))
+
+        assertFalse(result.isError)
+        val payload = assertIs<JsonObject>(result.content)
+        assertEquals("[]", payload["profiles"]?.toString())
+    }
+
+    @Test
     fun `get nutritional profiles tool returns exact profiles for requested ids`() = runTest {
         val now = Clock.System.now()
         val registry = ToolRegistry(
@@ -402,6 +419,46 @@ class ToolRegistryTest {
 
         assertTrue(result.isError)
         assertEquals("\"profileIds is required\"", result.content.toString())
+    }
+
+    @Test
+    fun `get nutritional profiles tool returns empty profiles when ids do not exist`() = runTest {
+        val registry = ToolRegistry(
+            trackedEntryRepository = FakeTrackedEntryRepository(),
+            entryAnalysisRepository = FakeEntryAnalysisRepository(),
+            weightHistoryRepository = FakeWeightHistoryRepository(),
+            appSettingsRepository = FakeAppSettingsRepository(),
+            nutritionalProfileRepository = FakeNutritionalProfileRepository()
+        )
+
+        val result = registry.execute(
+            ToolCall(
+                name = "get_nutritional_profiles",
+                arguments = buildJsonObject {
+                    put("profileIds", JsonArray(listOf(JsonPrimitive(9999999999L))))
+                }
+            )
+        )
+
+        assertFalse(result.isError)
+        val payload = assertIs<JsonObject>(result.content)
+        assertEquals("[9999999999]", payload["profileIds"]?.toString())
+        assertEquals("[]", payload["profiles"]?.toString())
+    }
+
+    @Test
+    fun `get nutritional profiles schema marks profile ids as required`() {
+        val registry = ToolRegistry(
+            trackedEntryRepository = FakeTrackedEntryRepository(),
+            entryAnalysisRepository = FakeEntryAnalysisRepository(),
+            weightHistoryRepository = FakeWeightHistoryRepository(),
+            appSettingsRepository = FakeAppSettingsRepository(),
+            nutritionalProfileRepository = FakeNutritionalProfileRepository()
+        )
+
+        val definition = registry.definitions().first { it.name == "get_nutritional_profiles" }
+        val required = assertIs<JsonArray>(assertIs<JsonObject>(definition.parametersSchema)["required"])
+        assertEquals("[\"profileIds\"]", required.toString())
     }
 
     private class FakeTrackedEntryRepository(
