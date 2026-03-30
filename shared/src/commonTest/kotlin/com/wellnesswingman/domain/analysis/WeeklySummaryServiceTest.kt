@@ -215,6 +215,7 @@ class WeeklySummaryServiceTest {
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
 
     private class FakeNutritionalProfileRepository : NutritionalProfileRepository {
+        override fun getAllAsFlow(): Flow<List<NutritionalProfile>> = emptyFlow()
         override suspend fun getAll(): List<NutritionalProfile> = emptyList()
         override suspend fun getById(profileId: Long): NutritionalProfile? = null
         override suspend fun getByExternalId(externalId: String): NutritionalProfile? = null

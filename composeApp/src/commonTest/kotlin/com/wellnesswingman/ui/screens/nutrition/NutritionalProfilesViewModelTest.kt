@@ -4,7 +4,12 @@ import com.wellnesswingman.data.model.NutritionalProfile
 import com.wellnesswingman.data.repository.NutritionalProfileRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -48,11 +53,18 @@ class NutritionalProfilesViewModelTest {
         )
 
         val viewModel = NutritionalProfilesViewModel(repository)
+        
+        // Trigger subscription for WhileSubscribed
+        val collectJob = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            viewModel.uiState.collect()
+        }
+        
         advanceUntilIdle()
 
         val state = assertIs<NutritionalProfilesUiState.Success>(viewModel.uiState.value)
         assertEquals(1, state.profiles.size)
         assertEquals("Quest Bar", state.profiles.single().primaryName)
+        collectJob.cancel()
     }
 
     @Test
@@ -77,6 +89,12 @@ class NutritionalProfilesViewModelTest {
             )
         )
         val viewModel = NutritionalProfilesViewModel(repository)
+        
+        // Trigger subscription for WhileSubscribed
+        val collectJob = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            viewModel.uiState.collect()
+        }
+        
         advanceUntilIdle()
 
         viewModel.deleteProfile(1L)
@@ -84,18 +102,27 @@ class NutritionalProfilesViewModelTest {
 
         val state = assertIs<NutritionalProfilesUiState.Success>(viewModel.uiState.value)
         assertEquals(listOf("Two"), state.profiles.map { it.primaryName })
+        collectJob.cancel()
     }
 }
 
 private class FakeProfilesRepository(
-    private val profiles: MutableList<NutritionalProfile> = mutableListOf()
+    initialProfiles: List<NutritionalProfile> = emptyList()
 ) : NutritionalProfileRepository {
+    private val profiles = initialProfiles.toMutableList()
+    private val _profilesFlow = MutableStateFlow(profiles.toList())
+
+    override fun getAllAsFlow(): Flow<List<NutritionalProfile>> = _profilesFlow
+
     override suspend fun getAll(): List<NutritionalProfile> = profiles.toList()
     override suspend fun getById(profileId: Long): NutritionalProfile? = profiles.find { it.profileId == profileId }
     override suspend fun getByExternalId(externalId: String): NutritionalProfile? = profiles.find { it.externalId == externalId }
     override suspend fun searchByName(query: String, limit: Int): List<NutritionalProfile> = emptyList()
     override suspend fun insert(profile: NutritionalProfile): Long = 0L
     override suspend fun update(profile: NutritionalProfile) {}
-    override suspend fun delete(profileId: Long) { profiles.removeAll { it.profileId == profileId } }
+    override suspend fun delete(profileId: Long) { 
+        profiles.removeAll { it.profileId == profileId }
+        _profilesFlow.value = profiles.toList()
+    }
     override suspend fun upsert(profile: NutritionalProfile) {}
 }

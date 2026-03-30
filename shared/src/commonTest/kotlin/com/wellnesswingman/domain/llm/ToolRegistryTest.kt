@@ -17,6 +17,7 @@ import com.wellnesswingman.data.repository.WeightHistoryRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
@@ -532,6 +533,7 @@ class ToolRegistryTest {
     private class FakeNutritionalProfileRepository(
         private val profiles: List<NutritionalProfile> = emptyList()
     ) : NutritionalProfileRepository {
+        override fun getAllAsFlow(): Flow<List<NutritionalProfile>> = flowOf(profiles)
         override suspend fun getAll(): List<NutritionalProfile> = profiles
         override suspend fun getById(profileId: Long): NutritionalProfile? = profiles.find { it.profileId == profileId }
         override suspend fun getByExternalId(externalId: String): NutritionalProfile? = profiles.find { it.externalId == externalId }

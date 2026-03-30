@@ -10,6 +10,8 @@ import com.wellnesswingman.platform.CaptureResult
 import com.wellnesswingman.platform.FileSystemOperations
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
@@ -272,6 +274,8 @@ private class FakeNutritionalProfileRepository(
     private val profiles: MutableList<NutritionalProfile> = mutableListOf()
 ) : NutritionalProfileRepository {
     val inserted = mutableListOf<NutritionalProfile>()
+
+    override fun getAllAsFlow(): Flow<List<NutritionalProfile>> = flowOf(profiles.toList())
 
     override suspend fun getAll(): List<NutritionalProfile> = profiles.toList()
 
