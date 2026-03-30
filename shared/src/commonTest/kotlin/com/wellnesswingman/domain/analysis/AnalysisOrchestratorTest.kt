@@ -2,11 +2,13 @@ package com.wellnesswingman.domain.analysis
 
 import com.wellnesswingman.data.model.EntryAnalysis
 import com.wellnesswingman.data.model.EntryType
+import com.wellnesswingman.data.model.NutritionalProfile
 import com.wellnesswingman.data.model.ProcessingStatus
 import com.wellnesswingman.data.model.TrackedEntry
 import com.wellnesswingman.data.repository.AppSettingsRepository
 import com.wellnesswingman.data.repository.EntryAnalysisRepository
 import com.wellnesswingman.data.repository.LlmProvider
+import com.wellnesswingman.data.repository.NutritionalProfileRepository
 import com.wellnesswingman.data.repository.TrackedEntryRepository
 import com.wellnesswingman.data.repository.WeightHistoryRepository
 import com.wellnesswingman.domain.llm.LlmAnalysisResult
@@ -43,7 +45,8 @@ class AnalysisOrchestratorTest {
             trackedEntryRepository = trackedEntryRepository,
             entryAnalysisRepository = entryAnalysisRepository,
             weightHistoryRepository = FakeWeightHistoryRepository(),
-            appSettingsRepository = FakeAppSettingsRepository()
+            appSettingsRepository = FakeAppSettingsRepository(),
+            nutritionalProfileRepository = FakeNutritionalProfileRepository()
         )
         val llmClient = mockk<LlmClient>()
         val llmClientFactory = mockk<LlmClientFactory>()
@@ -142,7 +145,8 @@ class AnalysisOrchestratorTest {
                 trackedEntryRepository = trackedEntryRepository,
                 entryAnalysisRepository = FakeEntryAnalysisRepository(),
                 weightHistoryRepository = FakeWeightHistoryRepository(),
-                appSettingsRepository = FakeAppSettingsRepository()
+                appSettingsRepository = FakeAppSettingsRepository(),
+                nutritionalProfileRepository = FakeNutritionalProfileRepository()
             ),
             fileSystem = mockk<FileSystem>(),
             appSettingsRepository = FakeAppSettingsRepository()
@@ -216,6 +220,17 @@ class AnalysisOrchestratorTest {
         override suspend fun deleteWeightRecord(recordId: Long) {}
         override suspend fun nullifyRelatedEntryId(entryId: Long) {}
         override suspend fun upsertWeightRecord(record: com.wellnesswingman.data.model.WeightRecord) {}
+    }
+
+    private class FakeNutritionalProfileRepository : NutritionalProfileRepository {
+        override suspend fun getAll(): List<NutritionalProfile> = emptyList()
+        override suspend fun getById(profileId: Long): NutritionalProfile? = null
+        override suspend fun getByExternalId(externalId: String): NutritionalProfile? = null
+        override suspend fun searchByName(query: String, limit: Int): List<NutritionalProfile> = emptyList()
+        override suspend fun insert(profile: NutritionalProfile): Long = 0L
+        override suspend fun update(profile: NutritionalProfile) {}
+        override suspend fun delete(profileId: Long) {}
+        override suspend fun upsert(profile: NutritionalProfile) {}
     }
 
     private class FakeAppSettingsRepository : AppSettingsRepository {

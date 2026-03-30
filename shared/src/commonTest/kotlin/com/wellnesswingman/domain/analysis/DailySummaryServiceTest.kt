@@ -4,6 +4,7 @@ import com.wellnesswingman.data.model.DailySummary
 import com.wellnesswingman.data.model.DailySummaryResult
 import com.wellnesswingman.data.model.EntryAnalysis
 import com.wellnesswingman.data.model.EntryType
+import com.wellnesswingman.data.model.NutritionalProfile
 import com.wellnesswingman.data.model.ProcessingStatus
 import com.wellnesswingman.data.model.TrackedEntry
 import com.wellnesswingman.data.model.WeightRecord
@@ -36,6 +37,7 @@ import com.wellnesswingman.data.repository.TrackedEntryRepository
 import com.wellnesswingman.data.repository.WeightHistoryRepository
 import com.wellnesswingman.data.repository.AppSettingsRepository
 import com.wellnesswingman.data.repository.LlmProvider
+import com.wellnesswingman.data.repository.NutritionalProfileRepository
 import com.wellnesswingman.domain.llm.LlmAnalysisResult
 import com.wellnesswingman.domain.llm.LlmClient
 import com.wellnesswingman.domain.llm.LlmClientFactory
@@ -186,10 +188,22 @@ class DailySummaryServiceTest {
         trackedEntryRepository = FakeTrackedEntryRepository(),
         entryAnalysisRepository = FakeEntryAnalysisRepository(),
         weightHistoryRepository = FakeWeightHistoryRepository(),
-        appSettingsRepository = FakeAppSettingsRepository()
+        appSettingsRepository = FakeAppSettingsRepository(),
+        nutritionalProfileRepository = FakeNutritionalProfileRepository()
     )
 
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
+
+    private class FakeNutritionalProfileRepository : NutritionalProfileRepository {
+        override suspend fun getAll(): List<NutritionalProfile> = emptyList()
+        override suspend fun getById(profileId: Long): NutritionalProfile? = null
+        override suspend fun getByExternalId(externalId: String): NutritionalProfile? = null
+        override suspend fun searchByName(query: String, limit: Int): List<NutritionalProfile> = emptyList()
+        override suspend fun insert(profile: NutritionalProfile): Long = 0L
+        override suspend fun update(profile: NutritionalProfile) {}
+        override suspend fun delete(profileId: Long) {}
+        override suspend fun upsert(profile: NutritionalProfile) {}
+    }
 
     private fun makeLlmClientFactory(hasKey: Boolean, response: String = """{"insights":[],"recommendations":[]}"""): LlmClientFactory {
         val fakeLlmClient = object : LlmClient {

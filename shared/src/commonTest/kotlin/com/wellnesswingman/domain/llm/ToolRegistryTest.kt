@@ -68,7 +68,8 @@ class ToolRegistryTest {
             ),
             entryAnalysisRepository = entryAnalysisRepository,
             weightHistoryRepository = FakeWeightHistoryRepository(),
-            appSettingsRepository = FakeAppSettingsRepository()
+            appSettingsRepository = FakeAppSettingsRepository(),
+            nutritionalProfileRepository = FakeNutritionalProfileRepository()
         )
 
         val result = registry.execute(
@@ -89,7 +90,7 @@ class ToolRegistryTest {
         assertTrue(entries.contains("\"latestInsightsJson\":{\"summary\":\"Tempo run\"}"))
         assertEquals(1, entryAnalysisRepository.getAllAnalysesCalls)
         assertEquals(0, entryAnalysisRepository.getLatestAnalysisCalls)
-        assertEquals(3, registry.definitions().size)
+        assertEquals(4, registry.definitions().size)
     }
 
     @Test
@@ -115,7 +116,8 @@ class ToolRegistryTest {
             trackedEntryRepository = trackedEntryRepository,
             entryAnalysisRepository = FakeEntryAnalysisRepository(),
             weightHistoryRepository = FakeWeightHistoryRepository(),
-            appSettingsRepository = FakeAppSettingsRepository()
+            appSettingsRepository = FakeAppSettingsRepository(),
+            nutritionalProfileRepository = FakeNutritionalProfileRepository()
         )
 
         val result = registry.execute(
@@ -140,7 +142,8 @@ class ToolRegistryTest {
             trackedEntryRepository = FakeTrackedEntryRepository(),
             entryAnalysisRepository = FakeEntryAnalysisRepository(),
             weightHistoryRepository = FakeWeightHistoryRepository(),
-            appSettingsRepository = FakeAppSettingsRepository()
+            appSettingsRepository = FakeAppSettingsRepository(),
+            nutritionalProfileRepository = FakeNutritionalProfileRepository()
         )
 
         registry.register(
@@ -164,7 +167,8 @@ class ToolRegistryTest {
             trackedEntryRepository = FakeTrackedEntryRepository(),
             entryAnalysisRepository = FakeEntryAnalysisRepository(),
             weightHistoryRepository = FakeWeightHistoryRepository(),
-            appSettingsRepository = FakeAppSettingsRepository()
+            appSettingsRepository = FakeAppSettingsRepository(),
+            nutritionalProfileRepository = FakeNutritionalProfileRepository()
         )
 
         val result = registry.execute(ToolCall(name = "missing_tool"))
@@ -180,7 +184,8 @@ class ToolRegistryTest {
             trackedEntryRepository = FakeTrackedEntryRepository(),
             entryAnalysisRepository = FakeEntryAnalysisRepository(),
             weightHistoryRepository = FakeWeightHistoryRepository(),
-            appSettingsRepository = FakeAppSettingsRepository()
+            appSettingsRepository = FakeAppSettingsRepository(),
+            nutritionalProfileRepository = FakeNutritionalProfileRepository()
         )
 
         val result = registry.execute(ToolCall(name = "get_user_profile"))
@@ -209,7 +214,8 @@ class ToolRegistryTest {
                     )
                 )
             ),
-            appSettingsRepository = FakeAppSettingsRepository()
+            appSettingsRepository = FakeAppSettingsRepository(),
+            nutritionalProfileRepository = FakeNutritionalProfileRepository()
         )
 
         val result = registry.execute(
@@ -233,7 +239,8 @@ class ToolRegistryTest {
             trackedEntryRepository = FakeTrackedEntryRepository(),
             entryAnalysisRepository = FakeEntryAnalysisRepository(),
             weightHistoryRepository = FakeWeightHistoryRepository(),
-            appSettingsRepository = FakeAppSettingsRepository()
+            appSettingsRepository = FakeAppSettingsRepository(),
+            nutritionalProfileRepository = FakeNutritionalProfileRepository()
         )
 
         registry.register(
@@ -309,6 +316,31 @@ class ToolRegistryTest {
         assertEquals(1, matches.size)
         assertTrue(matches.toString().contains("Quest Protein Bar"))
         assertTrue(matches.toString().contains("\"source\":\"exact\""))
+    }
+
+    @Test
+    fun `lookup nutritional profile tool returns empty matches when nothing is found`() = runTest {
+        val registry = ToolRegistry(
+            trackedEntryRepository = FakeTrackedEntryRepository(),
+            entryAnalysisRepository = FakeEntryAnalysisRepository(),
+            weightHistoryRepository = FakeWeightHistoryRepository(),
+            appSettingsRepository = FakeAppSettingsRepository(),
+            nutritionalProfileRepository = FakeNutritionalProfileRepository()
+        )
+
+        val result = registry.execute(
+            ToolCall(
+                name = "lookup_nutritional_profile",
+                arguments = buildJsonObject {
+                    put("query", JsonPrimitive("missing food"))
+                }
+            )
+        )
+
+        assertFalse(result.isError)
+        val payload = assertIs<JsonObject>(result.content)
+        assertEquals("missing food", payload["query"]?.toString()?.trim('"'))
+        assertEquals("[]", payload["matches"]?.toString())
     }
 
     private class FakeTrackedEntryRepository(

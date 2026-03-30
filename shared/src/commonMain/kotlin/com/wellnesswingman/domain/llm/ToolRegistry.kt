@@ -35,7 +35,7 @@ class ToolRegistry(
     private val entryAnalysisRepository: EntryAnalysisRepository,
     private val weightHistoryRepository: WeightHistoryRepository,
     private val appSettingsRepository: AppSettingsRepository,
-    private val nutritionalProfileRepository: NutritionalProfileRepository? = null
+    private val nutritionalProfileRepository: NutritionalProfileRepository
 ) {
     private val json = Json {
         ignoreUnknownKeys = true
@@ -190,8 +190,6 @@ class ToolRegistry(
     }
 
     private fun registerNutritionalProfileTools() {
-        val repository = nutritionalProfileRepository ?: return
-
         register(
             definition = ToolDefinition(
                 name = "lookup_nutritional_profile",
@@ -222,7 +220,7 @@ class ToolRegistry(
             }
 
             val limit = call.arguments["limit"]?.jsonPrimitive?.intOrNull?.coerceIn(1, 5) ?: 3
-            val matches = repository.searchByName(query, limit)
+            val matches = nutritionalProfileRepository.searchByName(query, limit)
             ToolResult(
                 toolCallId = call.id,
                 name = call.name,
