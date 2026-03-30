@@ -8,6 +8,7 @@ import com.wellnesswingman.domain.analysis.DailyTotalsCalculator
 import com.wellnesswingman.domain.analysis.DefaultBackgroundAnalysisService
 import com.wellnesswingman.domain.analysis.DefaultStaleEntryRecoveryService
 import com.wellnesswingman.domain.analysis.NutritionLabelAnalyzer
+import com.wellnesswingman.domain.analysis.NutritionLabelAnalyzing
 import com.wellnesswingman.domain.analysis.StaleEntryRecoveryService
 import com.wellnesswingman.domain.capture.PendingCaptureStore
 import com.wellnesswingman.domain.events.DefaultStatusChangeNotifier
@@ -21,6 +22,7 @@ import com.wellnesswingman.domain.navigation.HistoricalNavigationContext
 import com.wellnesswingman.domain.oauth.PendingOAuthResultStore
 import com.wellnesswingman.domain.polar.PolarInsightService
 import com.wellnesswingman.domain.polar.PolarSyncOrchestrator
+import org.koin.core.module.dsl.bind
 import org.koin.core.module.dsl.singleOf
 import org.koin.dsl.module
 
@@ -41,7 +43,7 @@ val domainModule = module {
 
     // LLM
     singleOf(::LlmClientFactory)
-    singleOf(::NutritionLabelAnalyzer)
+    singleOf(::NutritionLabelAnalyzer) { bind<NutritionLabelAnalyzing>() }
     single {
         ToolRegistry(
             trackedEntryRepository = get(),
