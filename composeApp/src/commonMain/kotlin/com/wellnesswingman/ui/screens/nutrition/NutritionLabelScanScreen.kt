@@ -42,7 +42,9 @@ data class NutritionLabelScanScreen(
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
-        val viewModel = getScreenModel<NutritionLabelScanViewModel> { parametersOf(profileId) }
+        val viewModel = getScreenModel<NutritionLabelScanViewModel> {
+            parametersOf(profileIdParameter(profileId))
+        }
         val uiState by viewModel.uiState.collectAsState()
 
         Scaffold(

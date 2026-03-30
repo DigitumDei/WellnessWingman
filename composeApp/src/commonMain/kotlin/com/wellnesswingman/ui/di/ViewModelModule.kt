@@ -8,6 +8,7 @@ import com.wellnesswingman.ui.screens.detail.EntryDetailViewModel
 import com.wellnesswingman.ui.screens.main.MainViewModel
 import com.wellnesswingman.ui.screens.nutrition.NutritionLabelScanViewModel
 import com.wellnesswingman.ui.screens.nutrition.NutritionalProfilesViewModel
+import com.wellnesswingman.ui.screens.nutrition.profileIdFromParameter
 import com.wellnesswingman.ui.screens.photo.PhotoReviewViewModel
 import com.wellnesswingman.ui.screens.settings.PolarSettingsViewModel
 import com.wellnesswingman.ui.screens.settings.SettingsViewModel
@@ -41,7 +42,7 @@ val viewModelModule = module {
     factoryOf(::NutritionalProfilesViewModel)
     factory { params ->
         NutritionLabelScanViewModel(
-            profileId = runCatching { params.get<Long>() }.getOrNull(),
+            profileId = profileIdFromParameter(runCatching { params.get<Long>() }.getOrNull()),
             cameraService = get(),
             fileSystem = get(),
             analyzer = get(),
