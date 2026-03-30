@@ -25,6 +25,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.JsonObjectBuilder
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.putJsonObject
@@ -243,7 +244,7 @@ class ToolRegistry(
                 )
             }
 
-            val matches = requestedIds.mapNotNull(nutritionalProfileRepository::getById)
+            val matches = requestedIds.mapNotNull { nutritionalProfileRepository.getById(it) }
             ToolResult(
                 toolCallId = call.id,
                 name = call.name,
