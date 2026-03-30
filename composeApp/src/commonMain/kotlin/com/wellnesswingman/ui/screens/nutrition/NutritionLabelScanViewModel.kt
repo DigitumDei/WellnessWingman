@@ -161,6 +161,7 @@ class NutritionLabelScanViewModel(
     private fun applyExtraction(extraction: NutritionLabelExtraction) {
         _uiState.value = _uiState.value.copy(
             isAnalyzing = false,
+            primaryName = extraction.primaryName?.trim()?.takeIf { it.isNotEmpty() } ?: _uiState.value.primaryName,
             extractionWarnings = extraction.warnings,
             servingSize = extraction.servingSize.orEmpty(),
             nutrition = extraction.nutrition,

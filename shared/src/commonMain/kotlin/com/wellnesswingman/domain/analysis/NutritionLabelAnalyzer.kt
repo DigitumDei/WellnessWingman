@@ -82,6 +82,7 @@ If a field is not visible, use null.
 
 Required JSON shape:
 {
+  "primaryName": "string or null",
   "servingSize": "string or null",
   "nutrition": {
     "totalCalories": number or null,
@@ -103,6 +104,8 @@ Required JSON shape:
 
 @Serializable
 data class NutritionLabelExtraction(
+    @SerialName("primaryName")
+    val primaryName: String? = null,
     @SerialName("servingSize")
     val servingSize: String? = null,
     @SerialName("nutrition")

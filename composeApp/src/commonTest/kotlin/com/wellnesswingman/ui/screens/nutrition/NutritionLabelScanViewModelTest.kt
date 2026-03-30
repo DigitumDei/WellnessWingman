@@ -112,6 +112,67 @@ class NutritionLabelScanViewModelTest {
     }
 
     @Test
+    fun `analyzeImage populates primary name when extraction returns one`() = runTest(dispatcher.scheduler) {
+        val viewModel = NutritionLabelScanViewModel(
+            profileId = null,
+            cameraService = FakeCameraCaptureOperations(),
+            fileSystem = FakeFileSystemOperations(),
+            analyzer = FakeNutritionLabelAnalyzer(
+                nextResult = Result.success(
+                    NutritionLabelExtraction(
+                        primaryName = "  Fairlife Core Power  ",
+                        servingSize = "1 bottle",
+                        nutrition = ExtractedNutrition(totalCalories = 230.0),
+                        confidence = 0.98
+                    )
+                )
+            ),
+            repository = FakeNutritionalProfileRepository()
+        )
+
+        viewModel.captureFromCamera()
+        advanceUntilIdle()
+        viewModel.analyzeImage()
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals("Fairlife Core Power", state.primaryName)
+        assertEquals("1 bottle", state.servingSize)
+        assertEquals(230.0, state.nutrition.totalCalories)
+    }
+
+    @Test
+    fun `analyzeImage keeps existing primary name when extraction omits it`() = runTest(dispatcher.scheduler) {
+        val viewModel = NutritionLabelScanViewModel(
+            profileId = null,
+            cameraService = FakeCameraCaptureOperations(),
+            fileSystem = FakeFileSystemOperations(),
+            analyzer = FakeNutritionLabelAnalyzer(
+                nextResult = Result.success(
+                    NutritionLabelExtraction(
+                        primaryName = "   ",
+                        servingSize = "1 bar",
+                        nutrition = ExtractedNutrition(totalCalories = 190.0),
+                        confidence = 0.91
+                    )
+                )
+            ),
+            repository = FakeNutritionalProfileRepository()
+        )
+
+        viewModel.updatePrimaryName("Quest Bar")
+        viewModel.captureFromCamera()
+        advanceUntilIdle()
+        viewModel.analyzeImage()
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals("Quest Bar", state.primaryName)
+        assertEquals("1 bar", state.servingSize)
+        assertEquals(190.0, state.nutrition.totalCalories)
+    }
+
+    @Test
     fun `save trims fields and inserts new profile`() = runTest(dispatcher.scheduler) {
         val repository = FakeNutritionalProfileRepository()
         val viewModel = NutritionLabelScanViewModel(
