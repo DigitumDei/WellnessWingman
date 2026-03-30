@@ -87,12 +87,28 @@ class NutritionalProfileTest {
         )
         val encoded = json.encodeToString(original)
 
+        // Verify key presence and structure without being brittle about Double formatting
+        assertTrue(encoded.contains("\"totalCalories\":"))
+        assertTrue(encoded.contains("\"protein\":"))
+        assertTrue(encoded.contains("\"source\":\"exact\""))
+
         val decoded = json.decodeFromString<NutritionalProfileLookupResult>(encoded)
-        assertEquals(original.profileId, decoded.profileId)
-        assertEquals(original.primaryName, decoded.primaryName)
-        assertEquals(original.nutrition.totalCalories, decoded.nutrition.totalCalories)
-        assertEquals(original.nutrition.protein, decoded.nutrition.protein)
-        assertEquals(original.source, decoded.source)
+        
+        assertEquals(8L, decoded.profileId)
+        assertEquals("Quest Protein Bar", decoded.primaryName)
+        assertEquals(listOf("protein bar"), decoded.aliases)
+        assertEquals("1 bar", decoded.servingSize)
+        assertEquals(190.0, decoded.nutrition.totalCalories)
+        assertEquals(21.0, decoded.nutrition.protein)
+        assertEquals(22.0, decoded.nutrition.carbohydrates)
+        assertEquals(7.0, decoded.nutrition.fat)
+        assertEquals(14.0, decoded.nutrition.fiber)
+        assertEquals(1.0, decoded.nutrition.sugar)
+        assertEquals(210.0, decoded.nutrition.sodium)
+        assertEquals(2.5, decoded.nutrition.saturatedFat)
+        assertEquals(0.0, decoded.nutrition.transFat)
+        assertEquals(5.0, decoded.nutrition.cholesterol)
+        assertEquals("exact", decoded.source)
         
         // Final sanity check for the whole object
         assertEquals(original, decoded)
