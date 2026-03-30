@@ -1,0 +1,120 @@
+CREATE TABLE NutritionalProfile (
+    profileId INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    externalId TEXT NOT NULL UNIQUE,
+    primaryName TEXT NOT NULL,
+    aliases TEXT NOT NULL DEFAULT '[]',
+    servingSize TEXT,
+    calories REAL,
+    protein REAL,
+    carbohydrates REAL,
+    fat REAL,
+    fiber REAL,
+    sugar REAL,
+    sodium REAL,
+    saturatedFat REAL,
+    transFat REAL,
+    cholesterol REAL,
+    rawJson TEXT,
+    sourceImagePath TEXT,
+    createdAt INTEGER NOT NULL,
+    updatedAt INTEGER NOT NULL
+);
+
+CREATE INDEX idx_nutritional_profile_name ON NutritionalProfile(primaryName);
+
+getAll:
+SELECT * FROM NutritionalProfile
+ORDER BY primaryName COLLATE NOCASE ASC;
+
+getById:
+SELECT * FROM NutritionalProfile
+WHERE profileId = ?;
+
+getByExternalId:
+SELECT * FROM NutritionalProfile
+WHERE externalId = ?;
+
+searchByName:
+SELECT * FROM NutritionalProfile
+WHERE lower(primaryName) LIKE lower(:query)
+   OR lower(aliases) LIKE lower(:aliases)
+ORDER BY
+    CASE
+        WHEN lower(primaryName) = lower(:exact) THEN 0
+        WHEN lower(primaryName) LIKE lower(:prefix) THEN 1
+        ELSE 2
+    END,
+    primaryName COLLATE NOCASE ASC
+LIMIT :limit;
+
+insert:
+INSERT INTO NutritionalProfile(
+    externalId,
+    primaryName,
+    aliases,
+    servingSize,
+    calories,
+    protein,
+    carbohydrates,
+    fat,
+    fiber,
+    sugar,
+    sodium,
+    saturatedFat,
+    transFat,
+    cholesterol,
+    rawJson,
+    sourceImagePath,
+    createdAt,
+    updatedAt
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+update:
+UPDATE NutritionalProfile
+SET primaryName = ?,
+    aliases = ?,
+    servingSize = ?,
+    calories = ?,
+    protein = ?,
+    carbohydrates = ?,
+    fat = ?,
+    fiber = ?,
+    sugar = ?,
+    sodium = ?,
+    saturatedFat = ?,
+    transFat = ?,
+    cholesterol = ?,
+    rawJson = ?,
+    sourceImagePath = ?,
+    updatedAt = ?
+WHERE profileId = ?;
+
+deleteById:
+DELETE FROM NutritionalProfile
+WHERE profileId = ?;
+
+upsert:
+INSERT OR REPLACE INTO NutritionalProfile(
+    profileId,
+    externalId,
+    primaryName,
+    aliases,
+    servingSize,
+    calories,
+    protein,
+    carbohydrates,
+    fat,
+    fiber,
+    sugar,
+    sodium,
+    saturatedFat,
+    transFat,
+    cholesterol,
+    rawJson,
+    sourceImagePath,
+    createdAt,
+    updatedAt
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+lastInsertRowId:
+SELECT last_insert_rowid();

@@ -9,6 +9,7 @@ import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -19,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import com.wellnesswingman.ui.screens.nutrition.NutritionalProfilesScreen
 
 class SettingsScreen : Screen {
     @Composable
@@ -61,6 +63,13 @@ class SettingsScreen : Screen {
                     title = "Polar Integration",
                     subtitle = "Connect your Polar fitness account",
                     onClick = { navigator.push(PolarSettingsScreen()) }
+                )
+                HorizontalDivider()
+                SettingsMenuItem(
+                    icon = Icons.Default.Restaurant,
+                    title = "Nutrition Profiles",
+                    subtitle = "Scan labels and manage exact packaged-food macros",
+                    onClick = { navigator.push(NutritionalProfilesScreen()) }
                 )
                 HorizontalDivider()
                 SettingsMenuItem(

@@ -43,6 +43,10 @@ val dataModule = module {
         SqlDelightWeightHistoryRepository(get())
     }
 
+    single<NutritionalProfileRepository> {
+        SqlDelightNutritionalProfileRepository(get())
+    }
+
     single<PolarSyncRepository> {
         SqlDelightPolarSyncRepository(get())
     }

@@ -519,6 +519,24 @@ fun MealAnalysisCard(
                     text = "Nutrition",
                     style = MaterialTheme.typography.titleMedium
                 )
+                nutrition.source?.let { source ->
+                    Text(
+                        text = if (source.equals("exact", ignoreCase = true)) {
+                            "Source: Exact saved profile"
+                        } else {
+                            "Source: Estimated by AI"
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                if (nutrition.matchedProfiles.isNotEmpty()) {
+                    Text(
+                        text = "Matched profiles: ${nutrition.matchedProfiles.joinToString(", ")}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
                 NutritionInfo(nutrition)
             }
 
@@ -535,8 +553,15 @@ fun MealAnalysisCard(
                     } else {
                         ""
                     }
+                    val sourceText = when {
+                        item.nutritionSource.equals("exact", ignoreCase = true) && !item.matchedProfileName.isNullOrBlank() ->
+                            " [exact: ${item.matchedProfileName}]"
+                        item.nutritionSource.equals("exact", ignoreCase = true) ->
+                            " [exact]"
+                        else -> ""
+                    }
                     Text(
-                        text = "• ${item.name}$portionText - $caloriesText$confidenceText",
+                        text = "• ${item.name}$portionText - $caloriesText$confidenceText$sourceText",
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }

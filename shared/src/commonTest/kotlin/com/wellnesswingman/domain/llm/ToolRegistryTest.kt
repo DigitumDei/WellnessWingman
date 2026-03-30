@@ -2,6 +2,7 @@ package com.wellnesswingman.domain.llm
 
 import com.wellnesswingman.data.model.EntryAnalysis
 import com.wellnesswingman.data.model.EntryType
+import com.wellnesswingman.data.model.NutritionalProfile
 import com.wellnesswingman.data.model.ProcessingStatus
 import com.wellnesswingman.data.model.TrackedEntry
 import com.wellnesswingman.data.model.WeightRecord
@@ -10,15 +11,18 @@ import com.wellnesswingman.data.model.llm.ToolDefinition
 import com.wellnesswingman.data.repository.AppSettingsRepository
 import com.wellnesswingman.data.repository.EntryAnalysisRepository
 import com.wellnesswingman.data.repository.LlmProvider
+import com.wellnesswingman.data.repository.NutritionalProfileRepository
 import com.wellnesswingman.data.repository.TrackedEntryRepository
 import com.wellnesswingman.data.repository.WeightHistoryRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDate
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -65,7 +69,8 @@ class ToolRegistryTest {
             ),
             entryAnalysisRepository = entryAnalysisRepository,
             weightHistoryRepository = FakeWeightHistoryRepository(),
-            appSettingsRepository = FakeAppSettingsRepository()
+            appSettingsRepository = FakeAppSettingsRepository(),
+            nutritionalProfileRepository = FakeNutritionalProfileRepository()
         )
 
         val result = registry.execute(
@@ -86,7 +91,7 @@ class ToolRegistryTest {
         assertTrue(entries.contains("\"latestInsightsJson\":{\"summary\":\"Tempo run\"}"))
         assertEquals(1, entryAnalysisRepository.getAllAnalysesCalls)
         assertEquals(0, entryAnalysisRepository.getLatestAnalysisCalls)
-        assertEquals(3, registry.definitions().size)
+        assertEquals(5, registry.definitions().size)
     }
 
     @Test
@@ -112,7 +117,8 @@ class ToolRegistryTest {
             trackedEntryRepository = trackedEntryRepository,
             entryAnalysisRepository = FakeEntryAnalysisRepository(),
             weightHistoryRepository = FakeWeightHistoryRepository(),
-            appSettingsRepository = FakeAppSettingsRepository()
+            appSettingsRepository = FakeAppSettingsRepository(),
+            nutritionalProfileRepository = FakeNutritionalProfileRepository()
         )
 
         val result = registry.execute(
@@ -137,7 +143,8 @@ class ToolRegistryTest {
             trackedEntryRepository = FakeTrackedEntryRepository(),
             entryAnalysisRepository = FakeEntryAnalysisRepository(),
             weightHistoryRepository = FakeWeightHistoryRepository(),
-            appSettingsRepository = FakeAppSettingsRepository()
+            appSettingsRepository = FakeAppSettingsRepository(),
+            nutritionalProfileRepository = FakeNutritionalProfileRepository()
         )
 
         registry.register(
@@ -161,7 +168,8 @@ class ToolRegistryTest {
             trackedEntryRepository = FakeTrackedEntryRepository(),
             entryAnalysisRepository = FakeEntryAnalysisRepository(),
             weightHistoryRepository = FakeWeightHistoryRepository(),
-            appSettingsRepository = FakeAppSettingsRepository()
+            appSettingsRepository = FakeAppSettingsRepository(),
+            nutritionalProfileRepository = FakeNutritionalProfileRepository()
         )
 
         val result = registry.execute(ToolCall(name = "missing_tool"))
@@ -177,7 +185,8 @@ class ToolRegistryTest {
             trackedEntryRepository = FakeTrackedEntryRepository(),
             entryAnalysisRepository = FakeEntryAnalysisRepository(),
             weightHistoryRepository = FakeWeightHistoryRepository(),
-            appSettingsRepository = FakeAppSettingsRepository()
+            appSettingsRepository = FakeAppSettingsRepository(),
+            nutritionalProfileRepository = FakeNutritionalProfileRepository()
         )
 
         val result = registry.execute(ToolCall(name = "get_user_profile"))
@@ -206,7 +215,8 @@ class ToolRegistryTest {
                     )
                 )
             ),
-            appSettingsRepository = FakeAppSettingsRepository()
+            appSettingsRepository = FakeAppSettingsRepository(),
+            nutritionalProfileRepository = FakeNutritionalProfileRepository()
         )
 
         val result = registry.execute(
@@ -230,7 +240,8 @@ class ToolRegistryTest {
             trackedEntryRepository = FakeTrackedEntryRepository(),
             entryAnalysisRepository = FakeEntryAnalysisRepository(),
             weightHistoryRepository = FakeWeightHistoryRepository(),
-            appSettingsRepository = FakeAppSettingsRepository()
+            appSettingsRepository = FakeAppSettingsRepository(),
+            nutritionalProfileRepository = FakeNutritionalProfileRepository()
         )
 
         registry.register(
@@ -262,6 +273,193 @@ class ToolRegistryTest {
 
         assertFalse(result.isError)
         assertEquals("""{"echo":"hello"}""", result.content.toString())
+    }
+
+    @Test
+    fun `list nutritional profiles tool returns names and aliases without nutrition`() = runTest {
+        val now = Clock.System.now()
+        val registry = ToolRegistry(
+            trackedEntryRepository = FakeTrackedEntryRepository(),
+            entryAnalysisRepository = FakeEntryAnalysisRepository(),
+            weightHistoryRepository = FakeWeightHistoryRepository(),
+            appSettingsRepository = FakeAppSettingsRepository(),
+            nutritionalProfileRepository = FakeNutritionalProfileRepository(
+                listOf(
+                    NutritionalProfile(
+                        profileId = 7L,
+                        externalId = "quest-bar",
+                        primaryName = "Quest Protein Bar",
+                        aliases = listOf("protein bar", "quest bar"),
+                        servingSize = "1 bar",
+                        calories = 190.0,
+                        protein = 21.0,
+                        carbohydrates = 22.0,
+                        fat = 7.0,
+                        createdAt = now,
+                        updatedAt = now
+                    )
+                )
+            )
+        )
+
+        val result = registry.execute(
+            ToolCall(
+                name = "list_nutritional_profiles"
+            )
+        )
+
+        assertFalse(result.isError)
+        val payload = assertIs<JsonObject>(result.content)
+        val profiles = assertIs<JsonArray>(payload["profiles"])
+        assertEquals(1, profiles.size)
+        assertTrue(profiles.toString().contains("Quest Protein Bar"))
+        assertTrue(profiles.toString().contains("protein bar"))
+        assertFalse(profiles.toString().contains("totalCalories"))
+    }
+
+    @Test
+    fun `list nutritional profiles tool returns empty list when no profiles exist`() = runTest {
+        val registry = ToolRegistry(
+            trackedEntryRepository = FakeTrackedEntryRepository(),
+            entryAnalysisRepository = FakeEntryAnalysisRepository(),
+            weightHistoryRepository = FakeWeightHistoryRepository(),
+            appSettingsRepository = FakeAppSettingsRepository(),
+            nutritionalProfileRepository = FakeNutritionalProfileRepository()
+        )
+
+        val result = registry.execute(ToolCall(name = "list_nutritional_profiles"))
+
+        assertFalse(result.isError)
+        val payload = assertIs<JsonObject>(result.content)
+        assertEquals("[]", payload["profiles"]?.toString())
+    }
+
+    @Test
+    fun `get nutritional profiles tool returns exact profiles for requested ids`() = runTest {
+        val now = Clock.System.now()
+        val registry = ToolRegistry(
+            trackedEntryRepository = FakeTrackedEntryRepository(),
+            entryAnalysisRepository = FakeEntryAnalysisRepository(),
+            weightHistoryRepository = FakeWeightHistoryRepository(),
+            appSettingsRepository = FakeAppSettingsRepository(),
+            nutritionalProfileRepository = FakeNutritionalProfileRepository(
+                listOf(
+                    NutritionalProfile(
+                        profileId = 7L,
+                        externalId = "quest-bar",
+                        primaryName = "Quest Protein Bar",
+                        aliases = listOf("protein bar", "quest bar"),
+                        servingSize = "1 bar",
+                        calories = 190.0,
+                        protein = 21.0,
+                        carbohydrates = 22.0,
+                        fat = 7.0,
+                        createdAt = now,
+                        updatedAt = now
+                    ),
+                    NutritionalProfile(
+                        profileId = 9L,
+                        externalId = "fairlife-shake",
+                        primaryName = "Fairlife Core Power",
+                        aliases = listOf("protein shake"),
+                        servingSize = "1 bottle",
+                        calories = 170.0,
+                        protein = 26.0,
+                        carbohydrates = 8.0,
+                        fat = 4.0,
+                        createdAt = now,
+                        updatedAt = now
+                    )
+                )
+            )
+        )
+
+        val result = registry.execute(
+            ToolCall(
+                name = "get_nutritional_profiles",
+                arguments = buildJsonObject {
+                    put(
+                        "profileIds",
+                        JsonArray(
+                            listOf(
+                                JsonPrimitive(9),
+                                JsonPrimitive(7),
+                                JsonPrimitive(999)
+                            )
+                        )
+                    )
+                }
+            )
+        )
+
+        assertFalse(result.isError)
+        val payload = assertIs<JsonObject>(result.content)
+        assertEquals("[9,7,999]", payload["profileIds"]?.toString())
+        val profiles = assertIs<JsonArray>(payload["profiles"])
+        assertEquals(2, profiles.size)
+        assertTrue(profiles.toString().contains("Fairlife Core Power"))
+        assertTrue(profiles.toString().contains("Quest Protein Bar"))
+        assertTrue(profiles.toString().contains("\"source\":\"exact\""))
+    }
+
+    @Test
+    fun `get nutritional profiles tool requires profile ids`() = runTest {
+        val registry = ToolRegistry(
+            trackedEntryRepository = FakeTrackedEntryRepository(),
+            entryAnalysisRepository = FakeEntryAnalysisRepository(),
+            weightHistoryRepository = FakeWeightHistoryRepository(),
+            appSettingsRepository = FakeAppSettingsRepository(),
+            nutritionalProfileRepository = FakeNutritionalProfileRepository()
+        )
+
+        val result = registry.execute(
+            ToolCall(
+                name = "get_nutritional_profiles"
+            )
+        )
+
+        assertTrue(result.isError)
+        assertEquals("\"profileIds is required\"", result.content.toString())
+    }
+
+    @Test
+    fun `get nutritional profiles tool returns empty profiles when ids do not exist`() = runTest {
+        val registry = ToolRegistry(
+            trackedEntryRepository = FakeTrackedEntryRepository(),
+            entryAnalysisRepository = FakeEntryAnalysisRepository(),
+            weightHistoryRepository = FakeWeightHistoryRepository(),
+            appSettingsRepository = FakeAppSettingsRepository(),
+            nutritionalProfileRepository = FakeNutritionalProfileRepository()
+        )
+
+        val result = registry.execute(
+            ToolCall(
+                name = "get_nutritional_profiles",
+                arguments = buildJsonObject {
+                    put("profileIds", JsonArray(listOf(JsonPrimitive(9999999999L))))
+                }
+            )
+        )
+
+        assertFalse(result.isError)
+        val payload = assertIs<JsonObject>(result.content)
+        assertEquals("[9999999999]", payload["profileIds"]?.toString())
+        assertEquals("[]", payload["profiles"]?.toString())
+    }
+
+    @Test
+    fun `get nutritional profiles schema marks profile ids as required`() {
+        val registry = ToolRegistry(
+            trackedEntryRepository = FakeTrackedEntryRepository(),
+            entryAnalysisRepository = FakeEntryAnalysisRepository(),
+            weightHistoryRepository = FakeWeightHistoryRepository(),
+            appSettingsRepository = FakeAppSettingsRepository(),
+            nutritionalProfileRepository = FakeNutritionalProfileRepository()
+        )
+
+        val definition = registry.definitions().first { it.name == "get_nutritional_profiles" }
+        val required = assertIs<JsonArray>(assertIs<JsonObject>(definition.parametersSchema)["required"])
+        assertEquals("[\"profileIds\"]", required.toString())
     }
 
     private class FakeTrackedEntryRepository(
@@ -330,6 +528,26 @@ class ToolRegistryTest {
         override suspend fun deleteWeightRecord(recordId: Long) {}
         override suspend fun nullifyRelatedEntryId(entryId: Long) {}
         override suspend fun upsertWeightRecord(record: WeightRecord) {}
+    }
+
+    private class FakeNutritionalProfileRepository(
+        private val profiles: List<NutritionalProfile> = emptyList()
+    ) : NutritionalProfileRepository {
+        override fun getAllAsFlow(): Flow<List<NutritionalProfile>> = flowOf(profiles)
+        override suspend fun getAll(): List<NutritionalProfile> = profiles
+        override suspend fun getById(profileId: Long): NutritionalProfile? = profiles.find { it.profileId == profileId }
+        override suspend fun getByExternalId(externalId: String): NutritionalProfile? = profiles.find { it.externalId == externalId }
+        override suspend fun searchByName(query: String, limit: Int): List<NutritionalProfile> {
+            val normalized = query.lowercase()
+            return profiles.filter {
+                it.primaryName.lowercase().contains(normalized) ||
+                    it.aliases.any { alias -> alias.lowercase().contains(normalized) }
+            }.take(limit)
+        }
+        override suspend fun insert(profile: NutritionalProfile): Long = profile.profileId
+        override suspend fun update(profile: NutritionalProfile) {}
+        override suspend fun delete(profileId: Long) {}
+        override suspend fun upsert(profile: NutritionalProfile) {}
     }
 
     private class FakeAppSettingsRepository : AppSettingsRepository {

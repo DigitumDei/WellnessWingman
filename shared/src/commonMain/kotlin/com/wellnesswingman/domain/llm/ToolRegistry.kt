@@ -9,6 +9,7 @@ import com.wellnesswingman.data.model.llm.ToolDefinition
 import com.wellnesswingman.data.model.llm.ToolResult
 import com.wellnesswingman.data.repository.AppSettingsRepository
 import com.wellnesswingman.data.repository.EntryAnalysisRepository
+import com.wellnesswingman.data.repository.NutritionalProfileRepository
 import com.wellnesswingman.data.repository.TrackedEntryRepository
 import com.wellnesswingman.data.repository.WeightHistoryRepository
 import io.github.aakira.napier.Napier
@@ -27,13 +28,15 @@ import kotlinx.serialization.json.JsonObjectBuilder
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.putJsonObject
 
 class ToolRegistry(
     private val trackedEntryRepository: TrackedEntryRepository,
     private val entryAnalysisRepository: EntryAnalysisRepository,
     private val weightHistoryRepository: WeightHistoryRepository,
-    private val appSettingsRepository: AppSettingsRepository
+    private val appSettingsRepository: AppSettingsRepository,
+    private val nutritionalProfileRepository: NutritionalProfileRepository
 ) {
     private val json = Json {
         ignoreUnknownKeys = true
@@ -45,6 +48,7 @@ class ToolRegistry(
 
     init {
         registerBuiltIns()
+        registerNutritionalProfileTools()
     }
 
     fun register(
@@ -180,6 +184,94 @@ class ToolRegistry(
                     put("entries", JsonArray(entries.map { entry ->
                         val latestAnalysis = latestAnalyses[entry.entryId]
                         entryJson(entry, latestAnalysis)
+                    }))
+                }
+            )
+        }
+    }
+
+    private fun registerNutritionalProfileTools() {
+        register(
+            definition = ToolDefinition(
+                name = "list_nutritional_profiles",
+                description = "List saved nutritional profile names and aliases so the model can choose likely matches.",
+                parametersSchema = emptyObjectSchema()
+            )
+        ) { call ->
+            val profiles = nutritionalProfileRepository.getAll()
+            ToolResult(
+                toolCallId = call.id,
+                name = call.name,
+                content = buildJsonObject {
+                    put("profiles", JsonArray(profiles.map { profile ->
+                        buildJsonObject {
+                            put("profileId", JsonPrimitive(profile.profileId))
+                            put("primaryName", JsonPrimitive(profile.primaryName))
+                            put("aliases", JsonArray(profile.aliases.map(::JsonPrimitive)))
+                        }
+                    }))
+                }
+            )
+        }
+
+        register(
+            definition = ToolDefinition(
+                name = "get_nutritional_profiles",
+                description = "Get full stored nutritional details for specific saved profile IDs.",
+                parametersSchema = buildJsonObject {
+                    put("type", JsonPrimitive("object"))
+                    putJsonObject("properties") {
+                        putJsonObject("profileIds") {
+                            put("type", JsonPrimitive("array"))
+                            put("description", JsonPrimitive("Saved nutritional profile IDs to fetch."))
+                            putJsonObject("items") {
+                                put("type", JsonPrimitive("integer"))
+                            }
+                        }
+                    }
+                    put("required", JsonArray(listOf(JsonPrimitive("profileIds"))))
+                }
+            )
+        ) { call ->
+            val requestedIds = (call.arguments["profileIds"] as? JsonArray)
+                ?.mapNotNull { it.jsonPrimitive.longOrNull }
+                ?.distinct()
+                .orEmpty()
+            if (requestedIds.isEmpty()) {
+                return@register ToolResult(
+                    toolCallId = call.id,
+                    name = call.name,
+                    content = JsonPrimitive("profileIds is required"),
+                    isError = true
+                )
+            }
+
+            val matches = requestedIds.mapNotNull { nutritionalProfileRepository.getById(it) }
+            ToolResult(
+                toolCallId = call.id,
+                name = call.name,
+                content = buildJsonObject {
+                    put("profileIds", JsonArray(requestedIds.map(::JsonPrimitive)))
+                    put("profiles", JsonArray(matches.map { profile ->
+                        buildJsonObject {
+                            put("profileId", JsonPrimitive(profile.profileId))
+                            put("primaryName", JsonPrimitive(profile.primaryName))
+                            put("aliases", JsonArray(profile.aliases.map(::JsonPrimitive)))
+                            put("servingSize", profile.servingSize?.let(::JsonPrimitive) ?: JsonNull)
+                            putJsonObject("nutrition") {
+                                put("totalCalories", profile.calories?.let(::JsonPrimitive) ?: JsonNull)
+                                put("protein", profile.protein?.let(::JsonPrimitive) ?: JsonNull)
+                                put("carbohydrates", profile.carbohydrates?.let(::JsonPrimitive) ?: JsonNull)
+                                put("fat", profile.fat?.let(::JsonPrimitive) ?: JsonNull)
+                                put("fiber", profile.fiber?.let(::JsonPrimitive) ?: JsonNull)
+                                put("sugar", profile.sugar?.let(::JsonPrimitive) ?: JsonNull)
+                                put("sodium", profile.sodium?.let(::JsonPrimitive) ?: JsonNull)
+                                put("saturatedFat", profile.saturatedFat?.let(::JsonPrimitive) ?: JsonNull)
+                                put("transFat", profile.transFat?.let(::JsonPrimitive) ?: JsonNull)
+                                put("cholesterol", profile.cholesterol?.let(::JsonPrimitive) ?: JsonNull)
+                            }
+                            put("source", JsonPrimitive("exact"))
+                        }
                     }))
                 }
             )
