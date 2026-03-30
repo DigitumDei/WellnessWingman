@@ -66,6 +66,7 @@ class NutritionLabelScanViewModel(
                         transFat = profile.transFat,
                         cholesterol = profile.cholesterol
                     ),
+                    rawJson = profile.rawJson,
                     sourceImagePath = profile.sourceImagePath,
                     photoBytes = profile.sourceImagePath
                         ?.takeIf(fileSystem::exists)

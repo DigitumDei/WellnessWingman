@@ -221,6 +221,22 @@ class SqlDelightNutritionalProfileRepositoryTest {
     }
 
     @Test
+    fun `upsert with default profile id creates autoincremented row`() = runTest {
+        repository.upsert(
+            profile(
+                externalId = "new-upsert",
+                primaryName = "Inserted Via Upsert"
+            )
+        )
+
+        val stored = repository.getByExternalId("new-upsert")
+
+        assertNotNull(stored)
+        assertTrue(stored.profileId > 0L)
+        assertEquals("Inserted Via Upsert", stored.primaryName)
+    }
+
+    @Test
     fun `invalid alias json falls back to empty aliases`() = runTest {
         database.nutritionalProfileQueries.insert(
             externalId = "bad-aliases",

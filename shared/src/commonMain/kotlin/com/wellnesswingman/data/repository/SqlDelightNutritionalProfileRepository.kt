@@ -111,6 +111,11 @@ class SqlDelightNutritionalProfileRepository(
     }
 
     override suspend fun upsert(profile: NutritionalProfile) = withContext(Dispatchers.IO) {
+        if (profile.profileId == 0L) {
+            insert(profile)
+            return@withContext
+        }
+
         queries.upsert(
             profileId = profile.profileId,
             externalId = profile.externalId,

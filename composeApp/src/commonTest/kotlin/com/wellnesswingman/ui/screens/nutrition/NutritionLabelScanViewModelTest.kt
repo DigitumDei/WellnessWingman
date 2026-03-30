@@ -23,6 +23,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertContentEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -201,6 +202,37 @@ class NutritionLabelScanViewModelTest {
         assertEquals(190.0, inserted.calories)
         assertEquals(21.0, inserted.protein)
         assertTrue(viewModel.uiState.value.saveCompleted)
+    }
+
+    @Test
+    fun `save preserves stored raw json when editing without reanalysis`() = runTest(dispatcher.scheduler) {
+        val createdAt = Instant.parse("2026-03-30T12:00:00Z")
+        val existing = NutritionalProfile(
+            profileId = 7L,
+            externalId = "core-power",
+            primaryName = "Core Power",
+            rawJson = """{"confidence":0.9}""",
+            createdAt = createdAt,
+            updatedAt = createdAt
+        )
+        val repository = FakeNutritionalProfileRepository(mutableListOf(existing))
+        val viewModel = NutritionLabelScanViewModel(
+            profileId = 7L,
+            cameraService = FakeCameraCaptureOperations(),
+            fileSystem = FakeFileSystemOperations(),
+            analyzer = FakeNutritionLabelAnalyzer(),
+            repository = repository
+        )
+
+        advanceUntilIdle()
+        viewModel.updatePrimaryName("Core Power Elite")
+        viewModel.save {}
+        advanceUntilIdle()
+
+        val updated = repository.getById(7L)
+        assertNotNull(updated)
+        assertEquals("""{"confidence":0.9}""", updated.rawJson)
+        assertEquals("Core Power Elite", updated.primaryName)
     }
 
     @Test
