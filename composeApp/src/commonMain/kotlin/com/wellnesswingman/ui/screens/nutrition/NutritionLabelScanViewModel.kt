@@ -85,24 +85,33 @@ class NutritionLabelScanViewModel(
 
     fun pickFromGallery() = handleCapture { cameraService.pickFromGallery() ?: CaptureResult.Cancelled }
 
+    fun applyCapturedPhoto(photoPath: String?, bytes: ByteArray) {
+        _uiState.value = _uiState.value.copy(
+            isCapturing = false,
+            error = null,
+            sourceImagePath = photoPath,
+            photoBytes = bytes,
+            servingSize = "",
+            nutrition = ExtractedNutrition(),
+            extractionWarnings = emptyList(),
+            rawJson = null
+        )
+    }
+
+    fun setError(message: String) {
+        _uiState.value = _uiState.value.copy(isCapturing = false, error = message)
+    }
+
     private fun handleCapture(block: suspend () -> CaptureResult) {
         screenModelScope.launch {
             try {
                 _uiState.value = _uiState.value.copy(isCapturing = true, error = null)
                 when (val result = block()) {
                     is CaptureResult.Success -> {
-                        _uiState.value = _uiState.value.copy(
-                            isCapturing = false,
-                            sourceImagePath = result.photoPath,
-                            photoBytes = result.bytes,
-                            servingSize = "",
-                            nutrition = ExtractedNutrition(),
-                            extractionWarnings = emptyList(),
-                            rawJson = null
-                        )
+                        applyCapturedPhoto(result.photoPath, result.bytes)
                     }
                     is CaptureResult.Error -> {
-                        _uiState.value = _uiState.value.copy(isCapturing = false, error = result.message)
+                        setError(result.message)
                     }
                     is CaptureResult.Cancelled -> {
                         _uiState.value = _uiState.value.copy(isCapturing = false)

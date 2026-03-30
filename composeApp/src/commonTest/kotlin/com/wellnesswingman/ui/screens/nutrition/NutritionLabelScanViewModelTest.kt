@@ -19,6 +19,7 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertContentEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -137,6 +138,29 @@ class NutritionLabelScanViewModelTest {
         assertEquals(190.0, inserted.calories)
         assertEquals(21.0, inserted.protein)
         assertTrue(viewModel.uiState.value.saveCompleted)
+    }
+
+    @Test
+    fun `applyCapturedPhoto replaces stale extraction state`() = runTest(dispatcher.scheduler) {
+        val viewModel = NutritionLabelScanViewModel(
+            profileId = null,
+            cameraService = FakeCameraCaptureOperations(),
+            fileSystem = FakeFileSystemOperations(),
+            analyzer = FakeNutritionLabelAnalyzer(),
+            repository = FakeNutritionalProfileRepository()
+        )
+
+        viewModel.updateServingSize("1 bar")
+        viewModel.updateNutrition { it.copy(totalCalories = 190.0) }
+        viewModel.applyCapturedPhoto("/tmp/new-label.jpg", byteArrayOf(9, 8, 7))
+
+        val state = viewModel.uiState.value
+        assertEquals("/tmp/new-label.jpg", state.sourceImagePath)
+        assertContentEquals(byteArrayOf(9, 8, 7), state.photoBytes)
+        assertEquals("", state.servingSize)
+        assertNull(state.nutrition.totalCalories)
+        assertTrue(state.extractionWarnings.isEmpty())
+        assertNull(state.rawJson)
     }
 }
 

@@ -11,7 +11,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -96,17 +95,13 @@ data class NutritionLabelScanScreen(
                             Text("Capture or choose a nutrition label photo to begin.")
                         }
 
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Button(onClick = viewModel::captureFromCamera, modifier = Modifier.weight(1f)) {
-                                Text("Camera")
-                            }
-                            OutlinedButton(onClick = viewModel::pickFromGallery, modifier = Modifier.weight(1f)) {
-                                Text("Gallery")
-                            }
-                        }
+                        NutritionLabelCaptureButtons(
+                            onCameraClickFallback = viewModel::captureFromCamera,
+                            onGalleryClickFallback = viewModel::pickFromGallery,
+                            onImageSelected = viewModel::applyCapturedPhoto,
+                            onError = viewModel::setError,
+                            modifier = Modifier.fillMaxWidth()
+                        )
 
                         Button(
                             onClick = viewModel::analyzeImage,
