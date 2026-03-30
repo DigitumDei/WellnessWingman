@@ -21,7 +21,7 @@ class NutritionLabelAnalyzer(
 
     override suspend fun analyzeLabelImage(
         imageBytes: ByteArray,
-        sourceImagePath: String? = null
+        sourceImagePath: String?
     ): NutritionLabelExtraction {
         check(hasConfiguredApiKey()) {
             "Missing API Key. Go to Settings to add your OpenAI or Gemini API key to extract nutrition facts."
