@@ -195,7 +195,7 @@ class AnalysisOrchestrator(
         return """
 You are a health and wellness analysis assistant with vision capabilities. Analyze the provided content (image and/or text) and determine the type of health-related entry, then provide detailed analysis.
 
-If the content is a meal and one or more food items appear to be packaged foods with saved exact nutrition data, call the `lookup_nutritional_profile` tool before finalizing the meal analysis. Prefer exact saved nutrition values over visual estimation whenever a reasonable name or alias match is found.
+If the content is a meal and one or more food items appear to be packaged foods with saved exact nutrition data, first call `list_nutritional_profiles` to review saved names and aliases. If one or more likely matches exist, call `get_nutritional_profiles` with the selected `profileId` values before finalizing the meal analysis. Prefer exact saved nutrition values over visual estimation whenever a reasonable saved-profile match is found.
 
 ENTRY TYPE DETECTION:
 First, determine what type of entry this is:

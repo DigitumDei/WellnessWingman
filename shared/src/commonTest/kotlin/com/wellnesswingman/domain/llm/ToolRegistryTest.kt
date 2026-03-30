@@ -90,7 +90,7 @@ class ToolRegistryTest {
         assertTrue(entries.contains("\"latestInsightsJson\":{\"summary\":\"Tempo run\"}"))
         assertEquals(1, entryAnalysisRepository.getAllAnalysesCalls)
         assertEquals(0, entryAnalysisRepository.getLatestAnalysisCalls)
-        assertEquals(4, registry.definitions().size)
+        assertEquals(5, registry.definitions().size)
     }
 
     @Test
@@ -275,7 +275,7 @@ class ToolRegistryTest {
     }
 
     @Test
-    fun `lookup nutritional profile tool returns exact matches`() = runTest {
+    fun `list nutritional profiles tool returns names and aliases without nutrition`() = runTest {
         val now = Clock.System.now()
         val registry = ToolRegistry(
             trackedEntryRepository = FakeTrackedEntryRepository(),
@@ -303,23 +303,89 @@ class ToolRegistryTest {
 
         val result = registry.execute(
             ToolCall(
-                name = "lookup_nutritional_profile",
+                name = "list_nutritional_profiles"
+            )
+        )
+
+        assertFalse(result.isError)
+        val payload = assertIs<JsonObject>(result.content)
+        val profiles = assertIs<JsonArray>(payload["profiles"])
+        assertEquals(1, profiles.size)
+        assertTrue(profiles.toString().contains("Quest Protein Bar"))
+        assertTrue(profiles.toString().contains("protein bar"))
+        assertFalse(profiles.toString().contains("totalCalories"))
+    }
+
+    @Test
+    fun `get nutritional profiles tool returns exact profiles for requested ids`() = runTest {
+        val now = Clock.System.now()
+        val registry = ToolRegistry(
+            trackedEntryRepository = FakeTrackedEntryRepository(),
+            entryAnalysisRepository = FakeEntryAnalysisRepository(),
+            weightHistoryRepository = FakeWeightHistoryRepository(),
+            appSettingsRepository = FakeAppSettingsRepository(),
+            nutritionalProfileRepository = FakeNutritionalProfileRepository(
+                listOf(
+                    NutritionalProfile(
+                        profileId = 7L,
+                        externalId = "quest-bar",
+                        primaryName = "Quest Protein Bar",
+                        aliases = listOf("protein bar", "quest bar"),
+                        servingSize = "1 bar",
+                        calories = 190.0,
+                        protein = 21.0,
+                        carbohydrates = 22.0,
+                        fat = 7.0,
+                        createdAt = now,
+                        updatedAt = now
+                    ),
+                    NutritionalProfile(
+                        profileId = 9L,
+                        externalId = "fairlife-shake",
+                        primaryName = "Fairlife Core Power",
+                        aliases = listOf("protein shake"),
+                        servingSize = "1 bottle",
+                        calories = 170.0,
+                        protein = 26.0,
+                        carbohydrates = 8.0,
+                        fat = 4.0,
+                        createdAt = now,
+                        updatedAt = now
+                    )
+                )
+            )
+        )
+
+        val result = registry.execute(
+            ToolCall(
+                name = "get_nutritional_profiles",
                 arguments = buildJsonObject {
-                    put("query", JsonPrimitive("quest bar"))
+                    put(
+                        "profileIds",
+                        JsonArray(
+                            listOf(
+                                JsonPrimitive(9),
+                                JsonPrimitive(7),
+                                JsonPrimitive(999)
+                            )
+                        )
+                    )
                 }
             )
         )
 
         assertFalse(result.isError)
         val payload = assertIs<JsonObject>(result.content)
-        val matches = assertIs<JsonArray>(payload["matches"])
-        assertEquals(1, matches.size)
-        assertTrue(matches.toString().contains("Quest Protein Bar"))
-        assertTrue(matches.toString().contains("\"source\":\"exact\""))
+        assertEquals("[9,7,999]", payload["profileIds"]?.toString())
+        val profiles = assertIs<JsonArray>(payload["profiles"])
+        assertEquals(2, profiles.size)
+        assertTrue(profiles.toString().contains("Fairlife Core Power"))
+        assertTrue(profiles.toString().contains("Quest Protein Bar"))
+        assertTrue(profiles.toString().contains("\"source\":\"exact\""))
     }
 
     @Test
-    fun `lookup nutritional profile tool returns empty matches when nothing is found`() = runTest {
+    fun `get nutritional profiles tool requires profile ids`() = runTest {
         val registry = ToolRegistry(
             trackedEntryRepository = FakeTrackedEntryRepository(),
             entryAnalysisRepository = FakeEntryAnalysisRepository(),
@@ -330,17 +396,12 @@ class ToolRegistryTest {
 
         val result = registry.execute(
             ToolCall(
-                name = "lookup_nutritional_profile",
-                arguments = buildJsonObject {
-                    put("query", JsonPrimitive("missing food"))
-                }
+                name = "get_nutritional_profiles"
             )
         )
 
-        assertFalse(result.isError)
-        val payload = assertIs<JsonObject>(result.content)
-        assertEquals("missing food", payload["query"]?.toString()?.trim('"'))
-        assertEquals("[]", payload["matches"]?.toString())
+        assertTrue(result.isError)
+        assertEquals("\"profileIds is required\"", result.content.toString())
     }
 
     private class FakeTrackedEntryRepository(

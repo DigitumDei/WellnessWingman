@@ -25,7 +25,6 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.JsonObjectBuilder
-import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.putJsonObject
@@ -192,41 +191,65 @@ class ToolRegistry(
     private fun registerNutritionalProfileTools() {
         register(
             definition = ToolDefinition(
-                name = "lookup_nutritional_profile",
-                description = "Look up stored nutritional information for a food item by name or alias.",
+                name = "list_nutritional_profiles",
+                description = "List saved nutritional profile names and aliases so the model can choose likely matches.",
+                parametersSchema = emptyObjectSchema()
+            )
+        ) { call ->
+            val profiles = nutritionalProfileRepository.getAll()
+            ToolResult(
+                toolCallId = call.id,
+                name = call.name,
+                content = buildJsonObject {
+                    put("profiles", JsonArray(profiles.map { profile ->
+                        buildJsonObject {
+                            put("profileId", JsonPrimitive(profile.profileId))
+                            put("primaryName", JsonPrimitive(profile.primaryName))
+                            put("aliases", JsonArray(profile.aliases.map(::JsonPrimitive)))
+                        }
+                    }))
+                }
+            )
+        }
+
+        register(
+            definition = ToolDefinition(
+                name = "get_nutritional_profiles",
+                description = "Get full stored nutritional details for specific saved profile IDs.",
                 parametersSchema = buildJsonObject {
                     put("type", JsonPrimitive("object"))
                     putJsonObject("properties") {
-                        putJsonObject("query") {
-                            put("type", JsonPrimitive("string"))
-                            put("description", JsonPrimitive("Food name or alias to search for."))
-                        }
-                        putJsonObject("limit") {
-                            put("type", JsonPrimitive("integer"))
-                            put("description", JsonPrimitive("Maximum matches to return, capped at 5."))
+                        putJsonObject("profileIds") {
+                            put("type", JsonPrimitive("array"))
+                            put("description", JsonPrimitive("Saved nutritional profile IDs to fetch."))
+                            putJsonObject("items") {
+                                put("type", JsonPrimitive("integer"))
+                            }
                         }
                     }
                 }
             )
         ) { call ->
-            val query = call.arguments["query"]?.jsonPrimitive?.contentOrNull?.trim().orEmpty()
-            if (query.isBlank()) {
+            val requestedIds = (call.arguments["profileIds"] as? JsonArray)
+                ?.mapNotNull { it.jsonPrimitive.intOrNull?.toLong() }
+                ?.distinct()
+                .orEmpty()
+            if (requestedIds.isEmpty()) {
                 return@register ToolResult(
                     toolCallId = call.id,
                     name = call.name,
-                    content = JsonPrimitive("query is required"),
+                    content = JsonPrimitive("profileIds is required"),
                     isError = true
                 )
             }
 
-            val limit = call.arguments["limit"]?.jsonPrimitive?.intOrNull?.coerceIn(1, 5) ?: 3
-            val matches = nutritionalProfileRepository.searchByName(query, limit)
+            val matches = requestedIds.mapNotNull(nutritionalProfileRepository::getById)
             ToolResult(
                 toolCallId = call.id,
                 name = call.name,
                 content = buildJsonObject {
-                    put("query", JsonPrimitive(query))
-                    put("matches", JsonArray(matches.map { profile ->
+                    put("profileIds", JsonArray(requestedIds.map(::JsonPrimitive)))
+                    put("profiles", JsonArray(matches.map { profile ->
                         buildJsonObject {
                             put("profileId", JsonPrimitive(profile.profileId))
                             put("primaryName", JsonPrimitive(profile.primaryName))
