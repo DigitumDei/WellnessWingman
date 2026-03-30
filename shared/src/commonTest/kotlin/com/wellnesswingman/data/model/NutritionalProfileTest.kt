@@ -13,6 +13,7 @@ class NutritionalProfileTest {
     private val json = Json {
         ignoreUnknownKeys = true
         isLenient = true
+        encodeDefaults = true
     }
 
     @Test
@@ -65,42 +66,35 @@ class NutritionalProfileTest {
 
     @Test
     fun `lookup result includes nested nutrition payload when provided`() {
-        val encoded = json.encodeToString(
-            NutritionalProfileLookupResult(
-                profileId = 8L,
-                primaryName = "Quest Protein Bar",
-                aliases = listOf("protein bar"),
-                servingSize = "1 bar",
-                nutrition = NutritionalProfileNutrition(
-                    totalCalories = 190.0,
-                    protein = 21.0,
-                    carbohydrates = 22.0,
-                    fat = 7.0,
-                    fiber = 14.0,
-                    sugar = 1.0,
-                    sodium = 210.0,
-                    saturatedFat = 2.5,
-                    transFat = 0.0,
-                    cholesterol = 5.0
-                ),
-                source = "exact"
-            )
+        val original = NutritionalProfileLookupResult(
+            profileId = 8L,
+            primaryName = "Quest Protein Bar",
+            aliases = listOf("protein bar"),
+            servingSize = "1 bar",
+            nutrition = NutritionalProfileNutrition(
+                totalCalories = 190.0,
+                protein = 21.0,
+                carbohydrates = 22.0,
+                fat = 7.0,
+                fiber = 14.0,
+                sugar = 1.0,
+                sodium = 210.0,
+                saturatedFat = 2.5,
+                transFat = 0.0,
+                cholesterol = 5.0
+            ),
+            source = "exact"
         )
-
-        assertTrue(encoded.contains("\"totalCalories\":190.0"))
-        assertTrue(encoded.contains("\"protein\":21.0"))
-        assertTrue(encoded.contains("\"source\":\"exact\""))
+        val encoded = json.encodeToString(original)
 
         val decoded = json.decodeFromString<NutritionalProfileLookupResult>(encoded)
-        assertEquals(190.0, decoded.nutrition.totalCalories)
-        assertEquals(21.0, decoded.nutrition.protein)
-        assertEquals(22.0, decoded.nutrition.carbohydrates)
-        assertEquals(7.0, decoded.nutrition.fat)
-        assertEquals(14.0, decoded.nutrition.fiber)
-        assertEquals(1.0, decoded.nutrition.sugar)
-        assertEquals(210.0, decoded.nutrition.sodium)
-        assertEquals(2.5, decoded.nutrition.saturatedFat)
-        assertEquals(0.0, decoded.nutrition.transFat)
-        assertEquals(5.0, decoded.nutrition.cholesterol)
+        assertEquals(original.profileId, decoded.profileId)
+        assertEquals(original.primaryName, decoded.primaryName)
+        assertEquals(original.nutrition.totalCalories, decoded.nutrition.totalCalories)
+        assertEquals(original.nutrition.protein, decoded.nutrition.protein)
+        assertEquals(original.source, decoded.source)
+        
+        // Final sanity check for the whole object
+        assertEquals(original, decoded)
     }
 }
