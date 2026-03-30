@@ -35,14 +35,13 @@ import com.wellnesswingman.ui.screens.detail.ImageDisplay
 import org.koin.core.parameter.parametersOf
 
 data class NutritionLabelScanScreen(
-    val profileId: Long? = null,
-    val onSaved: (() -> Unit)? = null
+    val profileId: Long? = null
 ) : Screen {
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
         val viewModel = getScreenModel<NutritionLabelScanViewModel> {
-            parametersOf(profileIdParameter(profileId))
+            parametersOf(profileId)
         }
         val uiState by viewModel.uiState.collectAsState()
 
@@ -169,7 +168,6 @@ data class NutritionLabelScanScreen(
                 Button(
                     onClick = {
                         viewModel.save {
-                            onSaved?.invoke()
                             navigator.pop()
                         }
                     },

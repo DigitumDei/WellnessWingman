@@ -1,9 +1,13 @@
 package com.wellnesswingman.data.repository
 
+import app.cash.sqldelight.coroutines.asFlow
+import app.cash.sqldelight.coroutines.mapToList
 import com.wellnesswingman.data.model.NutritionalProfile
 import com.wellnesswingman.db.WellnessWingmanDatabase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.Instant
 import kotlinx.serialization.encodeToString
@@ -19,6 +23,13 @@ class SqlDelightNutritionalProfileRepository(
     }
 
     private val queries = database.nutritionalProfileQueries
+
+    override fun getAllAsFlow(): Flow<List<NutritionalProfile>> {
+        return queries.getAll()
+            .asFlow()
+            .mapToList(Dispatchers.IO)
+            .map { list -> list.map { it.toDomain() } }
+    }
 
     override suspend fun getAll(): List<NutritionalProfile> = withContext(Dispatchers.IO) {
         queries.getAll().executeAsList().map { it.toDomain() }

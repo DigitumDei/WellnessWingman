@@ -63,9 +63,7 @@ class NutritionalProfilesScreen : Screen {
             floatingActionButton = {
                 FloatingActionButton(
                     onClick = {
-                        navigator.push(
-                            NutritionLabelScanScreen(onSaved = viewModel::loadProfiles)
-                        )
+                        navigator.push(NutritionLabelScanScreen())
                     }
                 ) {
                     Icon(Icons.Default.Add, contentDescription = "Scan nutrition label")
@@ -76,7 +74,7 @@ class NutritionalProfilesScreen : Screen {
                 is NutritionalProfilesUiState.Loading -> LoadingIndicator(Modifier.padding(paddingValues))
                 is NutritionalProfilesUiState.Error -> ErrorMessage(
                     message = state.message,
-                    onRetry = viewModel::loadProfiles,
+                    onRetry = { /* Flow will automatically retry or we could add a refresh trigger if needed */ },
                     modifier = Modifier.padding(paddingValues)
                 )
                 is NutritionalProfilesUiState.Success -> {
@@ -101,10 +99,7 @@ class NutritionalProfilesScreen : Screen {
                                     profile = profile,
                                     onClick = {
                                         navigator.push(
-                                            NutritionLabelScanScreen(
-                                                profileId = profile.profileId,
-                                                onSaved = viewModel::loadProfiles
-                                            )
+                                            NutritionLabelScanScreen(profileId = profile.profileId)
                                         )
                                     },
                                     onDelete = { deleteTarget = profile }
