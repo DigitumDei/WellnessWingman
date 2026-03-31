@@ -16,6 +16,16 @@ import kotlin.math.absoluteValue
  */
 object DateTimeConverter {
 
+    internal fun getLocalDayBounds(
+        localDate: LocalDate,
+        timeZone: TimeZone = TimeZone.currentSystemDefault()
+    ): Pair<Instant, Instant> {
+        val utcStart = localDate.atStartOfDayIn(timeZone)
+        val nextDay = localDate.plus(1, DateTimeUnit.DAY)
+        val utcEnd = nextDay.atStartOfDayIn(timeZone)
+        return utcStart to utcEnd
+    }
+
     /**
      * Converts the provided UTC instant into its original local representation
      * based on stored timezone metadata.
@@ -70,10 +80,7 @@ object DateTimeConverter {
         localDate: LocalDate,
         timeZone: TimeZone = TimeZone.currentSystemDefault()
     ): Pair<Instant, Instant> {
-        val utcStart = localDate.atStartOfDayIn(timeZone)
-        val nextDay = localDate.plus(1, DateTimeUnit.DAY)
-        val utcEnd = nextDay.atStartOfDayIn(timeZone)
-        return utcStart to utcEnd
+        return getLocalDayBounds(localDate, timeZone)
     }
 
     /**

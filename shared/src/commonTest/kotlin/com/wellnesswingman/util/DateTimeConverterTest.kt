@@ -25,4 +25,14 @@ class DateTimeConverterTest {
         assertEquals(LocalDate(2026, 12, 31), start.toLocalDateTime(TimeZone.UTC).date)
         assertEquals(LocalDate(2027, 1, 1), end.toLocalDateTime(TimeZone.UTC).date)
     }
+
+    @Test
+    fun `getUtcBoundsForLocalDay handles non-UTC timezone correctly`() {
+        val date = LocalDate(2026, 3, 31)
+        val timeZone = TimeZone.of("America/New_York")
+        val (start, end) = DateTimeConverter.getUtcBoundsForLocalDay(date, timeZone)
+
+        assertEquals(date, start.toLocalDateTime(timeZone).date)
+        assertEquals(LocalDate(2026, 4, 1), end.toLocalDateTime(timeZone).date)
+    }
 }
