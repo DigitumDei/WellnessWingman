@@ -17,5 +17,3 @@ For the current runnable and verification workflow, use:
 - [README.md](README.md)
 - [RUNNING_THE_APP.md](RUNNING_THE_APP.md)
 - [TESTING.md](TESTING.md)
-
-In this workspace, Gradle commands could not be re-run during the documentation refresh because `java` is not installed and `JAVA_HOME` is unset.

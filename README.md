@@ -79,7 +79,6 @@ See [RUNNING_THE_APP.md](RUNNING_THE_APP.md) for Android setup and [TESTING.md](
 - The main shared test suite runs via `:shared:desktopTest`.
 - Compose/common presentation tests live under `composeApp/src/commonTest/`.
 - Kover is enabled in `shared/` and currently verifies a 25% minimum baseline while coverage continues to grow.
-- In this workspace, Gradle tasks cannot run until Java is installed and `JAVA_HOME` is set.
 
 ## Architecture
 

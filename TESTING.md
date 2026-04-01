@@ -53,7 +53,7 @@ The current suites cover:
 - JDK 17 or newer
 - `JAVA_HOME` configured, or `java` available on `PATH`
 
-Without Java, Gradle will fail before configuration. In this workspace, `java` is currently unavailable, so the commands above could not be executed during this documentation update.
+Without Java, Gradle will fail before configuration.
 
 ## Practical Workflow
 
