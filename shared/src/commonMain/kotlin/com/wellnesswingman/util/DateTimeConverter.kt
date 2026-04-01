@@ -1,10 +1,12 @@
 package com.wellnesswingman.util
 
 import kotlinx.datetime.Instant
+import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.atStartOfDayIn
+import kotlinx.datetime.plus
 import kotlinx.datetime.toInstant
 import kotlinx.datetime.toLocalDateTime
 import kotlin.math.absoluteValue
@@ -13,6 +15,16 @@ import kotlin.math.absoluteValue
  * Provides helpers for normalizing timestamps between UTC and local timezones.
  */
 object DateTimeConverter {
+
+    internal fun getLocalDayBounds(
+        localDate: LocalDate,
+        timeZone: TimeZone = TimeZone.currentSystemDefault()
+    ): Pair<Instant, Instant> {
+        val utcStart = localDate.atStartOfDayIn(timeZone)
+        val nextDay = localDate.plus(1, DateTimeUnit.DAY)
+        val utcEnd = nextDay.atStartOfDayIn(timeZone)
+        return utcStart to utcEnd
+    }
 
     /**
      * Converts the provided UTC instant into its original local representation
@@ -68,11 +80,7 @@ object DateTimeConverter {
         localDate: LocalDate,
         timeZone: TimeZone = TimeZone.currentSystemDefault()
     ): Pair<Instant, Instant> {
-        val utcStart = localDate.atStartOfDayIn(timeZone)
-        val nextDay = LocalDate(localDate.year, localDate.monthNumber, localDate.dayOfMonth)
-            .let { LocalDate(it.year, it.monthNumber, it.dayOfMonth + 1) }
-        val utcEnd = nextDay.atStartOfDayIn(timeZone)
-        return utcStart to utcEnd
+        return getLocalDayBounds(localDate, timeZone)
     }
 
     /**

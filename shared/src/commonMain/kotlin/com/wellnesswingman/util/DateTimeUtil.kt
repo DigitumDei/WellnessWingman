@@ -12,8 +12,7 @@ object DateTimeUtil {
      * Returns (startOfDay, endOfDay) where endOfDay is exclusive.
      */
     fun getDayBounds(date: LocalDate, timeZone: TimeZone = TimeZone.currentSystemDefault()): Pair<Long, Long> {
-        val startOfDay = date.atStartOfDayIn(timeZone)
-        val endOfDay = date.plus(1, DateTimeUnit.DAY).atStartOfDayIn(timeZone)
+        val (startOfDay, endOfDay) = DateTimeConverter.getLocalDayBounds(date, timeZone)
         return Pair(startOfDay.toEpochMilliseconds(), endOfDay.toEpochMilliseconds())
     }
 
