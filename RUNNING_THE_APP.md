@@ -1,299 +1,131 @@
-# Running the WellnessWingman Android App
+# Running WellnessWingman
 
-This guide will help you build, run, and debug the WellnessWingman Android app on an emulator or device.
+This repository currently ships an Android-first Kotlin Multiplatform setup. The fastest path is to build and run the Android app from the repo root.
 
 ## Prerequisites
 
-1. **Java 17** - Already installed at `C:\Program Files\Eclipse Adoptium\jdk-17.0.17.10-hotspot`
-2. **Android SDK** - Install via Android Studio or command line tools
-3. **Android Emulator** - At least one emulator device configured
+- JDK 17 or newer installed and available via `JAVA_HOME` or `PATH`
+- Android SDK installed
+- `local.properties` present with at least `sdk.dir=/path/to/Android/Sdk`
 
-## Project Structure
+Optional for Polar testing:
 
-```
-kotlin/
-├── androidApp/          # Android application module (entry point)
-│   ├── build.gradle.kts
-│   └── src/main/
-│       ├── AndroidManifest.xml
-│       └── kotlin/com/wellnesswingman/
-│           ├── MainActivity.kt           # Main activity
-│           └── WellnessWingmanApp.kt    # Application class (Koin setup)
-├── composeApp/          # Compose UI library (shared UI components)
-│   └── src/
-│       ├── commonMain/   # Cross-platform UI code
-│       └── androidMain/  # Android-specific UI
-├── shared/              # Shared business logic (models, repos, services)
-│   └── src/
-│       ├── commonMain/   # Cross-platform code
-│       └── androidMain/  # Android-specific implementations
-└── gradle/              # Gradle wrapper and dependencies
+```properties
+polar.client.id=your-polar-client-id
+polar.broker.base.url=https://your-cloud-function-url
 ```
 
-## Quick Start - Command Line
+## Project Shape
 
-### 1. List Available Gradle Tasks
+- `androidApp/`: Android app entry point and manifest
+- `composeApp/`: shared Compose UI
+- `shared/`: shared data, domain, SQLDelight, and platform abstractions
+- `polar-oauth-broker/`: Polar OAuth broker and Terraform
+
+## Build the App
+
+From the repository root:
 
 ```bash
-cd D:\SourceCode\WellnessWingman\kotlin
-.\gradlew.bat tasks --group build
+./gradlew :androidApp:assembleDebug
 ```
 
-### 2. Build the App
+APK output:
 
-```bash
-# Debug build (faster, includes debug info)
-.\gradlew.bat :androidApp:assembleDebug
-
-# Release build (optimized, no debug info)
-.\gradlew.bat :androidApp:assembleRelease
+```text
+androidApp/build/outputs/apk/debug/androidApp-debug.apk
 ```
 
-APK will be generated at: `androidApp/build/outputs/apk/debug/androidApp-debug.apk`
+## Install and Launch
 
-### 3. Install to Emulator/Device
-
-First, make sure an emulator is running or device is connected:
+Start an emulator or connect a device, then:
 
 ```bash
-# List connected devices/emulators
-adb devices
-
-# If no emulator is running, start one (requires Android SDK)
-emulator -list-avds                    # List available emulators
-emulator -avd <avd_name> &            # Start emulator in background
-```
-
-Install the app:
-
-```bash
-# Install debug build
-.\gradlew.bat :androidApp:installDebug
-
-# Or install directly with adb
-adb install androidApp/build/outputs/apk/debug/androidApp-debug.apk
-```
-
-### 4. Run the App
-
-```bash
-# Build, install, and launch the app in one command
-.\gradlew.bat :androidApp:installDebug
+./gradlew :androidApp:installDebug
 adb shell am start -n com.wellnesswingman/.MainActivity
 ```
 
-## Using Android Studio
-
-### Initial Setup
-
-1. **Open Project**
-   - Launch Android Studio
-   - Select "Open" and navigate to `D:\SourceCode\WellnessWingman\kotlin`
-   - Wait for Gradle sync to complete (first time may take several minutes)
-
-2. **Configure SDK**
-   - File → Project Structure → SDK Location
-   - Ensure Android SDK location is set (usually `C:\Users\<username>\AppData\Local\Android\Sdk`)
-   - Ensure JDK is set to Java 17
-
-3. **Set Up Emulator**
-   - Tools → Device Manager (or AVD Manager)
-   - Click "Create Device"
-   - Recommended: Pixel 6 or similar with API 34 (Android 14)
-   - Download system image if prompted
-   - Finish setup
-
-### Running from Android Studio
-
-1. **Select Configuration**
-   - Top toolbar: Select `androidApp` from the run configuration dropdown
-   - Select your emulator device next to it
-
-2. **Run the App**
-   - Click the green "Run" button (▶) or press `Shift+F10`
-   - Or: Run → Run 'androidApp'
-   - First build will take a few minutes
-
-3. **Debug the App**
-   - Click the "Debug" button (🐞) or press `Shift+F9`
-   - Or: Run → Debug 'androidApp'
-
-### Setting Breakpoints
-
-1. Open any Kotlin file (e.g., `MainActivity.kt`)
-2. Click in the left gutter next to a line number to set a breakpoint (red dot)
-3. Run in debug mode
-4. When breakpoint hits, you can:
-   - Inspect variables in the "Variables" panel
-   - Step through code (F8 = step over, F7 = step into)
-   - Evaluate expressions (Alt+F8)
-   - View call stack
-
-### Useful Debug Configurations
-
-**Build Variants** (Bottom left or Build → Select Build Variant):
-- `debug` - Includes debug symbols, logging, slower but easier to debug
-- `release` - Optimized, minified (when enabled), no debug logging
-
-## Viewing Logs
-
-### Android Studio Logcat
-
-1. Open Logcat panel (bottom toolbar)
-2. Filter by:
-   - Package: `com.wellnesswingman`
-   - Tag: `WellnessWingman`, `Napier`, or custom tags
-   - Log level: Verbose, Debug, Info, Warn, Error
-
-### Command Line
+Useful device checks:
 
 ```bash
-# View all logs from the app
-adb logcat | grep "com.wellnesswingman"
-
-# View Napier logs (our logging library)
-adb logcat | grep "Napier"
-
-# Clear log buffer first
-adb logcat -c
+adb devices
 adb logcat
 ```
 
-## Common Gradle Commands
+## Android Studio
+
+1. Open the repository root in Android Studio.
+2. Let Gradle sync finish.
+3. Confirm the SDK path and JDK.
+4. Select the `androidApp` run configuration.
+5. Run or debug on an emulator/device.
+
+## First-Run Setup
+
+- Configure an LLM provider in Settings.
+- Add the required API key for the selected provider.
+- Grant camera, microphone, and notification permissions as needed.
+- Add Polar config to `local.properties` if you want to test OAuth and sync flows.
+
+## Notable Runtime Behaviors
+
+- `MainActivity` handles image share intents, so Android can send images directly into a pending capture flow.
+- OAuth callbacks use the `wellnesswingman://oauth/result` deep link.
+- `WellnessWingmanApp` schedules background jobs for image retention and Polar sync via WorkManager.
+- On startup, the app recovers stale processing entries and retries a pending Polar OAuth redemption if one survived process death.
+
+## Useful Commands
 
 ```bash
-# Clean build (removes all build artifacts)
-.\gradlew.bat clean
+# Clean
+./gradlew clean
 
-# Clean and rebuild everything
-.\gradlew.bat clean :androidApp:assembleDebug
+# Build everything needed for Android debug
+./gradlew :androidApp:assembleDebug
 
-# Run tests
-.\gradlew.bat :shared:test
+# Shared tests
+./gradlew :shared:desktopTest
 
-# Run tests with coverage report
-.\gradlew.bat :shared:test :shared:koverHtmlReport
-
-# Check dependencies
-.\gradlew.bat :androidApp:dependencies
-
-# Sync Gradle (if you edit build files)
-.\gradlew.bat --refresh-dependencies
+# Coverage report
+./gradlew :shared:desktopTest :shared:koverHtmlReport
 ```
 
 ## Troubleshooting
 
-### "No connected devices"
+### Java not found
 
-```bash
-# Check if emulator is running
-adb devices
+If Gradle fails with `JAVA_HOME is not set` or `java: command not found`, install JDK 17+ and export `JAVA_HOME` before running Gradle.
 
-# Restart adb if needed
-adb kill-server
-adb start-server
-adb devices
-```
+### SDK location missing
 
-### "SDK location not found"
+Create or update `local.properties`:
 
-- Create/edit `local.properties` in the kotlin directory:
-  ```properties
-  sdk.dir=C:\\Users\\<YourUsername>\\AppData\\Local\\Android\\Sdk
-  ```
-
-### "Build failed" or "Sync failed"
-
-```bash
-# Clean and retry
-.\gradlew.bat clean
-.\gradlew.bat :androidApp:assembleDebug --refresh-dependencies
-```
-
-### "Out of memory" during build
-
-Edit `gradle.properties` and increase heap size:
 ```properties
-org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g
+sdk.dir=/path/to/Android/Sdk
 ```
 
-### App crashes on launch
+### Polar OAuth button does nothing
 
-1. Check Logcat for crash logs
-2. Common issues:
-   - Missing API keys (OpenAI) - Check settings screen
-   - Database initialization errors - Clear app data
-   - Permission errors - Grant permissions in emulator settings
+Check both:
 
-## App Configuration
+- `polar.client.id`
+- `polar.broker.base.url`
 
-### Required Setup on First Launch
+If either is blank, the Android build will still compile, but Polar connection flows will not work.
 
-The app requires configuration before it can analyze meals:
+### Background sync is not running
 
-1. **OpenAI API Key**
-   - Launch app → Settings screen
-   - Enter your OpenAI API key
-   - Key is stored in encrypted preferences
+Verify:
 
-2. **Permissions** (will be requested on first use)
-   - Camera - for meal photo capture
-   - Microphone - for voice notes
-   - Storage - for saving photos
+- network is available
+- battery saver is not aggressively restricting WorkManager
+- the app has been launched at least once so periodic work can be enqueued
 
-### Database Location
+### App launch or processing issues
 
-SQLite database is stored at:
-- Debug: `/data/data/com.wellnesswingman/databases/wellness_wingman.db`
-- Access via: `adb shell` then `run-as com.wellnesswingman`
+Use Logcat and filter on:
 
-## Development Workflow
+- `com.wellnesswingman`
+- `Napier`
 
-### Typical Edit-Debug Cycle
-
-1. Make code changes in Android Studio
-2. Click "Run" or "Debug" (Gradle will auto-rebuild changed modules)
-3. App automatically installs and launches
-4. Test your changes
-5. Check Logcat for any errors or debug logs
-
-### Hot Reload (Compose)
-
-- Compose supports live preview of UI changes
-- Open any `@Composable` function
-- Click "Split" or "Design" mode to see preview
-- UI changes reflect immediately in preview (no rebuild needed)
-
-### Testing Individual Modules
-
-```bash
-# Test just the shared module
-.\gradlew.bat :shared:test
-
-# Test androidApp (if instrumented tests exist)
-.\gradlew.bat :androidApp:connectedDebugAndroidTest
-```
-
-## Performance Profiling
-
-In Android Studio:
-
-1. Run → Profile 'androidApp'
-2. Choose profiler:
-   - CPU - Find slow methods
-   - Memory - Find leaks
-   - Network - Monitor API calls
-   - Energy - Battery usage
-
-## Next Steps
-
-- See `TESTING.md` for E2E testing with Maestro
-- See `shared/build/reports/kover/html/index.html` for test coverage
-- Check the project README for architecture details
-
-## Useful Resources
-
-- [Kotlin Multiplatform Docs](https://kotlinlang.org/docs/multiplatform.html)
-- [Jetpack Compose Docs](https://developer.android.com/jetpack/compose)
-- [Android Debug Guide](https://developer.android.com/studio/debug)
-- [Gradle User Guide](https://docs.gradle.org/current/userguide/userguide.html)
+The app uses persistent Napier-backed logging, and diagnostics can also be shared from Settings.

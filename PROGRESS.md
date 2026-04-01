@@ -1,338 +1,45 @@
-# WellnessWingman Kotlin Multiplatform Migration - Progress Tracker
+# WellnessWingman Progress
 
-**Last Updated:** 2026-01-30
-**Overall Progress:** 20 of 24 tasks (83.3%)
-**Status:** Production Ready for Android
+**Last Updated:** 2026-04-01  
+**Status:** Active Android-first Kotlin Multiplatform application
 
----
+## Snapshot
 
-## ✅ Phase 1: Foundation (5/5 tasks - 100%)
+The repository is no longer best described as a migration-in-progress checklist. The active codebase now includes:
 
-### Task #1: Set up KMP project structure ✅
-**Status:** Completed
-**Files:** Build configuration, Gradle setup, module structure
-- [x] Root build.gradle.kts with version catalog
-- [x] settings.gradle.kts with module configuration
-- [x] gradle/libs.versions.toml with all dependencies
-- [x] Module structure: shared, composeApp, androidApp
-- [x] Platform-specific source sets (Android, iOS, Desktop)
+- shared SQLDelight-backed persistence for tracked entries, analyses, summaries, nutrition profiles, Polar sync state, and weight history
+- shared LLM integration for OpenAI and Gemini
+- shared daily and weekly summary generation with tool-calling support
+- Android share-intent capture, OAuth deep-link handling, and background work scheduling
+- Polar OAuth, API client integration, persisted sync checkpoints, refresh orchestration, and insight generation
+- nutrition-label scanning plus saved nutritional profile management
+- data export/import and diagnostics sharing
 
-### Task #2: Create data models ✅
-**Status:** Completed
-**Files:** 10+ data model files in `shared/src/commonMain/kotlin/com/wellnesswingman/data/model/`
-- [x] EntryType.kt
-- [x] ProcessingStatus.kt
-- [x] TrackedEntry.kt
-- [x] EntryAnalysis.kt
-- [x] DailySummary.kt
-- [x] TrackedEntryCard.kt
-- [x] MealAnalysisResult.kt
-- [x] ExerciseAnalysisResult.kt
-- [x] SleepAnalysisResult.kt
-- [x] Supporting models (NutritionEstimate, HealthInsights, etc.)
+## March 2026 Completed PRs
 
-### Task #3: Set up SQLDelight schemas ✅
-**Status:** Completed
-**Files:** SQL schemas and database drivers
-- [x] TrackedEntry.sq with 15+ queries
-- [x] EntryAnalysis.sq with 10+ queries
-- [x] DailySummary.sq with 12+ queries
-- [x] DriverFactory.kt (expect declaration)
-- [x] DriverFactory.android.kt
-- [x] DriverFactory.ios.kt
-- [x] DriverFactory.desktop.kt
+Major product and architecture work merged during March 2026:
 
-### Task #4: Implement repository layer ✅
-**Status:** Completed
-**Files:** Repository interfaces and implementations
-- [x] TrackedEntryRepository.kt
-- [x] SqlDelightTrackedEntryRepository.kt
-- [x] EntryAnalysisRepository.kt
-- [x] SqlDelightEntryAnalysisRepository.kt
-- [x] DailySummaryRepository.kt
-- [x] SqlDelightDailySummaryRepository.kt
-- [x] AppSettingsRepository.kt
-- [x] SettingsAppSettingsRepository.kt
+- `#127` nutritional profile workflow
+- `#125` tool registry wiring for daily and weekly summaries
+- `#123` shared LLM tool-calling support and issue 100 work
+- `#121` Polar insight bridge and day-detail follow-ups
+- `#120` Polar sync persistence and refresh orchestration
+- `#119` shared Polar API client and DTO mapping
+- `#118` Polar OAuth integration milestone 1
+- `#102` sectioned settings navigation
+- `#93` image retention service and Android background worker
 
-### Task #5: Port business logic services ✅
-**Status:** Completed
-**Files:** Pure business logic
-- [x] DailyTotalsCalculator.kt
-- [x] DateTimeUtil.kt
+Supporting maintenance work during the same month included documentation cleanup, app icon updates, workflow updates, and multiple dependency security bumps.
 
----
+## Active Focus Areas
 
-## ✅ Phase 2: Core Business Logic (5/5 tasks - 100%)
+- keep Android documentation and operational guides aligned with the shipped code
+- continue growing shared and Compose test coverage toward the repository’s long-term targets
+- re-enable or modernize the iOS Gradle target setup when the Kotlin/Gradle compatibility path is ready
+- expand manual verification around OAuth, WorkManager, and media flows that are not fully covered by automated tests
 
-### Task #6: Implement LLM client interfaces ✅
-**Status:** Completed
-**Files:** LLM integration layer
-- [x] LlmClient.kt (interface)
-- [x] OpenAiLlmClient.kt (using openai-kotlin)
-- [x] GeminiLlmClient.kt (using Ktor HTTP)
-- [x] LlmClientFactory.kt
-- [x] Request/response models
+## Open Gaps
 
-### Task #7: Implement analysis orchestrator ✅
-**Status:** Completed
-**Files:** Entry processing pipeline
-- [x] AnalysisOrchestrator.kt
-- [x] AnalysisInvocationResult sealed class
-- [x] Prompt building logic
-- [x] Status management
-- [x] Error handling
-
-### Task #8: Implement daily summary service ✅
-**Status:** Completed
-**Files:** Summary generation
-- [x] DailySummaryService.kt
-- [x] Summary generation with LLM
-- [x] Nutrition totals aggregation
-- [x] Regeneration support
-
-### Task #9: Implement platform services (expect/actual) ✅
-**Status:** Completed
-**Files:** Platform-specific implementations
-- [x] FileSystem.kt (expect)
-- [x] FileSystem.android.kt
-- [x] FileSystem.ios.kt
-- [x] FileSystem.desktop.kt
-- [x] CameraCaptureService.kt (expect)
-- [x] CameraCaptureService.android.kt
-- [x] CameraCaptureService.ios.kt
-- [x] CameraCaptureService.desktop.kt
-- [x] PhotoResizer.kt (expect)
-- [x] PhotoResizer.android.kt
-- [x] PhotoResizer.ios.kt
-- [x] PhotoResizer.desktop.kt
-
-### Task #10: Set up dependency injection with Koin ✅
-**Status:** Completed
-**Files:** Complete DI configuration
-- [x] DataModule.kt
-- [x] DomainModule.kt
-- [x] SharedModules.kt
-- [x] PlatformModule.android.kt
-- [x] PlatformModule.ios.kt
-- [x] PlatformModule.desktop.kt
-- [x] ViewModelModule.kt
-
----
-
-## ✅ Phase 3: UI Layer (7/7 tasks - 100%)
-
-### Task #11: Create Compose UI theme and design system ✅
-**Status:** Completed
-**Files:** Material3 theming
-- [x] Color.kt (light & dark color schemes)
-- [x] Typography.kt
-- [x] Theme.kt
-- [x] LoadingIndicator.kt
-- [x] ErrorMessage.kt
-- [x] EmptyState.kt
-
-### Task #12: Implement navigation with Voyager ✅
-**Status:** Completed
-**Files:** Navigation setup
-- [x] App.kt (root composable with Navigator)
-- [x] Screen definitions
-- [x] Slide transitions
-
-### Task #13: Create MainScreen with entry list ✅
-**Status:** Completed
-**Files:** Main entry list screen
-- [x] MainScreen.kt
-- [x] MainViewModel.kt
-- [x] EntryCard composable
-- [x] StatusChip composable
-- [x] Pull-to-refresh support
-- [x] Navigation to detail screens
-
-### Task #14: Create SettingsScreen ✅
-**Status:** Completed
-**Files:** Settings and configuration
-- [x] SettingsScreen.kt
-- [x] SettingsViewModel.kt
-- [x] LLM provider selection
-- [x] API key input (password-masked)
-- [x] Save/load functionality
-- [x] Snackbar feedback
-
-### Task #15: Create detail screens (Meal, Exercise, Sleep) ✅
-**Status:** Completed
-**Files:** Entry detail views
-- [x] EntryDetailScreen.kt
-- [x] EntryDetailViewModel.kt
-- [x] MealAnalysisCard composable
-- [x] ExerciseAnalysisCard composable
-- [x] SleepAnalysisCard composable
-- [x] Delete functionality with confirmation
-- [x] Navigation integration
-
-### Task #16: Create PhotoReviewScreen ✅
-**Status:** Completed
-**Files:** Photo capture and review UI
-- [x] PhotoReviewViewModel.kt
-- [x] PhotoReviewScreen.kt
-- [x] Camera capture integration
-- [x] Gallery picker integration
-- [x] Photo review with entry type selection
-- [x] Notes input
-- [x] Confirm/retry functionality
-- [x] Navigation to EntryDetailScreen after creation
-
-### Task #17: Create calendar views (Week, Month, Year, Day) ✅
-**Status:** Completed
-**Files:** Timeline views for entries
-- [x] CalendarViewModel.kt
-- [x] WeekViewModel.kt
-- [x] YearViewModel.kt
-- [x] DayDetailViewModel.kt
-- [x] MonthViewScreen.kt with calendar grid
-- [x] WeekViewScreen.kt with daily sections
-- [x] YearViewScreen.kt with month summary cards
-- [x] DayDetailScreen.kt with entry list
-- [x] Navigation integration from MainScreen
-- [x] Date navigation (previous/next/today)
-
-### Task #18: Create DailySummaryScreen ✅
-**Status:** Completed
-**Files:** Daily summary display
-- [x] DailySummaryScreen.kt
-- [x] DailySummaryViewModel.kt
-- [x] Summary content display
-- [x] Generate/regenerate functionality
-- [x] Loading and error states
-- [x] Empty states (no summary, no entries)
-
----
-
-## ✅ Phase 4: Android Application (1/1 task - 100%)
-
-### Task #19: Set up Android app module ✅
-**Status:** Completed
-**Files:** Android application entry point
-- [x] MainActivity.kt
-- [x] WellnessWingmanApp.kt (Application class)
-- [x] AndroidManifest.xml
-- [x] Build configuration
-- [x] Koin initialization
-- [x] Napier logging setup
-- [x] ProGuard rules
-- [x] Resource files (strings, colors, file_paths)
-
----
-
-## ⏳ Phase 5: Testing & Polish (0/5 tasks - 0%)
-
-### Task #20: Port unit tests to kotlin.test ✅
-**Status:** Completed
-**Files:** Comprehensive unit test suite created
-- [x] DailyTotalsCalculatorTest.kt - Business logic tests
-- [x] DateTimeUtilTest.kt - Utility function tests
-- [x] TrackedEntryTest.kt - Data model tests
-- [x] MealAnalysisResultTest.kt - JSON serialization tests
-- [x] SqlDelightTrackedEntryRepositoryTest.kt - Repository tests with in-memory DB
-- [x] Test dependencies configured (kotlin-test, coroutines-test, mockk, turbine)
-- [x] SQLDelight JDBC driver for in-memory testing
-**Note:** Tests require Java 17/21 to run (see TESTING.md)
-
-### Task #21: Set up code coverage with Kover ⏳
-**Status:** Pending (Optional)
-**Description:** Configure test coverage reporting
-**Requirements:**
-- [ ] Add Kover plugin configuration
-- [ ] Configure coverage filters
-- [ ] Set minimum coverage thresholds (70%)
-- [ ] Generate HTML/XML reports
-
-### Task #22: Create Maestro E2E test flows ⏳
-**Status:** Pending (Optional)
-**Description:** End-to-end testing
-**Requirements:**
-- [ ] smoke_test.yaml
-- [ ] create_entry.yaml
-- [ ] navigation.yaml
-- [ ] settings.yaml
-
-### Task #23: Set up iOS app module (basic) ⏳
-**Status:** Pending (Optional)
-**Description:** Basic iOS application structure
-**Requirements:**
-- [ ] Xcode project setup
-- [ ] ContentView.swift calling Compose
-- [ ] Info.plist configuration
-- [ ] Complete iOS platform implementations
-- [ ] Camera/Photos permissions
-
-### Task #24: Create documentation and README ✅
-**Status:** Completed
-**Files:** Project documentation
-- [x] README.md with comprehensive overview
-- [x] Build instructions
-- [x] Architecture documentation
-- [x] Migration status
-- [x] PROGRESS.md (this file)
-
----
-
-## 📊 Summary Statistics
-
-| Phase | Completed | Total | Percentage |
-|-------|-----------|-------|------------|
-| Phase 1: Foundation | 5 | 5 | 100% |
-| Phase 2: Core Logic | 5 | 5 | 100% |
-| Phase 3: UI Layer | 7 | 7 | 100% |
-| Phase 4: Android App | 1 | 1 | 100% |
-| Phase 5: Testing | 1 | 5 | 20% |
-| **TOTAL** | **20** | **24** | **83.3%** |
-
-## 🎯 Key Milestones Achieved
-
-- ✅ **Complete data and business logic layer**
-- ✅ **Full dependency injection with Koin**
-- ✅ **Cross-platform database with SQLDelight**
-- ✅ **Dual LLM provider support (OpenAI + Gemini)**
-- ✅ **Production-ready Android application**
-- ✅ **Kotlin 2.2.0 with latest dependencies**
-- ✅ **Gradle wrapper generated (9.3.0)**
-- ✅ **Comprehensive unit test suite**
-- ✅ **Material3 UI with complete screen set (9 screens)**
-- ✅ **Photo capture and review flow**
-- ✅ **Calendar views (Week/Month/Year/Day)**
-- ✅ **Type-safe navigation with Voyager**
-
-## 🚀 Production Readiness
-
-### Ready for Production ✅
-- Android app with complete feature set
-- Database persistence
-- LLM integration (OpenAI + Gemini)
-- Settings management
-- Entry tracking and analysis
-- Daily summaries
-- Photo capture and review
-- Calendar timeline views (Week/Month/Year/Day)
-
-### Optional Enhancements ⏳
-- Comprehensive testing (Tasks #20-22)
-- iOS support (Task #23)
-
-## 📁 File Statistics
-
-- **Total Files Created:** 96+
-- **Lines of Code:** ~12,000+
-- **Shared Module:** 65+ files
-- **ComposeApp Module:** 42+ files (9 complete screens)
-- **AndroidApp Module:** 10+ files
-
-## 🔗 Related Documentation
-
-- [README.md](README.md) - Project overview and setup
-- [MIGRATION_ANALYSIS.md](MIGRATION_ANALYSIS.md) - Detailed migration planning
-- [Build Instructions](README.md#building-the-project) - How to build and run
-
----
-
-**Note:** Tasks marked as "Pending (Optional)" are not required for core functionality.
-The application is production-ready for Android with all critical features implemented.
+- Gradle iOS targets remain disabled in build scripts even though `iosApp/` is still present
+- the current Kover-enforced minimum in Gradle is still a low baseline compared with the repository coverage target
+- Android-specific runtime paths such as camera capture, notifications, and background work still need manual validation on real devices/emulators as changes land

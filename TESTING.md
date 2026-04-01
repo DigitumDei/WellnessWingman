@@ -1,93 +1,86 @@
 # Testing Guide
 
-## Test Suite Overview
+This project’s main automated verification path is the shared desktop/unit suite plus Kover coverage reporting.
 
-WellnessWingman includes comprehensive unit tests using kotlin.test for multiplatform testing.
-
-### Test Files Created
-
-**Domain Layer Tests:**
-- `DailyTotalsCalculatorTest.kt` - Tests for nutrition totals calculation
-- `DateTimeUtilTest.kt` - Tests for date/time utility functions
-
-**Data Layer Tests:**
-- `SqlDelightTrackedEntryRepositoryTest.kt` - Repository tests with in-memory SQLite
-- `TrackedEntryTest.kt` - Data model tests
-- `MealAnalysisResultTest.kt` - JSON serialization tests for analysis results
-
-### Running Tests
-
-#### Prerequisites
-
-**Java Version Requirement:**
-- Tests require **Java 17 LTS** or **Java 21 LTS**
-- Current system has Java 25 (early access), which is not yet supported by Kotlin 2.x
-- To install Java 17:
-  - **Windows**: Download from [Adoptium](https://adoptium.net/temurin/releases/)
-  - **Using Chocolatey**: `choco install openjdk17`
-  - **Using Scoop**: `scoop install openjdk17`
-
-#### Running the Test Suite
-
-Once Java 17/21 is installed:
+## Primary Commands
 
 ```bash
-# Run all tests
-./gradlew test
+# Shared tests used in CI
+./gradlew :shared:desktopTest
 
-# Run shared module tests
-./gradlew :shared:testDebugUnitTest
+# XML report for Codecov
+./gradlew :shared:koverXmlReport
 
-# Run with coverage report (when Kover is re-enabled)
-./gradlew koverHtmlReport
+# Browsable local report
+./gradlew :shared:koverHtmlReport
+
+# Recommended local coverage pass
+./gradlew :shared:desktopTest :shared:koverHtmlReport
+
+# Full verification pass
+./gradlew check
 ```
 
-### Test Coverage
+## Test Locations
 
-Current test coverage includes:
-- ✅ Business logic (DailyTotalsCalculator)
-- ✅ Utilities (DateTimeUtil)
-- ✅ Data models and serialization
-- ✅ Repository layer with in-memory database
-- ⏳ ViewModels (TODO - requires MockK setup)
-- ⏳ Use cases/Orchestrators (TODO)
+- `shared/src/commonTest/`: shared domain, repository, serialization, Polar, LLM, migration, and media tests
+- `composeApp/src/commonTest/`: shared presentation and view-model/state logic tests
 
-### Known Issues
+## Coverage
 
-1. **Java 25 Compatibility**
-   - Kotlin 2.1.0/2.2.0 doesn't recognize Java 25
-   - Error: `java.lang.IllegalArgumentException: 25`
-   - **Solution**: Install Java 17 or 21
+- XML report: `shared/build/reports/kover/report.xml`
+- HTML report: `shared/build/reports/kover/html/index.html`
+- Current Kover verification baseline in Gradle: `25%`
+- Team target documented in repository guidance: `80%` line coverage and `70%` branch coverage for production code
 
-2. **SQLDelight Reserved Keywords**
-   - Fixed: Changed `count` column alias to `entry_count` in SQL queries
+The docs and the Gradle configuration are intentionally distinguished here: the repository guidance describes the desired target, while the current enforced Gradle minimum is still lower.
 
-3. **Gradle Wrapper**
-   - ✅ Successfully generated with Gradle 9.3.0
-   - ✅ iOS targets temporarily disabled for initial setup
-   - Can be re-enabled after Gradle/Java version stabilization
+## What Is Covered Today
 
-### Future Test Improvements
+The current suites cover:
 
-- Add ViewModel tests using Turbine for Flow testing
-- Add integration tests for AnalysisOrchestrator
-- Set up Maestro E2E tests (Task #22)
-- Re-enable Kover code coverage reporting (Task #21)
-- Add UI tests using Compose Testing framework
+- SQLDelight repository behavior
+- analysis orchestration and summary services
+- OpenAI and Gemini client behavior
+- tool registry behavior
+- nutrition-label analysis and nutrition-profile flows
+- Polar OAuth, API client, diagnostics, insights, and sync orchestration
+- image retention and data migration services
+- Compose state logic for calendar, main screen, and nutrition workflows
 
-### Dependencies
+## Environment Requirements
 
-Test dependencies are configured in `shared/build.gradle.kts`:
-- `kotlin-test` - Multiplatform test framework
-- `coroutines-test` - Testing utilities for coroutines
-- `mockk` - Mocking framework
-- `turbine` - Flow testing library
-- `sqldelight-driver-jdbc` - In-memory SQLite for tests
+- JDK 17 or newer
+- `JAVA_HOME` configured, or `java` available on `PATH`
 
-## Project Status
+Without Java, Gradle will fail before configuration.
 
-- **Overall Completion**: 79.2% (19/24 tasks)
-- **Phase 3 (UI Layer)**: 100% complete
-- **Phase 5 (Testing)**: Partially complete (test code written, requires Java 17/21 to run)
+## Practical Workflow
 
-See [PROGRESS.md](./PROGRESS.md) for detailed task breakdown.
+For most changes:
+
+```bash
+./gradlew :shared:desktopTest
+```
+
+Before a PR that touches shared logic:
+
+```bash
+./gradlew :shared:desktopTest :shared:koverXmlReport :shared:koverHtmlReport
+```
+
+When touching multiple modules or build logic:
+
+```bash
+./gradlew check
+```
+
+## Manual Verification Areas
+
+Automated tests do not replace manual checks for:
+
+- Android camera and share-intent capture flows
+- notification and foreground-service behavior
+- Polar OAuth browser redirect flow
+- WorkManager-triggered image retention and Polar sync
+- export/import UX and diagnostics sharing
