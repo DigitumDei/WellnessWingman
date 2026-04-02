@@ -1,0 +1,2 @@
+-- Migration from version 3 to version 4
+-- No-op placeholder to preserve contiguous SQLDelight migration numbering.

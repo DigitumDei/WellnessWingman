@@ -4,6 +4,7 @@ agp = "9.1.0"
 compose = "1.7.0"
 compose-compiler = "1.5.15"
 koin = "3.5.3"
+koin-compose = "1.1.2"
 sqldelight = "2.0.2"
 ktor = "2.3.12"
 coroutines = "1.9.0"
@@ -34,7 +35,7 @@ compose-ui-tooling-preview = { module = "org.jetbrains.compose.ui:ui-tooling-pre
 # Koin
 koin-core = { module = "io.insert-koin:koin-core", version.ref = "koin" }
 koin-android = { module = "io.insert-koin:koin-android", version.ref = "koin" }
-koin-compose = { module = "io.insert-koin:koin-androidx-compose", version.ref = "koin" }
+koin-compose = { module = "io.insert-koin:koin-compose", version.ref = "koin-compose" }
 
 # SQLDelight
 sqldelight-driver-android = { module = "app.cash.sqldelight:android-driver", version.ref = "sqldelight" }
