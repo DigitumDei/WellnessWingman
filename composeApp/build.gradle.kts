@@ -56,9 +56,6 @@ kotlin {
                 implementation(libs.koin.core)
                 implementation(libs.koin.compose)
 
-                // Coil for image loading
-                implementation(libs.coil.compose)
-
                 // Coroutines
                 implementation(libs.coroutines.core)
 
