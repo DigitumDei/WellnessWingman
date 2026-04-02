@@ -150,7 +150,7 @@ sqldelight {
 }
 
 pluginManager.withPlugin("org.jetbrains.kotlinx.kover") {
-    extensions.configure("kover") {
+    extensions.findByName("kover")?.apply {
         withGroovyBuilder {
             "reports" {
                 "filters" {
