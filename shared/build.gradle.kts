@@ -3,7 +3,13 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.android.library)
     alias(libs.plugins.sqldelight)
-    alias(libs.plugins.kover)
+    alias(libs.plugins.kover) apply false
+}
+
+if (gradle.startParameter.taskNames.any { taskName ->
+        taskName.contains("kover", ignoreCase = true)
+    }) {
+    apply(plugin = "org.jetbrains.kotlinx.kover")
 }
 
 kotlin {
@@ -143,27 +149,29 @@ sqldelight {
     }
 }
 
-kover {
-    reports {
-        filters {
-            excludes {
-                // Exclude generated code
-                packages("com.wellnesswingman.db")
+pluginManager.withPlugin("org.jetbrains.kotlinx.kover") {
+    configure<org.jetbrains.kotlinx.kover.gradle.plugin.dsl.KoverProjectExtension> {
+        reports {
+            filters {
+                excludes {
+                    // Exclude generated code
+                    packages("com.wellnesswingman.db")
 
-                // Exclude platform-specific implementations (tested via integration tests)
-                packages("com.wellnesswingman.platform")
+                    // Exclude platform-specific implementations (tested via integration tests)
+                    packages("com.wellnesswingman.platform")
 
-                // Exclude DI modules (simple wiring, no logic)
-                classes("*Module*")
+                    // Exclude DI modules (simple wiring, no logic)
+                    classes("*Module*")
+                }
             }
-        }
 
-        verify {
-            rule {
-                // Current baseline: 25%
-                // TODO: Increase threshold as more tests are added
-                // Target: 70%+ for production code
-                minBound(25)
+            verify {
+                rule {
+                    // Current baseline: 25%
+                    // TODO: Increase threshold as more tests are added
+                    // Target: 70%+ for production code
+                    minBound(25)
+                }
             }
         }
     }
