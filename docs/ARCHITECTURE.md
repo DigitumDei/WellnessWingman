@@ -91,6 +91,7 @@ The database version is currently `7`. Migrations exist for versions:
 
 - `1.sqm`
 - `2.sqm`
+- `3.sqm`
 - `4.sqm`
 - `5.sqm`
 - `6.sqm`
