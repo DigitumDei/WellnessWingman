@@ -285,7 +285,7 @@ class SettingsViewModel(
             try {
                 val result = dataMigrationService.importData(filePath)
                 val message = if (result.isSuccess) {
-                    "Import completed: ${result.entriesImported} entries, ${result.analysesImported} analyses, ${result.summariesImported} daily summaries, ${result.weeklySummariesImported} weekly summaries, ${result.weightRecordsImported} weight records"
+                    "Import completed: ${result.entriesImported} entries, ${result.nutritionalProfilesImported} nutritional profiles, ${result.analysesImported} analyses, ${result.summariesImported} daily summaries, ${result.weeklySummariesImported} weekly summaries, ${result.weightRecordsImported} weight records"
                 } else {
                     "Import completed with errors: ${result.errors.first()}"
                 }

@@ -120,6 +120,7 @@ val domainModule = module {
         DefaultDataMigrationService(
             trackedEntryRepository = get(),
             entryAnalysisRepository = get(),
+            nutritionalProfileRepository = get(),
             dailySummaryRepository = get(),
             weeklySummaryRepository = get(),
             appSettingsRepository = get(),
