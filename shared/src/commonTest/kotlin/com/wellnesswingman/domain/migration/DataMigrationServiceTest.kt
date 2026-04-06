@@ -84,6 +84,7 @@ private class FakeEntryAnalysisRepository : EntryAnalysisRepository {
 private class FakeNutritionalProfileRepository : NutritionalProfileRepository {
     val profiles = mutableListOf<NutritionalProfile>()
     val upserted = mutableListOf<NutritionalProfile>()
+    val failOnExternalIds = mutableSetOf<String>()
 
     override fun getAllAsFlow(): Flow<List<NutritionalProfile>> = flowOf(profiles)
     override suspend fun getAll(): List<NutritionalProfile> = profiles
@@ -93,7 +94,13 @@ private class FakeNutritionalProfileRepository : NutritionalProfileRepository {
     override suspend fun insert(profile: NutritionalProfile): Long = profile.profileId
     override suspend fun update(profile: NutritionalProfile) {}
     override suspend fun delete(profileId: Long) {}
-    override suspend fun upsert(profile: NutritionalProfile) { upserted.add(profile) }
+    override suspend fun upsert(profile: NutritionalProfile) {
+        if (profile.externalId in failOnExternalIds) {
+            throw IllegalStateException("duplicate profile ${profile.externalId}")
+        }
+        upserted.removeAll { it.profileId == profile.profileId || it.externalId == profile.externalId }
+        upserted.add(profile)
+    }
 }
 
 private class FakeDailySummaryRepository : DailySummaryRepository {
@@ -533,6 +540,153 @@ class DataMigrationServiceTest {
         assertEquals("photos/labels/granola.jpg", zipUtil.createdFileEntries!![0].name)
     }
 
+    @Test
+    fun `exportData rewrites external nutritional profile image paths to stable archive paths`() = runTest {
+        val nutritionalProfileRepo = FakeNutritionalProfileRepository()
+        val fileSystem = FakeFileSystem()
+        val now = Instant.parse("2026-02-11T09:00:00Z")
+
+        nutritionalProfileRepo.profiles.add(
+            NutritionalProfile(
+                profileId = 11,
+                externalId = "usda:granola/bar",
+                primaryName = "Granola Bar",
+                sourceImagePath = "/Users/test/Desktop/granola.jpg",
+                createdAt = now,
+                updatedAt = now
+            )
+        )
+        fileSystem.files["/Users/test/Desktop/granola.jpg"] = byteArrayOf(4, 5, 6)
+
+        val zipUtil = FakeZipUtil()
+        val service = createService(
+            nutritionalProfileRepo = nutritionalProfileRepo,
+            fileSystem = fileSystem,
+            zipUtil = zipUtil
+        )
+
+        service.exportData()
+
+        val jsonEntry = zipUtil.createdInMemoryEntries!!.find { it.name == "data.json" }!!
+        val exportData = json.decodeFromString(ExportData.serializer(), jsonEntry.data.decodeToString())
+        assertEquals(
+            "nutritional-profiles/usda_granola_bar/granola.jpg",
+            exportData.nutritionalProfiles[0].sourceImagePath
+        )
+        assertEquals(
+            "nutritional-profiles/usda_granola_bar/granola.jpg",
+            zipUtil.createdFileEntries!!.single().name
+        )
+    }
+
+    @Test
+    fun `exportData keeps distinct archive paths for external nutritional profile basename collisions`() = runTest {
+        val nutritionalProfileRepo = FakeNutritionalProfileRepository()
+        val fileSystem = FakeFileSystem()
+        val now = Instant.parse("2026-02-11T09:00:00Z")
+
+        nutritionalProfileRepo.profiles.add(
+            NutritionalProfile(
+                profileId = 1,
+                externalId = "profile-a",
+                primaryName = "Item A",
+                sourceImagePath = "/Users/a/label.jpg",
+                createdAt = now,
+                updatedAt = now
+            )
+        )
+        nutritionalProfileRepo.profiles.add(
+            NutritionalProfile(
+                profileId = 2,
+                externalId = "profile-b",
+                primaryName = "Item B",
+                sourceImagePath = "/Users/b/label.jpg",
+                createdAt = now,
+                updatedAt = now
+            )
+        )
+        fileSystem.files["/Users/a/label.jpg"] = byteArrayOf(1)
+        fileSystem.files["/Users/b/label.jpg"] = byteArrayOf(2)
+
+        val zipUtil = FakeZipUtil()
+        val service = createService(
+            nutritionalProfileRepo = nutritionalProfileRepo,
+            fileSystem = fileSystem,
+            zipUtil = zipUtil
+        )
+
+        service.exportData()
+
+        assertEquals(
+            setOf(
+                "nutritional-profiles/profile-a/label.jpg",
+                "nutritional-profiles/profile-b/label.jpg"
+            ),
+            zipUtil.createdFileEntries!!.map { it.name }.toSet()
+        )
+    }
+
+    @Test
+    fun `exportData skips missing nutritional profile image files but preserves archive path in JSON`() = runTest {
+        val nutritionalProfileRepo = FakeNutritionalProfileRepository()
+        val now = Instant.parse("2026-02-11T09:00:00Z")
+        nutritionalProfileRepo.profiles.add(
+            NutritionalProfile(
+                profileId = 3,
+                externalId = "missing-profile",
+                primaryName = "Missing Image",
+                sourceImagePath = "/Users/test/Desktop/missing.jpg",
+                createdAt = now,
+                updatedAt = now
+            )
+        )
+
+        val zipUtil = FakeZipUtil()
+        val service = createService(
+            nutritionalProfileRepo = nutritionalProfileRepo,
+            zipUtil = zipUtil
+        )
+
+        service.exportData()
+
+        val jsonEntry = zipUtil.createdInMemoryEntries!!.find { it.name == "data.json" }!!
+        val exportData = json.decodeFromString(ExportData.serializer(), jsonEntry.data.decodeToString())
+        assertEquals(
+            "nutritional-profiles/missing-profile/missing.jpg",
+            exportData.nutritionalProfiles[0].sourceImagePath
+        )
+        assertTrue(zipUtil.createdFileEntries!!.isEmpty())
+    }
+
+    @Test
+    fun `exportData ignores blank nutritional profile image paths`() = runTest {
+        val nutritionalProfileRepo = FakeNutritionalProfileRepository()
+        val now = Instant.parse("2026-02-11T09:00:00Z")
+        nutritionalProfileRepo.profiles.add(
+            NutritionalProfile(
+                profileId = 4,
+                externalId = "blank-image",
+                primaryName = "Blank Image",
+                sourceImagePath = "",
+                createdAt = now,
+                updatedAt = now
+            )
+        )
+
+        val zipUtil = FakeZipUtil()
+        val service = createService(
+            nutritionalProfileRepo = nutritionalProfileRepo,
+            zipUtil = zipUtil
+        )
+
+        service.exportData()
+
+        assertTrue(zipUtil.createdFileEntries!!.isEmpty())
+        val jsonEntry = zipUtil.createdInMemoryEntries!!.find { it.name == "data.json" }!!
+        val exportData = json.decodeFromString(ExportData.serializer(), jsonEntry.data.decodeToString())
+        assertEquals("", exportData.nutritionalProfiles[0].sourceImagePath)
+    }
+
     // endregion
 
     // region -- Import tests --
@@ -572,7 +726,7 @@ class DataMigrationServiceTest {
     }
 
     @Test
-    fun `importData imports entries, analyses, summaries, and weight records`() = runTest {
+    fun `importData imports entries, nutritional profiles, analyses, summaries, and weight records`() = runTest {
         val trackedEntryRepo = FakeTrackedEntryRepository()
         val entryAnalysisRepo = FakeEntryAnalysisRepository()
         val nutritionalProfileRepo = FakeNutritionalProfileRepository()
@@ -671,6 +825,49 @@ class DataMigrationServiceTest {
         assertEquals(1, weightHistoryRepo.upserted.size)
         assertEquals("/app/data/photos/labels/yogurt.jpg", nutritionalProfileRepo.upserted[0].sourceImagePath)
         assertTrue(fileSystem.copiedFiles.any { (_, dest) -> dest == "/app/data/photos/labels/yogurt.jpg" })
+    }
+
+    @Test
+    fun `importData rewrites exported external nutritional profile images into app data`() = runTest {
+        val nutritionalProfileRepo = FakeNutritionalProfileRepository()
+        val fileSystem = FakeFileSystem()
+        val zipUtil = FakeZipUtil()
+
+        val exportData = ExportData(
+            version = 1,
+            exportedAt = "2026-02-11T09:00:00Z",
+            nutritionalProfiles = listOf(
+                ExportNutritionalProfile(
+                    profileId = 1,
+                    externalId = "profile-a",
+                    primaryName = "External Profile",
+                    sourceImagePath = "nutritional-profiles/profile-a/label.jpg",
+                    createdAt = "2026-02-11T09:00:00Z",
+                    updatedAt = "2026-02-11T09:00:00Z"
+                )
+            )
+        )
+
+        val jsonString = json.encodeToString(ExportData.serializer(), exportData)
+        zipUtil.onExtract = { _, destDir ->
+            fileSystem.directories.add(destDir)
+            fileSystem.files["$destDir/data.json"] = jsonString.encodeToByteArray()
+            fileSystem.files["$destDir/nutritional-profiles/profile-a/label.jpg"] = byteArrayOf(7, 8, 9)
+        }
+
+        val service = createService(
+            nutritionalProfileRepo = nutritionalProfileRepo,
+            fileSystem = fileSystem,
+            zipUtil = zipUtil
+        )
+
+        val result = service.importData("/path/to/import.zip")
+
+        assertTrue(result.isSuccess)
+        assertEquals("/app/data/nutritional-profiles/profile-a/label.jpg", nutritionalProfileRepo.upserted.single().sourceImagePath)
+        assertTrue(
+            fileSystem.copiedFiles.any { (_, dest) -> dest == "/app/data/nutritional-profiles/profile-a/label.jpg" }
+        )
     }
 
     @Test
@@ -837,6 +1034,7 @@ class DataMigrationServiceTest {
 
     @Test
     fun `importData preserves backward compatibility when nutritional profiles are absent`() = runTest {
+        val trackedEntryRepo = FakeTrackedEntryRepository()
         val nutritionalProfileRepo = FakeNutritionalProfileRepository()
         val fileSystem = FakeFileSystem()
         val zipUtil = FakeZipUtil()
@@ -861,6 +1059,7 @@ class DataMigrationServiceTest {
         }
 
         val service = createService(
+            trackedEntryRepo = trackedEntryRepo,
             nutritionalProfileRepo = nutritionalProfileRepo,
             fileSystem = fileSystem,
             zipUtil = zipUtil
@@ -869,8 +1068,60 @@ class DataMigrationServiceTest {
         val result = service.importData("/path/to/import.zip")
 
         assertTrue(result.isSuccess)
+        assertEquals(1, result.entriesImported)
+        assertEquals(1, trackedEntryRepo.upserted.size)
         assertEquals(0, result.nutritionalProfilesImported)
         assertTrue(nutritionalProfileRepo.upserted.isEmpty())
+    }
+
+    @Test
+    fun `importData continues after nutritional profile errors`() = runTest {
+        val nutritionalProfileRepo = FakeNutritionalProfileRepository().apply {
+            failOnExternalIds.add("bad-profile")
+        }
+        val fileSystem = FakeFileSystem()
+        val zipUtil = FakeZipUtil()
+
+        val exportData = ExportData(
+            version = 1,
+            exportedAt = "2026-02-11T09:00:00Z",
+            nutritionalProfiles = listOf(
+                ExportNutritionalProfile(
+                    profileId = 1,
+                    externalId = "bad-profile",
+                    primaryName = "Bad",
+                    createdAt = "2026-02-11T09:00:00Z",
+                    updatedAt = "2026-02-11T09:00:00Z"
+                ),
+                ExportNutritionalProfile(
+                    profileId = 2,
+                    externalId = "good-profile",
+                    primaryName = "Good",
+                    createdAt = "2026-02-11T09:00:00Z",
+                    updatedAt = "2026-02-11T09:00:00Z"
+                )
+            )
+        )
+
+        val jsonString = json.encodeToString(ExportData.serializer(), exportData)
+        zipUtil.onExtract = { _, destDir ->
+            fileSystem.directories.add(destDir)
+            fileSystem.files["$destDir/data.json"] = jsonString.encodeToByteArray()
+        }
+
+        val service = createService(
+            nutritionalProfileRepo = nutritionalProfileRepo,
+            fileSystem = fileSystem,
+            zipUtil = zipUtil
+        )
+
+        val result = service.importData("/path/to/import.zip")
+
+        assertTrue(!result.isSuccess)
+        assertEquals(1, result.nutritionalProfilesImported)
+        assertEquals(1, result.errors.size)
+        assertTrue(result.errors.single().contains("bad-profile"))
+        assertEquals(listOf("good-profile"), nutritionalProfileRepo.upserted.map { it.externalId })
     }
 
     // endregion

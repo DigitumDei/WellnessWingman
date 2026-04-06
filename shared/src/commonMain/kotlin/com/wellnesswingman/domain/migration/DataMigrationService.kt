@@ -4,6 +4,7 @@ import com.wellnesswingman.data.model.export.ExportData
 import com.wellnesswingman.data.model.export.ExportUserProfile
 import com.wellnesswingman.data.model.export.toDomain
 import com.wellnesswingman.data.model.export.toExport
+import com.wellnesswingman.data.model.NutritionalProfile
 import com.wellnesswingman.data.repository.AppSettingsRepository
 import com.wellnesswingman.data.repository.DailySummaryRepository
 import com.wellnesswingman.data.repository.EntryAnalysisRepository
@@ -96,7 +97,10 @@ class DefaultDataMigrationService(
             nutritionalProfiles = nutritionalProfiles.map { profile ->
                 val exported = profile.toExport()
                 exported.copy(
-                    sourceImagePath = exported.sourceImagePath?.let { relativizePath(it, appDataDir) }
+                    sourceImagePath = exported.sourceImagePath
+                        ?.takeIf { it.isNotBlank() }
+                        ?.let { getNutritionalProfileArchivePath(profile, it, appDataDir) }
+                        ?: exported.sourceImagePath
                 )
             },
             analyses = analyses.map { it.toExport() },
@@ -113,7 +117,6 @@ class DefaultDataMigrationService(
 
         // 4. Gather image file paths (do not load into memory)
         val imageFiles = mutableListOf<ZipFileSource>()
-        val appDataPrefix = appDataDir.replace('\\', '/').trimEnd('/') + "/"
         val exportedPaths = mutableSetOf<String>()
 
         for (entry in entries) {
@@ -121,7 +124,7 @@ class DefaultDataMigrationService(
             for (absolutePath in imagePaths) {
                 addFileToExport(
                     absolutePath = absolutePath,
-                    appDataPrefix = appDataPrefix,
+                    archivePath = getArchivePathForAbsoluteFile(absolutePath, appDataDir),
                     exportedPaths = exportedPaths,
                     imageFiles = imageFiles
                 )
@@ -131,7 +134,7 @@ class DefaultDataMigrationService(
             profile.sourceImagePath?.takeIf { it.isNotBlank() }?.let { sourceImagePath ->
                 addFileToExport(
                     absolutePath = resolveImportPath(sourceImagePath, appDataDir),
-                    appDataPrefix = appDataPrefix,
+                    archivePath = getNutritionalProfileArchivePath(profile, sourceImagePath, appDataDir),
                     exportedPaths = exportedPaths,
                     imageFiles = imageFiles
                 )
@@ -390,23 +393,57 @@ class DefaultDataMigrationService(
 
     private fun addFileToExport(
         absolutePath: String,
-        appDataPrefix: String,
+        archivePath: String,
         exportedPaths: MutableSet<String>,
         imageFiles: MutableList<ZipFileSource>
     ) {
         if (!fileSystem.exists(absolutePath)) return
 
+        if (archivePath in exportedPaths) return
+
+        imageFiles.add(ZipFileSource(archivePath, absolutePath))
+        exportedPaths.add(archivePath)
+    }
+
+    private fun getArchivePathForAbsoluteFile(absolutePath: String, appDataDir: String): String {
         val normalizedAbsolute = absolutePath.replace('\\', '/')
-        val relativePath = if (normalizedAbsolute.startsWith(appDataPrefix)) {
+        val appDataPrefix = appDataDir.replace('\\', '/').trimEnd('/') + "/"
+        return if (normalizedAbsolute.startsWith(appDataPrefix)) {
             normalizedAbsolute.removePrefix(appDataPrefix)
         } else {
             normalizedAbsolute.substringAfterLast('/')
         }
+    }
 
-        if (relativePath in exportedPaths) return
+    private fun getNutritionalProfileArchivePath(
+        profile: NutritionalProfile,
+        sourceImagePath: String,
+        appDataDir: String
+    ): String {
+        val resolvedPath = resolveImportPath(sourceImagePath, appDataDir)
+        val normalizedResolvedPath = resolvedPath.replace('\\', '/')
+        val appDataPrefix = appDataDir.replace('\\', '/').trimEnd('/') + "/"
+        if (normalizedResolvedPath.startsWith(appDataPrefix)) {
+            return normalizedResolvedPath.removePrefix(appDataPrefix)
+        }
 
-        imageFiles.add(ZipFileSource(relativePath, absolutePath))
-        exportedPaths.add(relativePath)
+        val fileName = normalizedResolvedPath.substringAfterLast('/').ifBlank { "source-image" }
+        val profileKey = sanitizeArchiveSegment(profile.externalId.ifBlank { "profile-${profile.profileId}" })
+        return "nutritional-profiles/$profileKey/$fileName"
+    }
+
+    private fun sanitizeArchiveSegment(value: String): String {
+        val sanitized = buildString(value.length) {
+            for (char in value) {
+                append(
+                    when {
+                        char.isLetterOrDigit() || char == '-' || char == '_' -> char
+                        else -> '_'
+                    }
+                )
+            }
+        }.trim('_')
+        return sanitized.ifBlank { "profile" }
     }
 
     /**
