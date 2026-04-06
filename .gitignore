@@ -41,6 +41,7 @@ coverage/
 # Generated
 generated/
 *.generated.*
+.kotlin/
 
 # Node
 node_modules/

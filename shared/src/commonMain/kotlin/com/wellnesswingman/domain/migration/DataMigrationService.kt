@@ -4,9 +4,11 @@ import com.wellnesswingman.data.model.export.ExportData
 import com.wellnesswingman.data.model.export.ExportUserProfile
 import com.wellnesswingman.data.model.export.toDomain
 import com.wellnesswingman.data.model.export.toExport
+import com.wellnesswingman.data.model.NutritionalProfile
 import com.wellnesswingman.data.repository.AppSettingsRepository
 import com.wellnesswingman.data.repository.DailySummaryRepository
 import com.wellnesswingman.data.repository.EntryAnalysisRepository
+import com.wellnesswingman.data.repository.NutritionalProfileRepository
 import com.wellnesswingman.data.repository.TrackedEntryRepository
 import com.wellnesswingman.data.repository.WeeklySummaryRepository
 import com.wellnesswingman.data.repository.WeightHistoryRepository
@@ -27,6 +29,7 @@ interface DataMigrationService {
 
 data class ImportResult(
     val entriesImported: Int = 0,
+    val nutritionalProfilesImported: Int = 0,
     val analysesImported: Int = 0,
     val summariesImported: Int = 0,
     val weeklySummariesImported: Int = 0,
@@ -39,6 +42,7 @@ data class ImportResult(
 class DefaultDataMigrationService(
     private val trackedEntryRepository: TrackedEntryRepository,
     private val entryAnalysisRepository: EntryAnalysisRepository,
+    private val nutritionalProfileRepository: NutritionalProfileRepository,
     private val dailySummaryRepository: DailySummaryRepository,
     private val weeklySummaryRepository: WeeklySummaryRepository,
     private val appSettingsRepository: AppSettingsRepository,
@@ -60,6 +64,7 @@ class DefaultDataMigrationService(
         // 1. Gather data
         val entries = trackedEntryRepository.getAllEntries()
         val analyses = entryAnalysisRepository.getAllAnalyses()
+        val nutritionalProfiles = nutritionalProfileRepository.getAll()
         val summaries = dailySummaryRepository.getAllSummaries()
         val weeklySummaries = weeklySummaryRepository.getAllSummaries()
         val weightRecords = weightHistoryRepository.getAllWeightRecords()
@@ -75,7 +80,7 @@ class DefaultDataMigrationService(
             activityLevel = appSettingsRepository.getActivityLevel()
         )
 
-        Napier.i("Exporting ${entries.size} entries, ${analyses.size} analyses, ${summaries.size} daily summaries, ${weeklySummaries.size} weekly summaries, ${weightRecords.size} weight records, user profile")
+        Napier.i("Exporting ${entries.size} entries, ${nutritionalProfiles.size} nutritional profiles, ${analyses.size} analyses, ${summaries.size} daily summaries, ${weeklySummaries.size} weekly summaries, ${weightRecords.size} weight records, user profile")
 
         // 2. Build export model (relativize absolute paths for MAUI compatibility)
         val appDataDir = fileSystem.getAppDataDirectory()
@@ -87,6 +92,15 @@ class DefaultDataMigrationService(
                 exported.copy(
                     blobPath = exported.blobPath?.let { relativizePath(it, appDataDir) },
                     dataPayload = relativizePayloadPaths(exported.dataPayload, appDataDir)
+                )
+            },
+            nutritionalProfiles = nutritionalProfiles.map { profile ->
+                val exported = profile.toExport()
+                exported.copy(
+                    sourceImagePath = exported.sourceImagePath
+                        ?.takeIf { it.isNotBlank() }
+                        ?.let { getNutritionalProfileArchivePath(profile, it, appDataDir) }
+                        ?: exported.sourceImagePath
                 )
             },
             analyses = analyses.map { it.toExport() },
@@ -103,26 +117,28 @@ class DefaultDataMigrationService(
 
         // 4. Gather image file paths (do not load into memory)
         val imageFiles = mutableListOf<ZipFileSource>()
-        val appDataPrefix = appDataDir.replace('\\', '/').trimEnd('/') + "/"
         val exportedPaths = mutableSetOf<String>()
 
         for (entry in entries) {
             val imagePaths = enumerateImageAbsolutePaths(entry, appDataDir)
             for (absolutePath in imagePaths) {
-                if (!fileSystem.exists(absolutePath)) continue
-
-                // Convert absolute path to relative for the ZIP entry
-                val normalizedAbsolute = absolutePath.replace('\\', '/')
-                val relativePath = if (normalizedAbsolute.startsWith(appDataPrefix)) {
-                    normalizedAbsolute.removePrefix(appDataPrefix)
-                } else {
-                    normalizedAbsolute.substringAfterLast('/')
-                }
-
-                if (relativePath in exportedPaths) continue
-
-                imageFiles.add(ZipFileSource(relativePath, absolutePath))
-                exportedPaths.add(relativePath)
+                addFileToExport(
+                    absolutePath = absolutePath,
+                    archivePath = getArchivePathForAbsoluteFile(absolutePath, appDataDir),
+                    exportedPaths = exportedPaths,
+                    imageFiles = imageFiles
+                )
+            }
+        }
+        for (profile in nutritionalProfiles) {
+            profile.sourceImagePath?.takeIf { it.isNotBlank() }?.let { sourceImagePath ->
+                val absoluteSourceImagePath = resolveAbsolutePath(sourceImagePath, appDataDir)
+                addFileToExport(
+                    absolutePath = absoluteSourceImagePath,
+                    archivePath = getNutritionalProfileArchivePath(profile, absoluteSourceImagePath, appDataDir),
+                    exportedPaths = exportedPaths,
+                    imageFiles = imageFiles
+                )
             }
         }
 
@@ -184,7 +200,7 @@ class DefaultDataMigrationService(
                 return ImportResult(errors = listOf("Failed to parse data.json: ${e.message}"))
             }
 
-            Napier.i("Parsed: ${exportData.entries.size} entries, ${exportData.analyses.size} analyses, ${exportData.summaries.size} daily summaries, ${exportData.weeklySummaries.size} weekly summaries")
+            Napier.i("Parsed: ${exportData.entries.size} entries, ${exportData.nutritionalProfiles.size} nutritional profiles, ${exportData.analyses.size} analyses, ${exportData.summaries.size} daily summaries, ${exportData.weeklySummaries.size} weekly summaries")
 
             // 3. Copy images to app data directory
             val appDataDir = fileSystem.getAppDataDirectory()
@@ -211,7 +227,7 @@ class DefaultDataMigrationService(
                     val domainEntry = exportEntry.toDomain()
                     // Convert MAUI-style relative paths to absolute paths
                     val resolvedEntry = domainEntry.copy(
-                        blobPath = domainEntry.blobPath?.let { resolveImportPath(it, appDataDir) },
+                        blobPath = domainEntry.blobPath?.let { resolveAbsolutePath(it, appDataDir) },
                         dataPayload = resolvePayloadPaths(domainEntry.dataPayload, appDataDir)
                     )
                     trackedEntryRepository.upsertEntry(resolvedEntry)
@@ -222,7 +238,22 @@ class DefaultDataMigrationService(
                 }
             }
 
-            // 5. Upsert analyses
+            // 5. Upsert nutritional profiles
+            var nutritionalProfilesImported = 0
+            for (exportProfile in exportData.nutritionalProfiles) {
+                try {
+                    val domainProfile = exportProfile.toDomain().copy(
+                        sourceImagePath = exportProfile.sourceImagePath?.let { resolveAbsolutePath(it, appDataDir) }
+                    )
+                    nutritionalProfileRepository.upsert(domainProfile)
+                    nutritionalProfilesImported++
+                } catch (e: Exception) {
+                    Napier.w("Failed to import nutritional profile ${exportProfile.profileId}", e)
+                    errors.add("Failed to import nutritional profile ${exportProfile.profileId}: ${e.message}")
+                }
+            }
+
+            // 6. Upsert analyses
             var analysesImported = 0
             for (exportAnalysis in exportData.analyses) {
                 try {
@@ -235,7 +266,7 @@ class DefaultDataMigrationService(
                 }
             }
 
-            // 6. Upsert summaries
+            // 7. Upsert summaries
             var summariesImported = 0
             for (exportSummary in exportData.summaries) {
                 try {
@@ -250,7 +281,7 @@ class DefaultDataMigrationService(
 
             // SummariesAnalyses junction table: ignored (Kotlin doesn't have this)
 
-            // 7. Upsert weekly summaries
+            // 8. Upsert weekly summaries
             var weeklySummariesImported = 0
             for (exportWeeklySummary in exportData.weeklySummaries) {
                 try {
@@ -268,7 +299,7 @@ class DefaultDataMigrationService(
                 }
             }
 
-            // 8. Import user profile
+            // 9. Import user profile
             exportData.userProfile?.let { profile ->
                 try {
                     profile.height?.let { appSettingsRepository.setHeight(it) }
@@ -285,7 +316,7 @@ class DefaultDataMigrationService(
                 }
             }
 
-            // 9. Upsert weight records
+            // 10. Upsert weight records
             var weightRecordsImported = 0
             for (exportRecord in exportData.weightRecords) {
                 try {
@@ -298,9 +329,10 @@ class DefaultDataMigrationService(
                 }
             }
 
-            Napier.i("Import completed: $entriesImported entries, $analysesImported analyses, $summariesImported daily summaries, $weeklySummariesImported weekly summaries, $weightRecordsImported weight records")
+            Napier.i("Import completed: $entriesImported entries, $nutritionalProfilesImported nutritional profiles, $analysesImported analyses, $summariesImported daily summaries, $weeklySummariesImported weekly summaries, $weightRecordsImported weight records")
             return ImportResult(
                 entriesImported = entriesImported,
+                nutritionalProfilesImported = nutritionalProfilesImported,
                 analysesImported = analysesImported,
                 summariesImported = summariesImported,
                 weeklySummariesImported = weeklySummariesImported,
@@ -357,7 +389,77 @@ class DefaultDataMigrationService(
         }
 
         // Resolve any relative paths to absolute
-        return rawPaths.map { resolveImportPath(it, appDataDir) }
+        return rawPaths.map { resolveAbsolutePath(it, appDataDir) }
+    }
+
+    private fun addFileToExport(
+        absolutePath: String,
+        archivePath: String,
+        exportedPaths: MutableSet<String>,
+        imageFiles: MutableList<ZipFileSource>
+    ) {
+        if (!fileSystem.exists(absolutePath)) return
+
+        if (archivePath in exportedPaths) return
+
+        imageFiles.add(ZipFileSource(archivePath, absolutePath))
+        exportedPaths.add(archivePath)
+    }
+
+    private fun getArchivePathForAbsoluteFile(absolutePath: String, appDataDir: String): String {
+        val normalizedAbsolute = absolutePath.replace('\\', '/')
+        val appDataPrefix = appDataDir.replace('\\', '/').trimEnd('/') + "/"
+        return if (normalizedAbsolute.startsWith(appDataPrefix)) {
+            normalizedAbsolute.removePrefix(appDataPrefix)
+        } else {
+            normalizedAbsolute.substringAfterLast('/')
+        }
+    }
+
+    private fun getNutritionalProfileArchivePath(
+        profile: NutritionalProfile,
+        absoluteSourceImagePath: String,
+        appDataDir: String
+    ): String {
+        val normalizedResolvedPath = absoluteSourceImagePath.replace('\\', '/')
+        val appDataPrefix = appDataDir.replace('\\', '/').trimEnd('/') + "/"
+        if (normalizedResolvedPath.startsWith(appDataPrefix)) {
+            return normalizedResolvedPath.removePrefix(appDataPrefix)
+        }
+
+        val fileName = normalizedResolvedPath.substringAfterLast('/').ifBlank { "source-image" }
+        val profileKey = buildNutritionalProfileArchiveKey(profile)
+        return "nutritional-profiles/$profileKey/$fileName"
+    }
+
+    private fun buildNutritionalProfileArchiveKey(profile: NutritionalProfile): String {
+        val profileIdentity = profile.externalId.ifBlank { "profile-${profile.profileId}" }
+        val profileKey = sanitizeArchiveSegment(profileIdentity)
+        val uniqueSuffix = stableArchiveSuffix(profileIdentity)
+        return "$profileKey-$uniqueSuffix"
+    }
+
+    private fun sanitizeArchiveSegment(value: String): String {
+        val sanitized = buildString(value.length) {
+            for (char in value) {
+                append(
+                    when {
+                        char.isLetterOrDigit() || char == '-' || char == '_' -> char
+                        else -> '_'
+                    }
+                )
+            }
+        }.trim('_')
+        return sanitized.ifBlank { "profile" }
+    }
+
+    private fun stableArchiveSuffix(value: String): String {
+        var hash = 0x811C9DC5.toInt()
+        for (byte in value.encodeToByteArray()) {
+            hash = hash xor (byte.toInt() and 0xFF)
+            hash *= 16777619
+        }
+        return hash.toUInt().toString(16).padStart(8, '0')
     }
 
     /**
@@ -365,7 +467,7 @@ class DefaultDataMigrationService(
      * MAUI exports store relative paths (e.g. "Entries/Meal/guid.jpg")
      * while the Kotlin app expects absolute paths.
      */
-    private fun resolveImportPath(path: String, appDataDir: String): String {
+    private fun resolveAbsolutePath(path: String, appDataDir: String): String {
         if (path.isBlank()) return path
         // Already absolute (starts with / on Unix or drive letter on Windows)
         if (path.startsWith("/") || (path.length >= 2 && path[1] == ':')) return path
@@ -438,7 +540,7 @@ class DefaultDataMigrationService(
             for (key in pathKeys) {
                 val value = mutableMap[key]
                 if (value is kotlinx.serialization.json.JsonPrimitive && value.isString && value.content.isNotBlank()) {
-                    val resolved = resolveImportPath(value.content, appDataDir)
+                    val resolved = resolveAbsolutePath(value.content, appDataDir)
                     if (resolved != value.content) {
                         mutableMap[key] = kotlinx.serialization.json.JsonPrimitive(resolved)
                         modified = true
