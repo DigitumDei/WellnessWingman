@@ -132,9 +132,10 @@ class DefaultDataMigrationService(
         }
         for (profile in nutritionalProfiles) {
             profile.sourceImagePath?.takeIf { it.isNotBlank() }?.let { sourceImagePath ->
+                val absoluteSourceImagePath = resolveAbsolutePath(sourceImagePath, appDataDir)
                 addFileToExport(
-                    absolutePath = resolveImportPath(sourceImagePath, appDataDir),
-                    archivePath = getNutritionalProfileArchivePath(profile, sourceImagePath, appDataDir),
+                    absolutePath = absoluteSourceImagePath,
+                    archivePath = getNutritionalProfileArchivePath(profile, absoluteSourceImagePath, appDataDir),
                     exportedPaths = exportedPaths,
                     imageFiles = imageFiles
                 )
@@ -226,7 +227,7 @@ class DefaultDataMigrationService(
                     val domainEntry = exportEntry.toDomain()
                     // Convert MAUI-style relative paths to absolute paths
                     val resolvedEntry = domainEntry.copy(
-                        blobPath = domainEntry.blobPath?.let { resolveImportPath(it, appDataDir) },
+                        blobPath = domainEntry.blobPath?.let { resolveAbsolutePath(it, appDataDir) },
                         dataPayload = resolvePayloadPaths(domainEntry.dataPayload, appDataDir)
                     )
                     trackedEntryRepository.upsertEntry(resolvedEntry)
@@ -242,7 +243,7 @@ class DefaultDataMigrationService(
             for (exportProfile in exportData.nutritionalProfiles) {
                 try {
                     val domainProfile = exportProfile.toDomain().copy(
-                        sourceImagePath = exportProfile.sourceImagePath?.let { resolveImportPath(it, appDataDir) }
+                        sourceImagePath = exportProfile.sourceImagePath?.let { resolveAbsolutePath(it, appDataDir) }
                     )
                     nutritionalProfileRepository.upsert(domainProfile)
                     nutritionalProfilesImported++
@@ -388,7 +389,7 @@ class DefaultDataMigrationService(
         }
 
         // Resolve any relative paths to absolute
-        return rawPaths.map { resolveImportPath(it, appDataDir) }
+        return rawPaths.map { resolveAbsolutePath(it, appDataDir) }
     }
 
     private fun addFileToExport(
@@ -417,19 +418,25 @@ class DefaultDataMigrationService(
 
     private fun getNutritionalProfileArchivePath(
         profile: NutritionalProfile,
-        sourceImagePath: String,
+        absoluteSourceImagePath: String,
         appDataDir: String
     ): String {
-        val resolvedPath = resolveImportPath(sourceImagePath, appDataDir)
-        val normalizedResolvedPath = resolvedPath.replace('\\', '/')
+        val normalizedResolvedPath = absoluteSourceImagePath.replace('\\', '/')
         val appDataPrefix = appDataDir.replace('\\', '/').trimEnd('/') + "/"
         if (normalizedResolvedPath.startsWith(appDataPrefix)) {
             return normalizedResolvedPath.removePrefix(appDataPrefix)
         }
 
         val fileName = normalizedResolvedPath.substringAfterLast('/').ifBlank { "source-image" }
-        val profileKey = sanitizeArchiveSegment(profile.externalId.ifBlank { "profile-${profile.profileId}" })
+        val profileKey = buildNutritionalProfileArchiveKey(profile)
         return "nutritional-profiles/$profileKey/$fileName"
+    }
+
+    private fun buildNutritionalProfileArchiveKey(profile: NutritionalProfile): String {
+        val profileIdentity = profile.externalId.ifBlank { "profile-${profile.profileId}" }
+        val profileKey = sanitizeArchiveSegment(profileIdentity)
+        val uniqueSuffix = stableArchiveSuffix(profileIdentity)
+        return "$profileKey-$uniqueSuffix"
     }
 
     private fun sanitizeArchiveSegment(value: String): String {
@@ -446,12 +453,21 @@ class DefaultDataMigrationService(
         return sanitized.ifBlank { "profile" }
     }
 
+    private fun stableArchiveSuffix(value: String): String {
+        var hash = 0x811C9DC5.toInt()
+        for (byte in value.encodeToByteArray()) {
+            hash = hash xor (byte.toInt() and 0xFF)
+            hash *= 16777619
+        }
+        return hash.toUInt().toString(16).padStart(8, '0')
+    }
+
     /**
      * Resolves a potentially relative path to an absolute path.
      * MAUI exports store relative paths (e.g. "Entries/Meal/guid.jpg")
      * while the Kotlin app expects absolute paths.
      */
-    private fun resolveImportPath(path: String, appDataDir: String): String {
+    private fun resolveAbsolutePath(path: String, appDataDir: String): String {
         if (path.isBlank()) return path
         // Already absolute (starts with / on Unix or drive letter on Windows)
         if (path.startsWith("/") || (path.length >= 2 && path[1] == ':')) return path
@@ -524,7 +540,7 @@ class DefaultDataMigrationService(
             for (key in pathKeys) {
                 val value = mutableMap[key]
                 if (value is kotlinx.serialization.json.JsonPrimitive && value.isString && value.content.isNotBlank()) {
-                    val resolved = resolveImportPath(value.content, appDataDir)
+                    val resolved = resolveAbsolutePath(value.content, appDataDir)
                     if (resolved != value.content) {
                         mutableMap[key] = kotlinx.serialization.json.JsonPrimitive(resolved)
                         modified = true

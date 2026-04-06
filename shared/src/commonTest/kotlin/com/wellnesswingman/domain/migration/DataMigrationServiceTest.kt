@@ -569,14 +569,10 @@ class DataMigrationServiceTest {
 
         val jsonEntry = zipUtil.createdInMemoryEntries!!.find { it.name == "data.json" }!!
         val exportData = json.decodeFromString(ExportData.serializer(), jsonEntry.data.decodeToString())
-        assertEquals(
-            "nutritional-profiles/usda_granola_bar/granola.jpg",
-            exportData.nutritionalProfiles[0].sourceImagePath
-        )
-        assertEquals(
-            "nutritional-profiles/usda_granola_bar/granola.jpg",
-            zipUtil.createdFileEntries!!.single().name
-        )
+        val archivePath = exportData.nutritionalProfiles[0].sourceImagePath!!
+        assertTrue(archivePath.startsWith("nutritional-profiles/usda_granola_bar-"))
+        assertTrue(archivePath.endsWith("/granola.jpg"))
+        assertEquals(archivePath, zipUtil.createdFileEntries!!.single().name)
     }
 
     @Test
@@ -617,13 +613,85 @@ class DataMigrationServiceTest {
 
         service.exportData()
 
-        assertEquals(
-            setOf(
-                "nutritional-profiles/profile-a/label.jpg",
-                "nutritional-profiles/profile-b/label.jpg"
-            ),
-            zipUtil.createdFileEntries!!.map { it.name }.toSet()
+        val archivePaths = zipUtil.createdFileEntries!!.map { it.name }
+        assertEquals(2, archivePaths.toSet().size)
+        assertTrue(archivePaths.any { it.startsWith("nutritional-profiles/profile-a-") && it.endsWith("/label.jpg") })
+        assertTrue(archivePaths.any { it.startsWith("nutritional-profiles/profile-b-") && it.endsWith("/label.jpg") })
+    }
+
+    @Test
+    fun `exportData keeps distinct archive paths when sanitized external ids collide`() = runTest {
+        val nutritionalProfileRepo = FakeNutritionalProfileRepository()
+        val fileSystem = FakeFileSystem()
+        val now = Instant.parse("2026-02-11T09:00:00Z")
+
+        nutritionalProfileRepo.profiles.add(
+            NutritionalProfile(
+                profileId = 1,
+                externalId = "usda:abc",
+                primaryName = "Item A",
+                sourceImagePath = "/Users/a/label.jpg",
+                createdAt = now,
+                updatedAt = now
+            )
         )
+        nutritionalProfileRepo.profiles.add(
+            NutritionalProfile(
+                profileId = 2,
+                externalId = "usda/abc",
+                primaryName = "Item B",
+                sourceImagePath = "/Users/b/label.jpg",
+                createdAt = now,
+                updatedAt = now
+            )
+        )
+        fileSystem.files["/Users/a/label.jpg"] = byteArrayOf(1)
+        fileSystem.files["/Users/b/label.jpg"] = byteArrayOf(2)
+
+        val zipUtil = FakeZipUtil()
+        val service = createService(
+            nutritionalProfileRepo = nutritionalProfileRepo,
+            fileSystem = fileSystem,
+            zipUtil = zipUtil
+        )
+
+        service.exportData()
+
+        val archivePaths = zipUtil.createdFileEntries!!.map { it.name }
+        assertEquals(2, archivePaths.toSet().size)
+        assertTrue(archivePaths.all { it.startsWith("nutritional-profiles/usda_abc-") && it.endsWith("/label.jpg") })
+    }
+
+    @Test
+    fun `exportData falls back to profile id when nutritional profile external id is blank`() = runTest {
+        val nutritionalProfileRepo = FakeNutritionalProfileRepository()
+        val fileSystem = FakeFileSystem()
+        val now = Instant.parse("2026-02-11T09:00:00Z")
+
+        nutritionalProfileRepo.profiles.add(
+            NutritionalProfile(
+                profileId = 42,
+                externalId = "",
+                primaryName = "Fallback Key",
+                sourceImagePath = "/Users/test/Desktop/fallback.jpg",
+                createdAt = now,
+                updatedAt = now
+            )
+        )
+        fileSystem.files["/Users/test/Desktop/fallback.jpg"] = byteArrayOf(4, 2)
+
+        val zipUtil = FakeZipUtil()
+        val service = createService(
+            nutritionalProfileRepo = nutritionalProfileRepo,
+            fileSystem = fileSystem,
+            zipUtil = zipUtil
+        )
+
+        service.exportData()
+
+        val archivePath = zipUtil.createdFileEntries!!.single().name
+        assertTrue(archivePath.startsWith("nutritional-profiles/profile-42-"))
+        assertTrue(archivePath.endsWith("/fallback.jpg"))
     }
 
     @Test
@@ -651,10 +719,9 @@ class DataMigrationServiceTest {
 
         val jsonEntry = zipUtil.createdInMemoryEntries!!.find { it.name == "data.json" }!!
         val exportData = json.decodeFromString(ExportData.serializer(), jsonEntry.data.decodeToString())
-        assertEquals(
-            "nutritional-profiles/missing-profile/missing.jpg",
-            exportData.nutritionalProfiles[0].sourceImagePath
-        )
+        val archivePath = exportData.nutritionalProfiles[0].sourceImagePath!!
+        assertTrue(archivePath.startsWith("nutritional-profiles/missing-profile-"))
+        assertTrue(archivePath.endsWith("/missing.jpg"))
         assertTrue(zipUtil.createdFileEntries!!.isEmpty())
     }
 
