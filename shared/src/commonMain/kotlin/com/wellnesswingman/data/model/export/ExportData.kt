@@ -3,6 +3,7 @@ package com.wellnesswingman.data.model.export
 import com.wellnesswingman.data.model.DailySummary
 import com.wellnesswingman.data.model.EntryAnalysis
 import com.wellnesswingman.data.model.EntryType
+import com.wellnesswingman.data.model.NutritionalProfile
 import com.wellnesswingman.data.model.ProcessingStatus
 import com.wellnesswingman.data.model.TrackedEntry
 import com.wellnesswingman.data.model.WeeklySummary
@@ -144,6 +145,7 @@ data class ExportData(
     @SerialName("Version") val version: Int = 1,
     @SerialName("ExportedAt") val exportedAt: String, // ISO 8601
     @SerialName("Entries") val entries: List<ExportTrackedEntry> = emptyList(),
+    @SerialName("NutritionalProfiles") val nutritionalProfiles: List<ExportNutritionalProfile> = emptyList(),
     @SerialName("Analyses") val analyses: List<ExportEntryAnalysis> = emptyList(),
     @SerialName("Summaries") val summaries: List<ExportDailySummary> = emptyList(),
     @SerialName("SummariesAnalyses") val summariesAnalyses: List<ExportSummaryAnalysis> = emptyList(),
@@ -235,6 +237,29 @@ data class ExportWeightRecord(
     @SerialName("RelatedEntryId") val relatedEntryId: Long? = null
 )
 
+@Serializable
+data class ExportNutritionalProfile(
+    @SerialName("ProfileId") val profileId: Long,
+    @SerialName("ExternalId") val externalId: String,
+    @SerialName("PrimaryName") val primaryName: String,
+    @SerialName("Aliases") val aliases: List<String> = emptyList(),
+    @SerialName("ServingSize") val servingSize: String? = null,
+    @SerialName("Calories") val calories: Double? = null,
+    @SerialName("Protein") val protein: Double? = null,
+    @SerialName("Carbohydrates") val carbohydrates: Double? = null,
+    @SerialName("Fat") val fat: Double? = null,
+    @SerialName("Fiber") val fiber: Double? = null,
+    @SerialName("Sugar") val sugar: Double? = null,
+    @SerialName("Sodium") val sodium: Double? = null,
+    @SerialName("SaturatedFat") val saturatedFat: Double? = null,
+    @SerialName("TransFat") val transFat: Double? = null,
+    @SerialName("Cholesterol") val cholesterol: Double? = null,
+    @SerialName("RawJson") val rawJson: String? = null,
+    @SerialName("SourceImagePath") val sourceImagePath: String? = null,
+    @SerialName("CreatedAt") val createdAt: String,
+    @SerialName("UpdatedAt") val updatedAt: String
+)
+
 // endregion
 
 // region -- Mapping functions --
@@ -247,6 +272,50 @@ fun WeightRecord.toExport(): ExportWeightRecord = ExportWeightRecord(
     weightUnit = weightUnit,
     source = source,
     relatedEntryId = relatedEntryId
+)
+
+fun NutritionalProfile.toExport(): ExportNutritionalProfile = ExportNutritionalProfile(
+    profileId = profileId,
+    externalId = externalId,
+    primaryName = primaryName,
+    aliases = aliases,
+    servingSize = servingSize,
+    calories = calories,
+    protein = protein,
+    carbohydrates = carbohydrates,
+    fat = fat,
+    fiber = fiber,
+    sugar = sugar,
+    sodium = sodium,
+    saturatedFat = saturatedFat,
+    transFat = transFat,
+    cholesterol = cholesterol,
+    rawJson = rawJson,
+    sourceImagePath = sourceImagePath,
+    createdAt = createdAt.toString(),
+    updatedAt = updatedAt.toString()
+)
+
+fun ExportNutritionalProfile.toDomain(): NutritionalProfile = NutritionalProfile(
+    profileId = profileId,
+    externalId = externalId,
+    primaryName = primaryName,
+    aliases = aliases,
+    servingSize = servingSize,
+    calories = calories,
+    protein = protein,
+    carbohydrates = carbohydrates,
+    fat = fat,
+    fiber = fiber,
+    sugar = sugar,
+    sodium = sodium,
+    saturatedFat = saturatedFat,
+    transFat = transFat,
+    cholesterol = cholesterol,
+    rawJson = rawJson,
+    sourceImagePath = sourceImagePath,
+    createdAt = parseCSharpInstant(createdAt),
+    updatedAt = parseCSharpInstant(updatedAt)
 )
 
 fun ExportWeightRecord.toDomain(): WeightRecord = WeightRecord(
