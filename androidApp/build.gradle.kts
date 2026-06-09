@@ -16,19 +16,18 @@ val localProps = Properties().apply {
 // APK has fewer commits -> a lower versionCode -> the OS refuses to silently reinstall it
 // over a newer build. Falls back to 1 when git history is unavailable (source archive / CI
 // shallow clone).
-fun gitCommitCount(): Int = try {
-    val process = ProcessBuilder("git", "rev-list", "--count", "HEAD")
-        .directory(rootProject.projectDir)
-        .redirectErrorStream(true)
-        .start()
-    val count = process.inputStream.bufferedReader().use { it.readText() }.trim().toIntOrNull()
-    process.waitFor()
-    count ?: 1
+//
+// Uses Gradle's providers.exec API so the git output is tracked as a build input and the
+// Configuration Cache is correctly invalidated when the commit count changes.
+val computedVersionCode = try {
+    providers.exec {
+        commandLine("git", "rev-list", "--count", "HEAD")
+        workingDir = rootProject.projectDir
+        isIgnoreExitValue = true
+    }.standardOutput.asText.map { it.trim().toIntOrNull() ?: 1 }.get()
 } catch (e: Exception) {
     1
 }
-
-val computedVersionCode = gitCommitCount()
 
 android {
     namespace = "com.wellnesswingman"
