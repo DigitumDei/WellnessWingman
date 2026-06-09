@@ -71,6 +71,7 @@ tmp/
 memory/
 
 # Local tooling
+mempalace.yaml
 
 # Tooling
 healthhelper_design.db3

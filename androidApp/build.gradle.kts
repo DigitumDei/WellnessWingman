@@ -11,6 +11,24 @@ val localProps = Properties().apply {
     if (f.exists()) load(f.inputStream())
 }
 
+// Derive a monotonic versionCode from the git commit count so each build supersedes
+// the last. This restores Android's downgrade protection: an older (e.g. backup-restored)
+// APK has fewer commits -> a lower versionCode -> the OS refuses to silently reinstall it
+// over a newer build. Falls back to 1 when git history is unavailable (source archive / CI
+// shallow clone).
+//
+// Uses Gradle's providers.exec API so the git output is tracked as a build input and the
+// Configuration Cache is correctly invalidated when the commit count changes.
+val computedVersionCode = try {
+    providers.exec {
+        commandLine("git", "rev-list", "--count", "HEAD")
+        workingDir = rootProject.projectDir
+        isIgnoreExitValue = true
+    }.standardOutput.asText.map { it.trim().toIntOrNull() ?: 1 }.get()
+} catch (e: Exception) {
+    1
+}
+
 android {
     namespace = "com.wellnesswingman"
     compileSdk = 34
@@ -19,7 +37,7 @@ android {
         applicationId = "com.wellnesswingman"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
+        versionCode = computedVersionCode
         versionName = "1.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
