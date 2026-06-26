@@ -29,6 +29,10 @@ class LlmClientFactory(
                 apiKey = apiKey,
                 model = model
             )
+            LlmProvider.OPENROUTER -> OpenRouterLlmClient(
+                apiKey = apiKey,
+                model = model
+            )
         }
     }
 
