@@ -283,7 +283,7 @@ class OpenRouterLlmClientTest {
         assertEquals(HttpMethod.Post, request.method)
         assertEquals(
             ContentType.Application.Json.toString(),
-            request.headers[HttpHeaders.ContentType]
+            request.body.contentType?.toString()
         )
         assertEquals("Bearer test-key", request.headers[HttpHeaders.Authorization])
         assertEquals("https://wellnesswingman.com", request.headers["HTTP-Referer"])
