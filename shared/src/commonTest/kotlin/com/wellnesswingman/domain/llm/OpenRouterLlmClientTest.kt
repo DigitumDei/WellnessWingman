@@ -416,7 +416,7 @@ class OpenRouterLlmClientTest {
         assertTrue(imagePart is ImagePart, "Second part should be ImagePart")
         val expectedUrl = "data:image/jpeg;base64,${Base64.encode(imageBytes)}"
         assertEquals(expectedUrl, (imagePart as ImagePart).imageUrl.url)
-        assertEquals("auto", (imagePart as ImagePart).imageUrl.detail)
+        assertNull((imagePart as ImagePart).imageUrl.detail)
     }
 
     private fun toolCallCompletion(message: ChatMessage) = ChatCompletion(
