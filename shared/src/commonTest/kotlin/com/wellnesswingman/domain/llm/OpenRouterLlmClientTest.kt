@@ -99,6 +99,7 @@ class OpenRouterLlmClientTest {
         assertEquals("apple", capturedFood)
         assertEquals("""{"answer":"95 calories"}""", result.content)
         assertEquals(2, requests.size)
+        assertEquals(ModelId("openai/gpt-4o-mini"), requests[0].model)
 
         val secondRequestMessages = requests[1].messages
         assertEquals(3, secondRequestMessages.size)
