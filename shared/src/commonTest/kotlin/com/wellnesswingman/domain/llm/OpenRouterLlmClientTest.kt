@@ -278,7 +278,7 @@ class OpenRouterLlmClientTest {
         val body = requests.single()
         assertTrue(body.contains(""""model":"openai/whisper-1""""), "Body should contain model")
         assertTrue(body.contains(""""input_audio""""), "Body should contain input_audio object")
-        assertTrue(body.contains(""""data":"AAE=""".trimMargin()), "Body should contain base64-encoded audio data")
+        assertTrue(body.contains(""""data":"AAE=""""), "Body should contain base64-encoded audio data")
         assertTrue(body.contains(""""format":"m4a""""), "Body should contain audio format")
     }
 
