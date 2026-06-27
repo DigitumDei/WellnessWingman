@@ -14,6 +14,7 @@ import com.aallam.openai.api.model.ModelId
 import com.aallam.openai.client.OpenAI
 import com.wellnesswingman.data.model.llm.ToolDefinition
 import io.mockk.coEvery
+import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.test.runTest
