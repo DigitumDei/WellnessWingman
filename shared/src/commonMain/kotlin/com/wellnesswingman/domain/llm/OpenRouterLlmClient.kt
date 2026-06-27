@@ -33,6 +33,10 @@ import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlin.time.Duration.Companion.seconds
 
+/**
+ * OpenRouter implementation of LlmClient using the openai-kotlin library.
+ * OpenRouter exposes a unified OpenAI-compatible endpoint at https://openrouter.ai/api/v1.
+ */
 class OpenRouterLlmClient(
     apiKey: String,
     private val model: String = "openai/gpt-4o-mini",

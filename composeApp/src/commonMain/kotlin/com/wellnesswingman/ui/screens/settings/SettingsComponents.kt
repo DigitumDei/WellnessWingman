@@ -123,6 +123,7 @@ fun ProviderSelector(
                         text = when (provider) {
                             LlmProvider.OPENAI -> "GPT-4o-mini with vision and Whisper"
                             LlmProvider.GEMINI -> "Gemini 1.5 Flash with vision"
+                            LlmProvider.OPENROUTER -> "Multi-model gateway via OpenRouter"
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant

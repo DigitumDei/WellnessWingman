@@ -126,8 +126,14 @@ class AnalysisOrchestrator(
             // Create and save the analysis
             val analysis = EntryAnalysis(
                 entryId = entry.entryId,
-                providerId = llmClient.javaClass.simpleName
-                    .let { if (it.contains("OpenAi")) "openai" else "gemini" },
+                providerId = llmClient.javaClass.simpleName.let {
+                    when {
+                        it.contains("OpenAi", ignoreCase = true) -> "openai"
+                        it.contains("Gemini", ignoreCase = true) -> "gemini"
+                        it.contains("OpenRouter", ignoreCase = true) -> "openrouter"
+                        else -> "unknown"
+                    }
+                },
                 model = result.diagnostics.model,
                 capturedAt = Clock.System.now(),
                 insightsJson = result.content,
