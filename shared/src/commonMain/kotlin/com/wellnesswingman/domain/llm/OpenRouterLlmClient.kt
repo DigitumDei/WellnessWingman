@@ -63,7 +63,12 @@ class OpenRouterLlmClient(
             connectTimeoutMillis = 30_000
             socketTimeoutMillis = 120_000
         }
-    }
+    },
+    private val transcriptionBaseUrl: String = "https://openrouter.ai/api/v1/audio/transcriptions",
+    private val transcriptionHeaders: Map<String, String> = mapOf(
+        "HTTP-Referer" to "https://wellnesswingman.com",
+        "X-Title" to "WellnessWingman"
+    )
 ) : LlmClient {
     private val json = Json {
         ignoreUnknownKeys = true
@@ -125,11 +130,10 @@ class OpenRouterLlmClient(
 
         Napier.d("OpenRouter STT request: model=openai/whisper-1, format=$format, audio size=${audioBytes.size} bytes")
 
-        val httpResponse = httpClient.post("https://openrouter.ai/api/v1/audio/transcriptions") {
+        val httpResponse = httpClient.post(transcriptionBaseUrl) {
             contentType(ContentType.Application.Json)
             header("Authorization", "Bearer $apiKey")
-            header("HTTP-Referer", "https://wellnesswingman.com")
-            header("X-Title", "WellnessWingman")
+            transcriptionHeaders.forEach { (key, value) -> header(key, value) }
             setBody(requestBody.toString())
         }
 
