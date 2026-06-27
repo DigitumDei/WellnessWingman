@@ -373,7 +373,7 @@ class OpenRouterLlmClientTest {
             finalCompletion("""{"analysis":"a cat wearing a hat"}""")
         }
 
-        val imageBytes = byteArrayOf(0x89, 0x50, 0x4E, 0x47)
+        val imageBytes = byteArrayOf(0x89.toByte(), 0x50.toByte(), 0x4E.toByte(), 0x47.toByte())
         val prompt = "Describe this image in detail"
         val client = OpenRouterLlmClient(
             apiKey = "test-key",
