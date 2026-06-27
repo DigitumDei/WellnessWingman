@@ -6,6 +6,9 @@ import com.aallam.openai.api.chat.ChatCompletionRequest
 import com.aallam.openai.api.chat.ChatMessage
 import com.aallam.openai.api.chat.ChatRole
 import com.aallam.openai.api.chat.FunctionCall
+import com.aallam.openai.api.chat.ImagePart
+import com.aallam.openai.api.chat.ListContent
+import com.aallam.openai.api.chat.TextPart
 import com.aallam.openai.api.chat.ToolCall as OpenAiToolCall
 import com.aallam.openai.api.chat.ToolId
 import com.aallam.openai.api.core.FinishReason
@@ -24,6 +27,8 @@ import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.test.runTest
+import kotlin.io.encoding.Base64
+import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlin.test.Test
@@ -355,6 +360,63 @@ class OpenRouterLlmClientTest {
         }
 
         assertTrue(error.message.orEmpty().contains("400"), "Error should mention HTTP status")
+    }
+
+    @OptIn(ExperimentalEncodingApi::class)
+    @Test
+    fun `analyzeImage sends TextPart and ImagePart with base64 data URI`() = runTest {
+        val requests = mutableListOf<ChatCompletionRequest>()
+        val api = mockk<OpenAI>()
+        coEvery { api.chatCompletion(any()) } answers {
+            requests += firstArg<ChatCompletionRequest>()
+            finalCompletion("""{"analysis":"a cat wearing a hat"}""")
+        }
+
+        val imageBytes = byteArrayOf(0x89, 0x50, 0x4E, 0x47)
+        val prompt = "Describe this image in detail"
+        val client = OpenRouterLlmClient(
+            apiKey = "test-key",
+            model = "openai/gpt-4o-mini",
+            client = api
+        )
+
+        val result = client.analyzeImage(
+            imageBytes = imageBytes,
+            prompt = prompt,
+            jsonSchema = null,
+            tools = emptyList(),
+            toolExecutor = null
+        )
+
+        assertEquals("""{"analysis":"a cat wearing a hat"}""", result.content)
+        assertEquals("openai/gpt-4o-mini", result.diagnostics.model)
+        assertTrue(result.diagnostics.latencyMs >= 0)
+        assertEquals(6, result.diagnostics.promptTokens)
+        assertEquals(5, result.diagnostics.completionTokens)
+        assertEquals(11, result.diagnostics.totalTokens)
+
+        assertEquals(1, requests.size)
+        val messages = requests[0].messages
+        assertEquals(1, messages.size)
+
+        val message = messages[0]
+        assertEquals(ChatRole.User, message.role)
+
+        val content = message.messageContent
+        assertTrue(content is ListContent, "Content should be ListContent for multi-part messages")
+
+        val parts = (content as ListContent).content
+        assertEquals(2, parts.size, "Should have TextPart and ImagePart")
+
+        val textPart = parts[0]
+        assertTrue(textPart is TextPart, "First part should be TextPart")
+        assertEquals(prompt, (textPart as TextPart).text)
+
+        val imagePart = parts[1]
+        assertTrue(imagePart is ImagePart, "Second part should be ImagePart")
+        val expectedUrl = "data:image/jpeg;base64,${Base64.encode(imageBytes)}"
+        assertEquals(expectedUrl, (imagePart as ImagePart).imageUrl.url)
+        assertEquals("auto", (imagePart as ImagePart).imageUrl.detail)
     }
 
     private fun toolCallCompletion(message: ChatMessage) = ChatCompletion(
