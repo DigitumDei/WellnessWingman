@@ -1,6 +1,5 @@
 package com.wellnesswingman.domain.llm
 
-import com.aallam.openai.api.audio.TranscriptionRequest
 import com.aallam.openai.api.chat.ChatCompletionRequest
 import com.aallam.openai.api.chat.ChatMessage
 import com.aallam.openai.api.chat.ToolCall as OpenAiToolCall
@@ -11,7 +10,6 @@ import com.aallam.openai.api.chat.Parameters
 import com.aallam.openai.api.chat.TextPart
 import com.aallam.openai.api.chat.ToolChoice
 import com.aallam.openai.api.chat.chatCompletionRequest
-import com.aallam.openai.api.file.FileSource
 import com.aallam.openai.api.model.ModelId
 import com.aallam.openai.client.LoggingConfig
 import com.aallam.openai.client.OpenAI
@@ -19,6 +17,11 @@ import com.aallam.openai.client.OpenAIHost
 import com.aallam.openai.api.http.Timeout
 import com.wellnesswingman.data.model.llm.ToolCall
 import com.wellnesswingman.data.model.llm.ToolDefinition
+import io.ktor.client.*
+import io.ktor.client.plugins.*
+import io.ktor.client.request.*
+import io.ktor.client.statement.*
+import io.ktor.http.*
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -28,17 +31,21 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.coroutines.CancellationException
 import kotlinx.datetime.Clock
 import io.github.aakira.napier.Napier
-import okio.Buffer
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlin.time.Duration.Companion.seconds
 
 /**
- * OpenRouter implementation of LlmClient using the openai-kotlin library.
- * OpenRouter exposes a unified OpenAI-compatible endpoint at https://openrouter.ai/api/v1.
+ * OpenRouter implementation of LlmClient using the openai-kotlin library for chat
+ * and a custom Ktor HTTP call for audio transcription (OpenRouter's STT endpoint
+ * requires a JSON body with base64 input_audio, which openai-kotlin's multipart
+ * FileSource cannot emit).
+ *
+ * Chat endpoint: https://openrouter.ai/api/v1/chat/completions
+ * STT endpoint: https://openrouter.ai/api/v1/audio/transcriptions
  */
 class OpenRouterLlmClient(
-    apiKey: String,
+    private val apiKey: String,
     private val model: String = "openai/gpt-4o-mini",
     private val client: OpenAI = OpenAI(
         token = apiKey,
@@ -49,7 +56,14 @@ class OpenRouterLlmClient(
         ),
         logging = LoggingConfig(),
         timeout = Timeout(socket = 60.seconds, connect = 60.seconds, request = 60.seconds)
-    )
+    ),
+    private val httpClient: HttpClient = HttpClient {
+        install(HttpTimeout) {
+            requestTimeoutMillis = 120_000
+            connectTimeoutMillis = 30_000
+            socketTimeoutMillis = 120_000
+        }
+    }
 ) : LlmClient {
     private val json = Json {
         ignoreUnknownKeys = true
@@ -90,24 +104,45 @@ class OpenRouterLlmClient(
         return runConversation(messages, jsonSchema, tools, toolExecutor, startTime)
     }
 
+    @OptIn(ExperimentalEncodingApi::class)
     override suspend fun transcribeAudio(audioBytes: ByteArray, mimeType: String): String {
-        val extension = when (mimeType) {
+        val format = when (mimeType) {
             "audio/m4a" -> "m4a"
             "audio/mp3" -> "mp3"
             "audio/wav" -> "wav"
             else -> "m4a"
         }
 
-        val request = TranscriptionRequest(
-            audio = FileSource(
-                name = "audio.$extension",
-                source = Buffer().write(audioBytes)
-            ),
-            model = ModelId("openai/whisper-1")
-        )
+        val base64Audio = Base64.encode(audioBytes)
 
-        val transcription = client.transcription(request)
-        return transcription.text
+        val requestBody = buildJsonObject {
+            put("model", JsonPrimitive("openai/whisper-1"))
+            put("input_audio", buildJsonObject {
+                put("data", JsonPrimitive(base64Audio))
+                put("format", JsonPrimitive(format))
+            })
+        }
+
+        Napier.d("OpenRouter STT request: model=openai/whisper-1, format=$format, audio size=${audioBytes.size} bytes")
+
+        val httpResponse = httpClient.post("https://openrouter.ai/api/v1/audio/transcriptions") {
+            contentType(ContentType.Application.Json)
+            header("Authorization", "Bearer $apiKey")
+            header("HTTP-Referer", "https://wellnesswingman.com")
+            header("X-Title", "WellnessWingman")
+            setBody(requestBody.toString())
+        }
+
+        if (!httpResponse.status.isSuccess()) {
+            val errorBody = httpResponse.bodyAsText()
+            Napier.e("OpenRouter transcription API error ${httpResponse.status}: $errorBody")
+            throw Exception("OpenRouter transcription failed: ${httpResponse.status}: $errorBody")
+        }
+
+        val responseBody = httpResponse.bodyAsText()
+        val responseJson = json.parseToJsonElement(responseBody).jsonObject
+        return responseJson["text"]?.jsonPrimitive?.content
+            ?: throw Exception("OpenRouter returned empty transcription")
     }
 
     override suspend fun generateCompletion(

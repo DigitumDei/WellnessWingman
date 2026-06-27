@@ -13,6 +13,12 @@ import com.aallam.openai.api.core.Usage
 import com.aallam.openai.api.model.ModelId
 import com.aallam.openai.client.OpenAI
 import com.wellnesswingman.data.model.llm.ToolDefinition
+import io.ktor.client.*
+import io.ktor.client.engine.mock.*
+import io.ktor.client.request.*
+import io.ktor.http.*
+import io.ktor.http.content.*
+import io.ktor.utils.io.*
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
@@ -28,6 +34,8 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class OpenRouterLlmClientTest {
+
+    private val jsonHeaders = headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString())
 
     @Test
     fun `generateCompletion replays assistant tool call message without dropping metadata`() = runTest {
@@ -240,20 +248,99 @@ class OpenRouterLlmClientTest {
     }
 
     @Test
-    fun `transcribeAudio requests OpenRouter whisper model`() = runTest {
-        val api = mockk<OpenAI>()
-        coEvery { api.transcription(any()) } returns mockk {
-            every { text } returns "hello world"
-        }
+    fun `transcribeAudio sends JSON request with base64 audio to OpenRouter`() = runTest {
+        val requests = mutableListOf<String>()
+        val httpClient = HttpClient(MockEngine { request: HttpRequestData ->
+            requests += when (val body = request.body) {
+                is OutgoingContent.ByteArrayContent -> body.bytes().decodeToString()
+                is OutgoingContent.ReadChannelContent -> body.readFrom().readRemaining().readText()
+                is OutgoingContent.WriteChannelContent -> "<write-channel-content>"
+                is OutgoingContent.NoContent -> ""
+                else -> body.toString()
+            }
+            respond(
+                content = """{"text": "hello world"}""",
+                status = HttpStatusCode.OK,
+                headers = jsonHeaders
+            )
+        })
 
         val client = OpenRouterLlmClient(
             apiKey = "test-key",
-            client = api
+            httpClient = httpClient
         )
 
         val result = client.transcribeAudio(byteArrayOf(0x00, 0x01), "audio/m4a")
 
         assertEquals("hello world", result)
+        assertEquals(1, requests.size)
+
+        val body = requests.single()
+        assertTrue(body.contains(""""model":"openai/whisper-1""""), "Body should contain model")
+        assertTrue(body.contains(""""input_audio""""), "Body should contain input_audio object")
+        assertTrue(body.contains(""""data":"AAE=""".trimMargin()), "Body should contain base64-encoded audio data")
+        assertTrue(body.contains(""""format":"m4a""""), "Body should contain audio format")
+    }
+
+    @Test
+    fun `transcribeAudio maps mime type to correct format`() = runTest {
+        val requests = mutableListOf<String>()
+        val httpClient = HttpClient(MockEngine { request: HttpRequestData ->
+            requests += when (val body = request.body) {
+                is OutgoingContent.ByteArrayContent -> body.bytes().decodeToString()
+                is OutgoingContent.ReadChannelContent -> body.readFrom().readRemaining().readText()
+                is OutgoingContent.WriteChannelContent -> "<write-channel-content>"
+                is OutgoingContent.NoContent -> ""
+                else -> body.toString()
+            }
+            respond(
+                content = """{"text": "transcribed"}""",
+                status = HttpStatusCode.OK,
+                headers = jsonHeaders
+            )
+        })
+
+        val client = OpenRouterLlmClient(
+            apiKey = "test-key",
+            httpClient = httpClient
+        )
+
+        client.transcribeAudio(byteArrayOf(0x00), "audio/wav")
+        assertTrue(requests.single().contains(""""format":"wav""""), "Should use wav format for audio/wav")
+
+        requests.clear()
+        client.transcribeAudio(byteArrayOf(0x00), "audio/mp3")
+        assertTrue(requests.single().contains(""""format":"mp3""""), "Should use mp3 format for audio/mp3")
+
+        requests.clear()
+        client.transcribeAudio(byteArrayOf(0x00), "audio/m4a")
+        assertTrue(requests.single().contains(""""format":"m4a""""), "Should use m4a format for audio/m4a")
+
+        requests.clear()
+        client.transcribeAudio(byteArrayOf(0x00), "unknown/type")
+        assertTrue(requests.single().contains(""""format":"m4a""""), "Should default to m4a for unknown types")
+    }
+
+    @Test
+    fun `transcribeAudio throws on API error response`() = runTest {
+        val httpClient = HttpClient(MockEngine {
+            respond(
+                content = """{"error": "bad request"}""",
+                status = HttpStatusCode.BadRequest,
+                headers = jsonHeaders
+            )
+        })
+
+        val client = OpenRouterLlmClient(
+            apiKey = "test-key",
+            httpClient = httpClient
+        )
+
+        val error = assertFailsWith<Exception> {
+            client.transcribeAudio(byteArrayOf(0x00), "audio/m4a")
+        }
+
+        assertTrue(error.message.orEmpty().contains("400"), "Error should mention HTTP status")
     }
 
     private fun toolCallCompletion(message: ChatMessage) = ChatCompletion(
