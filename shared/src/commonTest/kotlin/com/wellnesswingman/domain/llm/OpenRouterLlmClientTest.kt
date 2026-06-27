@@ -249,15 +249,9 @@ class OpenRouterLlmClientTest {
 
     @Test
     fun `transcribeAudio sends JSON request with base64 audio to OpenRouter`() = runTest {
-        val requests = mutableListOf<String>()
+        val capturedRequests = mutableListOf<HttpRequestData>()
         val httpClient = HttpClient(MockEngine { request: HttpRequestData ->
-            requests += when (val body = request.body) {
-                is OutgoingContent.ByteArrayContent -> body.bytes().decodeToString()
-                is OutgoingContent.ReadChannelContent -> body.readFrom().readRemaining().readText()
-                is OutgoingContent.WriteChannelContent -> "<write-channel-content>"
-                is OutgoingContent.NoContent -> ""
-                else -> body.toString()
-            }
+            capturedRequests += request
             respond(
                 content = """{"text": "hello world"}""",
                 status = HttpStatusCode.OK,
@@ -273,9 +267,29 @@ class OpenRouterLlmClientTest {
         val result = client.transcribeAudio(byteArrayOf(0x00, 0x01), "audio/m4a")
 
         assertEquals("hello world", result)
-        assertEquals(1, requests.size)
+        assertEquals(1, capturedRequests.size)
 
-        val body = requests.single()
+        val request = capturedRequests.single()
+        assertTrue(
+            request.url.toString().contains("openrouter.ai/api/v1/audio/transcriptions"),
+            "URL should point to OpenRouter transcription endpoint"
+        )
+        assertEquals(HttpMethod.Post, request.method)
+        assertEquals(
+            ContentType.Application.Json.toString(),
+            request.headers[HttpHeaders.ContentType]
+        )
+        assertEquals("Bearer test-key", request.headers[HttpHeaders.Authorization])
+        assertEquals("https://wellnesswingman.com", request.headers["HTTP-Referer"])
+        assertEquals("WellnessWingman", request.headers["X-Title"])
+
+        val body = when (val b = request.body) {
+            is OutgoingContent.ByteArrayContent -> b.bytes().decodeToString()
+            is OutgoingContent.ReadChannelContent -> b.readFrom().readRemaining().readText()
+            is OutgoingContent.WriteChannelContent -> "<write-channel-content>"
+            is OutgoingContent.NoContent -> ""
+            else -> b.toString()
+        }
         assertTrue(body.contains(""""model":"openai/whisper-1""""), "Body should contain model")
         assertTrue(body.contains(""""input_audio""""), "Body should contain input_audio object")
         assertTrue(body.contains(""""data":"AAE=""""), "Body should contain base64-encoded audio data")
