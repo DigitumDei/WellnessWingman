@@ -56,6 +56,7 @@ class AnalysisOrchestratorTest {
 
         every { llmClientFactory.hasCurrentApiKey() } returns true
         every { llmClientFactory.createForCurrentProvider() } returns llmClient
+        every { llmClient.providerId } returns "gemini"
         coEvery {
             llmClient.generateCompletion(
                 prompt = any(),
