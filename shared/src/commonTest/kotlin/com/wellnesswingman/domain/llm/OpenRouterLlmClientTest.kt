@@ -329,12 +329,44 @@ class OpenRouterLlmClientTest {
         assertTrue(requests.single().contains(""""format":"wav""""), "Should use wav format for audio/wav")
 
         requests.clear()
+        client.transcribeAudio(byteArrayOf(0x00), "audio/x-wav")
+        assertTrue(requests.single().contains(""""format":"wav""""), "Should use wav format for audio/x-wav")
+
+        requests.clear()
         client.transcribeAudio(byteArrayOf(0x00), "audio/mp3")
         assertTrue(requests.single().contains(""""format":"mp3""""), "Should use mp3 format for audio/mp3")
 
         requests.clear()
+        client.transcribeAudio(byteArrayOf(0x00), "audio/mpeg")
+        assertTrue(requests.single().contains(""""format":"mp3""""), "Should use mp3 format for audio/mpeg")
+
+        requests.clear()
         client.transcribeAudio(byteArrayOf(0x00), "audio/m4a")
         assertTrue(requests.single().contains(""""format":"m4a""""), "Should use m4a format for audio/m4a")
+
+        requests.clear()
+        client.transcribeAudio(byteArrayOf(0x00), "audio/x-m4a")
+        assertTrue(requests.single().contains(""""format":"m4a""""), "Should use m4a format for audio/x-m4a")
+
+        requests.clear()
+        client.transcribeAudio(byteArrayOf(0x00), "audio/webm")
+        assertTrue(requests.single().contains(""""format":"webm""""), "Should use webm format for audio/webm")
+
+        requests.clear()
+        client.transcribeAudio(byteArrayOf(0x00), "audio/ogg")
+        assertTrue(requests.single().contains(""""format":"ogg""""), "Should use ogg format for audio/ogg")
+
+        requests.clear()
+        client.transcribeAudio(byteArrayOf(0x00), "audio/aac")
+        assertTrue(requests.single().contains(""""format":"aac""""), "Should use aac format for audio/aac")
+
+        requests.clear()
+        client.transcribeAudio(byteArrayOf(0x00), "audio/flac")
+        assertTrue(requests.single().contains(""""format":"flac""""), "Should use flac format for audio/flac")
+
+        requests.clear()
+        client.transcribeAudio(byteArrayOf(0x00), "audio/x-flac")
+        assertTrue(requests.single().contains(""""format":"flac""""), "Should use flac format for audio/x-flac")
 
         requests.clear()
         client.transcribeAudio(byteArrayOf(0x00), "unknown/type")

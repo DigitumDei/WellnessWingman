@@ -166,7 +166,7 @@ class AnalysisOrchestratorTest {
     }
 
     @Test
-    fun `processEntry sets providerId to openrouter when client class name contains OpenRouter`() = runTest {
+    fun `processEntry sets providerId to openrouter for OpenRouter client`() = runTest {
         val trackedEntryRepository = FakeTrackedEntryRepository()
         val entryAnalysisRepository = FakeEntryAnalysisRepository()
         val toolRegistry = ToolRegistry(

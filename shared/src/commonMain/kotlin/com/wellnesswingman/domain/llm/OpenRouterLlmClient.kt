@@ -58,13 +58,7 @@ class OpenRouterLlmClient(
         logging = LoggingConfig(),
         timeout = Timeout(socket = 60.seconds, connect = 60.seconds, request = 60.seconds)
     ),
-    private val httpClient: HttpClient = HttpClient {
-        install(HttpTimeout) {
-            requestTimeoutMillis = 120_000
-            connectTimeoutMillis = 30_000
-            socketTimeoutMillis = 120_000
-        }
-    },
+    private val httpClient: HttpClient = sharedHttpClient,
     private val transcriptionBaseUrl: String = "https://openrouter.ai/api/v1/audio/transcriptions",
     private val transcriptionHeaders: Map<String, String> = mapOf(
         "HTTP-Referer" to "https://wellnesswingman.com",
@@ -78,6 +72,13 @@ class OpenRouterLlmClient(
 
     private companion object {
         const val MAX_TOOL_ROUNDS = 5
+        private val sharedHttpClient = HttpClient {
+            install(HttpTimeout) {
+                requestTimeoutMillis = 120_000
+                connectTimeoutMillis = 30_000
+                socketTimeoutMillis = 120_000
+            }
+        }
     }
 
     @OptIn(ExperimentalEncodingApi::class)
@@ -113,9 +114,13 @@ class OpenRouterLlmClient(
     @OptIn(ExperimentalEncodingApi::class)
     override suspend fun transcribeAudio(audioBytes: ByteArray, mimeType: String): String {
         val format = when (mimeType) {
-            "audio/m4a" -> "m4a"
-            "audio/mp3" -> "mp3"
-            "audio/wav" -> "wav"
+            "audio/m4a", "audio/x-m4a" -> "m4a"
+            "audio/mp3", "audio/mpeg" -> "mp3"
+            "audio/wav", "audio/x-wav" -> "wav"
+            "audio/webm" -> "webm"
+            "audio/ogg" -> "ogg"
+            "audio/aac" -> "aac"
+            "audio/flac", "audio/x-flac" -> "flac"
             else -> "m4a"
         }
 
