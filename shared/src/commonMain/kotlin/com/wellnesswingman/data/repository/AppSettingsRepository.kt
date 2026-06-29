@@ -5,7 +5,8 @@ package com.wellnesswingman.data.repository
  */
 enum class LlmProvider {
     OPENAI,
-    GEMINI
+    GEMINI,
+    OPENROUTER
 }
 
 /**

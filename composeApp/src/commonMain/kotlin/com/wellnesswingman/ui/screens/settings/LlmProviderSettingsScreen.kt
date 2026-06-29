@@ -116,6 +116,33 @@ class LlmProviderSettingsScreen : Screen {
                     singleLine = true
                 )
 
+                HorizontalDivider()
+
+                // OpenRouter Configuration
+                Text(
+                    text = "OpenRouter Configuration",
+                    style = MaterialTheme.typography.titleLarge
+                )
+
+                OutlinedTextField(
+                    value = uiState.openRouterApiKey,
+                    onValueChange = { viewModel.updateOpenRouterApiKey(it) },
+                    label = { Text("API Key") },
+                    placeholder = { Text("sk-or-v1-...") },
+                    visualTransformation = PasswordVisualTransformation(),
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+
+                OutlinedTextField(
+                    value = uiState.openRouterModel,
+                    onValueChange = { viewModel.updateOpenRouterModel(it) },
+                    label = { Text("Model") },
+                    placeholder = { Text("openai/gpt-4o-mini") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+
                 Spacer(modifier = Modifier.weight(1f))
 
                 // Save Button

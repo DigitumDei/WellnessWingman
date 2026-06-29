@@ -32,6 +32,8 @@ class GeminiLlmClient(
     private val model: String = "gemini-1.5-flash",
     private val httpClient: HttpClient = createDefaultHttpClient()
 ) : LlmClient {
+    override val providerId: String = "gemini"
+
     private val json = Json {
         ignoreUnknownKeys = true
         isLenient = true

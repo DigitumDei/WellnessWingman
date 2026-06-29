@@ -1,6 +1,5 @@
 package com.wellnesswingman.domain.llm
 
-import com.aallam.openai.api.audio.TranscriptionRequest
 import com.aallam.openai.api.chat.ChatCompletionRequest
 import com.aallam.openai.api.chat.ChatMessage
 import com.aallam.openai.api.chat.ToolCall as OpenAiToolCall
@@ -11,40 +10,62 @@ import com.aallam.openai.api.chat.Parameters
 import com.aallam.openai.api.chat.TextPart
 import com.aallam.openai.api.chat.ToolChoice
 import com.aallam.openai.api.chat.chatCompletionRequest
-import com.aallam.openai.api.file.FileSource
 import com.aallam.openai.api.model.ModelId
 import com.aallam.openai.client.LoggingConfig
 import com.aallam.openai.client.OpenAI
+import com.aallam.openai.client.OpenAIHost
 import com.aallam.openai.api.http.Timeout
 import com.wellnesswingman.data.model.llm.ToolCall
 import com.wellnesswingman.data.model.llm.ToolDefinition
+import io.ktor.client.*
+import io.ktor.client.plugins.*
+import io.ktor.client.request.*
+import io.ktor.client.statement.*
+import io.ktor.http.*
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.coroutines.CancellationException
 import kotlinx.datetime.Clock
 import io.github.aakira.napier.Napier
-import okio.Buffer
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlin.time.Duration.Companion.seconds
 
 /**
- * OpenAI implementation of LlmClient using openai-kotlin library.
+ * OpenRouter implementation of LlmClient using the openai-kotlin library for chat
+ * and a custom Ktor HTTP call for audio transcription (OpenRouter's STT endpoint
+ * requires a JSON body with base64 input_audio, which openai-kotlin's multipart
+ * FileSource cannot emit).
+ *
+ * Chat endpoint: https://openrouter.ai/api/v1/chat/completions
+ * STT endpoint: https://openrouter.ai/api/v1/audio/transcriptions
  */
-class OpenAiLlmClient(
-    apiKey: String,
-    private val model: String = "gpt-4o-mini",
+class OpenRouterLlmClient(
+    private val apiKey: String,
+    private val model: String = "openai/gpt-4o-mini",
     private val client: OpenAI = OpenAI(
         token = apiKey,
+        host = OpenAIHost(baseUrl = "https://openrouter.ai/api/v1/"),
+        headers = mapOf(
+            "HTTP-Referer" to "https://wellnesswingman.com",
+            "X-Title" to "WellnessWingman"
+        ),
         logging = LoggingConfig(),
         timeout = Timeout(socket = 60.seconds, connect = 60.seconds, request = 60.seconds)
+    ),
+    private val httpClient: HttpClient = sharedHttpClient,
+    private val transcriptionBaseUrl: String = "https://openrouter.ai/api/v1/audio/transcriptions",
+    private val transcriptionHeaders: Map<String, String> = mapOf(
+        "HTTP-Referer" to "https://wellnesswingman.com",
+        "X-Title" to "WellnessWingman"
     )
 ) : LlmClient {
-    override val providerId: String = "openai"
+    override val providerId: String = "openrouter"
 
     private val json = Json {
         ignoreUnknownKeys = true
@@ -53,6 +74,13 @@ class OpenAiLlmClient(
 
     private companion object {
         const val MAX_TOOL_ROUNDS = 5
+        private val sharedHttpClient = HttpClient {
+            install(HttpTimeout) {
+                requestTimeoutMillis = 120_000
+                connectTimeoutMillis = 30_000
+                socketTimeoutMillis = 120_000
+            }
+        }
     }
 
     @OptIn(ExperimentalEncodingApi::class)
@@ -65,10 +93,9 @@ class OpenAiLlmClient(
     ): LlmAnalysisResult {
         val startTime = Clock.System.now()
 
-        // Encode image as base64
         val base64Image = Base64.encode(imageBytes)
 
-        Napier.d("OpenAI analyzeImage called")
+        Napier.d("OpenRouter analyzeImage called")
         Napier.d("Model: $model")
         Napier.d("Image bytes size: ${imageBytes.size}")
         Napier.d("Base64 image length: ${base64Image.length}")
@@ -86,24 +113,48 @@ class OpenAiLlmClient(
         return runConversation(messages, jsonSchema, tools, toolExecutor, startTime)
     }
 
+    @OptIn(ExperimentalEncodingApi::class)
     override suspend fun transcribeAudio(audioBytes: ByteArray, mimeType: String): String {
-        val extension = when (mimeType) {
-            "audio/m4a" -> "m4a"
-            "audio/mp3" -> "mp3"
-            "audio/wav" -> "wav"
+        val format = when (mimeType) {
+            "audio/m4a", "audio/x-m4a" -> "m4a"
+            "audio/mp3", "audio/mpeg" -> "mp3"
+            "audio/wav", "audio/x-wav" -> "wav"
+            "audio/webm" -> "webm"
+            "audio/ogg" -> "ogg"
+            "audio/aac" -> "aac"
+            "audio/flac", "audio/x-flac" -> "flac"
             else -> "m4a"
         }
 
-        val request = TranscriptionRequest(
-            audio = FileSource(
-                name = "audio.$extension",
-                source = Buffer().write(audioBytes)
-            ),
-            model = ModelId("whisper-1")
-        )
+        val base64Audio = Base64.encode(audioBytes)
 
-        val transcription = client.transcription(request)
-        return transcription.text
+        val requestBody = buildJsonObject {
+            put("model", JsonPrimitive("openai/whisper-1"))
+            put("input_audio", buildJsonObject {
+                put("data", JsonPrimitive(base64Audio))
+                put("format", JsonPrimitive(format))
+            })
+        }
+
+        Napier.d("OpenRouter STT request: model=openai/whisper-1, format=$format, audio size=${audioBytes.size} bytes")
+
+        val httpResponse = httpClient.post(transcriptionBaseUrl) {
+            contentType(ContentType.Application.Json)
+            header("Authorization", "Bearer $apiKey")
+            transcriptionHeaders.forEach { (key, value) -> header(key, value) }
+            setBody(requestBody.toString())
+        }
+
+        if (!httpResponse.status.isSuccess()) {
+            val errorBody = httpResponse.bodyAsText()
+            Napier.e("OpenRouter transcription API error ${httpResponse.status}: $errorBody")
+            throw Exception("OpenRouter transcription failed: ${httpResponse.status}: $errorBody")
+        }
+
+        val responseBody = httpResponse.bodyAsText()
+        val responseJson = json.parseToJsonElement(responseBody).jsonObject
+        return responseJson["text"]?.jsonPrimitive?.content
+            ?: throw Exception("OpenRouter returned empty transcription")
     }
 
     override suspend fun generateCompletion(
@@ -143,7 +194,7 @@ class OpenAiLlmClient(
         var resolvedModel = model
 
         repeat(MAX_TOOL_ROUNDS) { round ->
-            Napier.d("Sending OpenAI request, round ${round + 1}")
+            Napier.d("Sending OpenRouter request, round ${round + 1}")
 
             val completion = client.chatCompletion(
                 buildRequest(messages, jsonSchema, tools)
@@ -155,7 +206,7 @@ class OpenAiLlmClient(
             resolvedModel = completion.model.id
 
             val message = completion.choices.firstOrNull()?.message
-                ?: error("OpenAI returned no completion choices")
+                ?: error("OpenRouter returned no completion choices")
 
             val toolCalls = message.toolCalls.orEmpty()
             if (toolCalls.isEmpty()) {
@@ -174,13 +225,13 @@ class OpenAiLlmClient(
             }
 
             val executor = toolExecutor
-                ?: error("OpenAI requested tool calls but no tool executor was provided")
+                ?: error("OpenRouter requested tool calls but no tool executor was provided")
 
             messages.add(message)
 
             toolCalls.forEach { toolCall ->
                 require(toolCall is OpenAiToolCall.Function) {
-                    "Unsupported OpenAI tool call type: ${toolCall::class.simpleName}"
+                    "Unsupported OpenRouter tool call type: ${toolCall::class.simpleName}"
                 }
 
                 val result = runCatching {
@@ -223,10 +274,10 @@ class OpenAiLlmClient(
         resolvedModel = completion.model.id
 
         val message = completion.choices.firstOrNull()?.message
-            ?: error("OpenAI returned no completion choices")
+            ?: error("OpenRouter returned no completion choices")
 
         if (message.toolCalls.orEmpty().isNotEmpty()) {
-            error("OpenAI tool loop exceeded $MAX_TOOL_ROUNDS rounds")
+            error("OpenRouter tool loop exceeded $MAX_TOOL_ROUNDS rounds")
         }
 
         val endTime = Clock.System.now()
@@ -248,7 +299,7 @@ class OpenAiLlmClient(
         jsonSchema: String?,
         tools: List<ToolDefinition>
     ): ChatCompletionRequest = chatCompletionRequest {
-        model = ModelId(this@OpenAiLlmClient.model)
+        model = ModelId(this@OpenRouterLlmClient.model)
         this.messages = messages
         responseFormat = if (jsonSchema != null) ChatResponseFormat.JsonObject else null
         if (tools.isNotEmpty()) {

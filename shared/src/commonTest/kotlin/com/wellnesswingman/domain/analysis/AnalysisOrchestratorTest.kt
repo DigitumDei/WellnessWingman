@@ -56,6 +56,7 @@ class AnalysisOrchestratorTest {
 
         every { llmClientFactory.hasCurrentApiKey() } returns true
         every { llmClientFactory.createForCurrentProvider() } returns llmClient
+        every { llmClient.providerId } returns "gemini"
         coEvery {
             llmClient.generateCompletion(
                 prompt = any(),
@@ -163,6 +164,75 @@ class AnalysisOrchestratorTest {
             orchestrator.processEntry(entry)
         }
         assertEquals(ProcessingStatus.PROCESSING, trackedEntryRepository.statusById[9L])
+    }
+
+    @Test
+    fun `processEntry sets providerId to openrouter for OpenRouter client`() = runTest {
+        val trackedEntryRepository = FakeTrackedEntryRepository()
+        val entryAnalysisRepository = FakeEntryAnalysisRepository()
+        val toolRegistry = ToolRegistry(
+            trackedEntryRepository = trackedEntryRepository,
+            entryAnalysisRepository = entryAnalysisRepository,
+            weightHistoryRepository = FakeWeightHistoryRepository(),
+            appSettingsRepository = FakeAppSettingsRepository(),
+            nutritionalProfileRepository = FakeNutritionalProfileRepository()
+        )
+        val openRouterClient = OpenRouterStubLlmClient()
+        val llmClientFactory = mockk<LlmClientFactory>()
+        val fileSystem = mockk<FileSystem>()
+
+        every { llmClientFactory.hasCurrentApiKey() } returns true
+        every { llmClientFactory.createForCurrentProvider() } returns openRouterClient
+        every { fileSystem.exists(any()) } returns false
+
+        val orchestrator = AnalysisOrchestrator(
+            trackedEntryRepository = trackedEntryRepository,
+            entryAnalysisRepository = entryAnalysisRepository,
+            llmClientFactory = llmClientFactory,
+            toolRegistry = toolRegistry,
+            fileSystem = fileSystem,
+            appSettingsRepository = FakeAppSettingsRepository()
+        )
+
+        val entry = TrackedEntry(
+            entryId = 14L,
+            entryType = EntryType.UNKNOWN,
+            capturedAt = Clock.System.now(),
+            processingStatus = ProcessingStatus.PENDING
+        )
+
+        val result = orchestrator.processEntry(entry)
+        val success = assertIs<AnalysisInvocationResult.Success>(result)
+        assertEquals("openrouter", success.analysis.providerId)
+        val inserted = entryAnalysisRepository.inserted.first()
+        assertEquals("openrouter", inserted.providerId)
+    }
+
+    private class OpenRouterStubLlmClient : LlmClient {
+        override val providerId: String = "openrouter"
+
+        override suspend fun analyzeImage(
+            imageBytes: ByteArray,
+            prompt: String,
+            jsonSchema: String?,
+            tools: List<com.wellnesswingman.data.model.llm.ToolDefinition>,
+            toolExecutor: ToolExecutor?
+        ): LlmAnalysisResult = throw NotImplementedError()
+
+        override suspend fun transcribeAudio(
+            audioBytes: ByteArray,
+            mimeType: String
+        ): String = throw NotImplementedError()
+
+        override suspend fun generateCompletion(
+            prompt: String,
+            jsonSchema: String?,
+            tools: List<com.wellnesswingman.data.model.llm.ToolDefinition>,
+            toolExecutor: ToolExecutor?
+        ): LlmAnalysisResult = LlmAnalysisResult(
+            content = """{"schemaVersion":"1.0","entryType":"Other","confidence":0.9,"otherAnalysis":{"summary":"Reviewed"},"warnings":[]}""",
+            diagnostics = LlmDiagnostics(model = "openrouter-test")
+        )
     }
 
     private class FakeTrackedEntryRepository : TrackedEntryRepository {

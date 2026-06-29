@@ -39,8 +39,10 @@ class SettingsViewModel(
                 val selectedProvider = appSettingsRepository.getSelectedProvider()
                 val openAiKey = appSettingsRepository.getApiKey(LlmProvider.OPENAI) ?: ""
                 val geminiKey = appSettingsRepository.getApiKey(LlmProvider.GEMINI) ?: ""
+                val openRouterKey = appSettingsRepository.getApiKey(LlmProvider.OPENROUTER) ?: ""
                 val openAiModel = appSettingsRepository.getModel(LlmProvider.OPENAI) ?: "gpt-4o-mini"
                 val geminiModel = appSettingsRepository.getModel(LlmProvider.GEMINI) ?: "gemini-1.5-flash"
+                val openRouterModel = appSettingsRepository.getModel(LlmProvider.OPENROUTER) ?: "openai/gpt-4o-mini"
 
                 val height = appSettingsRepository.getHeight()?.toString() ?: ""
                 val heightUnit = appSettingsRepository.getHeightUnit()
@@ -56,6 +58,8 @@ class SettingsViewModel(
                     openAiModel = openAiModel,
                     geminiApiKey = geminiKey,
                     geminiModel = geminiModel,
+                    openRouterApiKey = openRouterKey,
+                    openRouterModel = openRouterModel,
                     height = height,
                     heightUnit = heightUnit,
                     sex = sex,
@@ -78,12 +82,20 @@ class SettingsViewModel(
         _uiState.value = _uiState.value.copy(geminiApiKey = apiKey)
     }
 
+    fun updateOpenRouterApiKey(apiKey: String) {
+        _uiState.value = _uiState.value.copy(openRouterApiKey = apiKey)
+    }
+
     fun updateOpenAiModel(model: String) {
         _uiState.value = _uiState.value.copy(openAiModel = model)
     }
 
     fun updateGeminiModel(model: String) {
         _uiState.value = _uiState.value.copy(geminiModel = model)
+    }
+
+    fun updateOpenRouterModel(model: String) {
+        _uiState.value = _uiState.value.copy(openRouterModel = model)
     }
 
     fun selectProvider(provider: LlmProvider) {
@@ -172,8 +184,12 @@ class SettingsViewModel(
         if (state.geminiApiKey.isNotBlank()) {
             appSettingsRepository.setApiKey(LlmProvider.GEMINI, state.geminiApiKey)
         }
+        if (state.openRouterApiKey.isNotBlank()) {
+            appSettingsRepository.setApiKey(LlmProvider.OPENROUTER, state.openRouterApiKey)
+        }
         appSettingsRepository.setModel(LlmProvider.OPENAI, state.openAiModel)
         appSettingsRepository.setModel(LlmProvider.GEMINI, state.geminiModel)
+        appSettingsRepository.setModel(LlmProvider.OPENROUTER, state.openRouterModel)
         appSettingsRepository.setSelectedProvider(state.selectedProvider)
     }
 
@@ -316,6 +332,8 @@ data class SettingsUiState(
     val openAiModel: String = "gpt-4o-mini",
     val geminiApiKey: String = "",
     val geminiModel: String = "gemini-1.5-flash",
+    val openRouterApiKey: String = "",
+    val openRouterModel: String = "openai/gpt-4o-mini",
     val saveSuccess: Boolean = false,
     val error: String? = null,
     val isExporting: Boolean = false,

@@ -22,6 +22,7 @@ class SettingsAppSettingsRepository(
         private const val DEFAULT_PROVIDER = "OPENAI"
         private const val DEFAULT_OPENAI_MODEL = "gpt-4o-mini"
         private const val DEFAULT_GEMINI_MODEL = "gemini-1.5-flash"
+        private const val DEFAULT_OPENROUTER_MODEL = "openai/gpt-4o-mini"
 
         // User Profile keys
         private const val KEY_PROFILE_HEIGHT = "profile_height"
@@ -76,6 +77,7 @@ class SettingsAppSettingsRepository(
         val defaultModel = when (provider) {
             LlmProvider.OPENAI -> DEFAULT_OPENAI_MODEL
             LlmProvider.GEMINI -> DEFAULT_GEMINI_MODEL
+            LlmProvider.OPENROUTER -> DEFAULT_OPENROUTER_MODEL
         }
         return settings.getString("$KEY_PREFIX_MODEL${provider.name}", defaultModel)
     }
