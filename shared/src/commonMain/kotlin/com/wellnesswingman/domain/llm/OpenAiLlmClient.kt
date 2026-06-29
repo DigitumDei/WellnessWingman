@@ -44,6 +44,8 @@ class OpenAiLlmClient(
         timeout = Timeout(socket = 60.seconds, connect = 60.seconds, request = 60.seconds)
     )
 ) : LlmClient {
+    override val providerId: String = "openai"
+
     private val json = Json {
         ignoreUnknownKeys = true
         isLenient = true

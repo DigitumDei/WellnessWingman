@@ -208,6 +208,8 @@ class AnalysisOrchestratorTest {
     }
 
     private class OpenRouterStubLlmClient : LlmClient {
+        override val providerId: String = "openrouter"
+
         override suspend fun analyzeImage(
             imageBytes: ByteArray,
             prompt: String,

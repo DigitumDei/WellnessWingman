@@ -9,10 +9,7 @@ import com.wellnesswingman.data.model.analysis.UnifiedAnalysisResult
 import com.wellnesswingman.data.repository.AppSettingsRepository
 import com.wellnesswingman.data.repository.EntryAnalysisRepository
 import com.wellnesswingman.data.repository.TrackedEntryRepository
-import com.wellnesswingman.domain.llm.GeminiLlmClient
 import com.wellnesswingman.domain.llm.LlmClientFactory
-import com.wellnesswingman.domain.llm.OpenAiLlmClient
-import com.wellnesswingman.domain.llm.OpenRouterLlmClient
 import com.wellnesswingman.domain.llm.ToolRegistry
 import com.wellnesswingman.platform.FileSystem
 import com.wellnesswingman.util.formatDecimal
@@ -129,12 +126,7 @@ class AnalysisOrchestrator(
             // Create and save the analysis
             val analysis = EntryAnalysis(
                 entryId = entry.entryId,
-                providerId = when (llmClient) {
-                    is OpenAiLlmClient -> "openai"
-                    is GeminiLlmClient -> "gemini"
-                    is OpenRouterLlmClient -> "openrouter"
-                    else -> "unknown"
-                },
+                providerId = llmClient.providerId,
                 model = result.diagnostics.model,
                 capturedAt = Clock.System.now(),
                 insightsJson = result.content,

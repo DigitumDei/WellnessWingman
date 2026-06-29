@@ -30,6 +30,11 @@ data class LlmDiagnostics(
  */
 interface LlmClient {
     /**
+     * Identifier for the LLM provider (e.g. "openai", "gemini", "openrouter").
+     */
+    val providerId: String get() = "unknown"
+
+    /**
      * Analyzes an image with a text prompt.
      */
     suspend fun analyzeImage(

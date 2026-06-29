@@ -65,6 +65,8 @@ class OpenRouterLlmClient(
         "X-Title" to "WellnessWingman"
     )
 ) : LlmClient {
+    override val providerId: String = "openrouter"
+
     private val json = Json {
         ignoreUnknownKeys = true
         isLenient = true
