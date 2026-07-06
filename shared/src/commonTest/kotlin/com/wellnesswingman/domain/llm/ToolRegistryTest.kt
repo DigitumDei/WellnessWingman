@@ -351,6 +351,7 @@ class ToolRegistryTest {
                         primaryName = "Quest Protein Bar",
                         aliases = listOf("protein bar", "quest bar"),
                         servingSize = "1 bar",
+                        measurementSize = "1 tbsp = 15 g",
                         calories = 190.0,
                         protein = 21.0,
                         carbohydrates = 22.0,
