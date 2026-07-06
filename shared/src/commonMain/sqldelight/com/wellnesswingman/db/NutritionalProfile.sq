@@ -4,7 +4,6 @@ CREATE TABLE NutritionalProfile (
     primaryName TEXT NOT NULL,
     aliases TEXT NOT NULL DEFAULT '[]',
     servingSize TEXT,
-    measurementSize TEXT,
     calories REAL,
     protein REAL,
     carbohydrates REAL,
@@ -18,7 +17,8 @@ CREATE TABLE NutritionalProfile (
     rawJson TEXT,
     sourceImagePath TEXT,
     createdAt INTEGER NOT NULL,
-    updatedAt INTEGER NOT NULL
+    updatedAt INTEGER NOT NULL,
+    measurementSize TEXT
 );
 
 CREATE INDEX idx_nutritional_profile_name ON NutritionalProfile(primaryName);
