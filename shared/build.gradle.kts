@@ -137,7 +137,6 @@ sqldelight {
             packageName.set("com.wellnesswingman.db")
             srcDirs.setFrom("src/commonMain/sqldelight")
             schemaOutputDirectory.set(file("src/commonMain/sqldelight/databases"))
-            version = 8
             verifyMigrations.set(true)
         }
     }
