@@ -3,6 +3,7 @@ package com.wellnesswingman.data.model.export
 import com.wellnesswingman.data.model.DailySummary
 import com.wellnesswingman.data.model.EntryAnalysis
 import com.wellnesswingman.data.model.EntryType
+import com.wellnesswingman.data.model.NutritionalProfile
 import com.wellnesswingman.data.model.ProcessingStatus
 import com.wellnesswingman.data.model.TrackedEntry
 import com.wellnesswingman.data.model.WeeklySummary
@@ -390,6 +391,42 @@ class ExportDataTest {
     // endregion
 
     // region -- Mapping functions: WeightRecord --
+
+    @Test
+    fun `NutritionalProfile toExport and back preserves measurement guidance`() {
+        val now = Instant.parse("2026-07-06T08:00:00Z")
+        val profile = NutritionalProfile(
+            profileId = 7,
+            externalId = "peanut-butter",
+            primaryName = "Peanut Butter",
+            servingSize = "100 g",
+            measurementSize = "1 tbsp = 16 g",
+            calories = 588.0,
+            createdAt = now,
+            updatedAt = now
+        )
+
+        val exported = profile.toExport()
+        assertEquals("1 tbsp = 16 g", exported.measurementSize)
+        assertEquals(profile, exported.toDomain())
+    }
+
+    @Test
+    fun `older nutritional profile export without measurement guidance remains compatible`() {
+        val encoded = """
+            {
+              "ProfileId": 7,
+              "ExternalId": "legacy-profile",
+              "PrimaryName": "Legacy Profile",
+              "CreatedAt": "2026-07-06T08:00:00Z",
+              "UpdatedAt": "2026-07-06T08:00:00Z"
+            }
+        """.trimIndent()
+
+        val exported = json.decodeFromString<ExportNutritionalProfile>(encoded)
+        assertNull(exported.measurementSize)
+        assertNull(exported.toDomain().measurementSize)
+    }
 
     @Test
     fun `WeightRecord toExport and back preserves data`() {

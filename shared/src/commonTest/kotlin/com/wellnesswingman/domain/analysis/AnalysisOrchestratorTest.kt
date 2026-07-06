@@ -53,6 +53,7 @@ class AnalysisOrchestratorTest {
         val fileSystem = mockk<FileSystem>()
         val capturedTools = mutableListOf<com.wellnesswingman.data.model.llm.ToolDefinition>()
         var capturedExecutor: ToolExecutor? = null
+        var capturedPrompt = ""
 
         every { llmClientFactory.hasCurrentApiKey() } returns true
         every { llmClientFactory.createForCurrentProvider() } returns llmClient
@@ -65,6 +66,7 @@ class AnalysisOrchestratorTest {
                 toolExecutor = any()
             )
         } answers {
+            capturedPrompt = firstArg()
             capturedTools += thirdArg<List<com.wellnesswingman.data.model.llm.ToolDefinition>>()
             capturedExecutor = arg(3)
             LlmAnalysisResult(
@@ -112,6 +114,8 @@ class AnalysisOrchestratorTest {
         assertEquals(EntryType.OTHER, trackedEntryRepository.typeById[7L])
         assertEquals(toolRegistry.definitions().map { it.name }, capturedTools.map { it.name })
         assertNotNull(capturedExecutor)
+        assertTrue(capturedPrompt.contains("use that stored household-measure-to-gram conversion"))
+        assertTrue(capturedPrompt.contains("Do not guess the gram weight"))
 
         val toolResult = capturedExecutor!!.invoke(
             com.wellnesswingman.data.model.llm.ToolCall(name = "get_user_profile")

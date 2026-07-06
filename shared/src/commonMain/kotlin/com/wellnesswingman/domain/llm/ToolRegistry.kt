@@ -217,7 +217,7 @@ class ToolRegistry(
         register(
             definition = ToolDefinition(
                 name = "get_nutritional_profiles",
-                description = "Get full stored nutritional details for specific saved profile IDs.",
+                description = "Get full stored nutritional details and household-measure-to-gram guidance for specific saved profile IDs.",
                 parametersSchema = buildJsonObject {
                     put("type", JsonPrimitive("object"))
                     putJsonObject("properties") {
@@ -258,6 +258,7 @@ class ToolRegistry(
                             put("primaryName", JsonPrimitive(profile.primaryName))
                             put("aliases", JsonArray(profile.aliases.map(::JsonPrimitive)))
                             put("servingSize", profile.servingSize?.let(::JsonPrimitive) ?: JsonNull)
+                            put("measurementSize", profile.measurementSize?.let(::JsonPrimitive) ?: JsonNull)
                             putJsonObject("nutrition") {
                                 put("totalCalories", profile.calories?.let(::JsonPrimitive) ?: JsonNull)
                                 put("protein", profile.protein?.let(::JsonPrimitive) ?: JsonNull)
