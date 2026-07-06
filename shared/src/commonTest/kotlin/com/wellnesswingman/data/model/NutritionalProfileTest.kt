@@ -24,6 +24,7 @@ class NutritionalProfileTest {
             primaryName = "Fairlife Core Power",
             aliases = listOf("core power", "protein shake"),
             servingSize = "1 bottle",
+            measurementSize = "1 tbsp = 15 g",
             calories = 230.0,
             protein = 42.0,
             carbohydrates = 9.0,
@@ -60,6 +61,7 @@ class NutritionalProfileTest {
         assertEquals("Quest Protein Bar", decoded.primaryName)
         assertEquals(emptyList(), decoded.aliases)
         assertNull(decoded.servingSize)
+        assertNull(decoded.measurementSize)
         assertNull(decoded.nutrition.totalCalories)
         assertEquals("exact", decoded.source)
     }
@@ -71,6 +73,7 @@ class NutritionalProfileTest {
             primaryName = "Quest Protein Bar",
             aliases = listOf("protein bar"),
             servingSize = "1 bar",
+            measurementSize = "1 tbsp = 15 g",
             nutrition = NutritionalProfileNutrition(
                 totalCalories = 190.0,
                 protein = 21.0,
@@ -89,6 +92,7 @@ class NutritionalProfileTest {
 
         // Verify key presence and structure without being brittle about Double formatting
         assertTrue(encoded.contains("\"totalCalories\":"))
+        assertTrue(encoded.contains("\"measurementSize\":"))
         assertTrue(encoded.contains("\"protein\":"))
         assertTrue(encoded.contains("\"source\":\"exact\""))
 
@@ -98,6 +102,7 @@ class NutritionalProfileTest {
         assertEquals("Quest Protein Bar", decoded.primaryName)
         assertEquals(listOf("protein bar"), decoded.aliases)
         assertEquals("1 bar", decoded.servingSize)
+        assertEquals("1 tbsp = 15 g", decoded.measurementSize)
         assertEquals(190.0, decoded.nutrition.totalCalories)
         assertEquals(21.0, decoded.nutrition.protein)
         assertEquals(22.0, decoded.nutrition.carbohydrates)

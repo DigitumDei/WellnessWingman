@@ -42,6 +42,7 @@ class SqlDelightNutritionalProfileRepositoryTest {
             primaryName = "Quest Protein Bar",
             aliases = listOf("protein bar", "quest bar"),
             servingSize = "1 bar",
+            measurementSize = "1 tbsp = 15 g",
             calories = 190.0,
             protein = 21.0,
             carbohydrates = 22.0,
@@ -69,6 +70,7 @@ class SqlDelightNutritionalProfileRepositoryTest {
         assertEquals(profile.primaryName, stored.primaryName)
         assertEquals(profile.aliases, stored.aliases)
         assertEquals(profile.servingSize, stored.servingSize)
+        assertEquals(profile.measurementSize, stored.measurementSize)
         assertEquals(profile.calories, stored.calories)
         assertEquals(profile.protein, stored.protein)
         assertEquals(profile.carbohydrates, stored.carbohydrates)
@@ -86,6 +88,86 @@ class SqlDelightNutritionalProfileRepositoryTest {
 
         val flowed = repository.getAllAsFlow().first()
         assertEquals(listOf(stored), flowed)
+    }
+
+    @Test
+    fun `version 8 migration preserves profiles and adds nullable measurement guidance`() = runTest {
+        val migrationDriver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
+
+        try {
+            migrationDriver.execute(
+                identifier = null,
+                sql = """
+                    CREATE TABLE NutritionalProfile (
+                        profileId INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                        externalId TEXT NOT NULL UNIQUE,
+                        primaryName TEXT NOT NULL,
+                        aliases TEXT NOT NULL DEFAULT '[]',
+                        servingSize TEXT,
+                        calories REAL,
+                        protein REAL,
+                        carbohydrates REAL,
+                        fat REAL,
+                        fiber REAL,
+                        sugar REAL,
+                        sodium REAL,
+                        saturatedFat REAL,
+                        transFat REAL,
+                        cholesterol REAL,
+                        rawJson TEXT,
+                        sourceImagePath TEXT,
+                        createdAt INTEGER NOT NULL,
+                        updatedAt INTEGER NOT NULL
+                    )
+                """.trimIndent(),
+                parameters = 0
+            )
+            migrationDriver.execute(
+                identifier = null,
+                sql = """
+                    INSERT INTO NutritionalProfile (
+                        externalId,
+                        primaryName,
+                        aliases,
+                        servingSize,
+                        calories,
+                        createdAt,
+                        updatedAt
+                    ) VALUES (
+                        'legacy-profile',
+                        'Legacy Profile',
+                        '["legacy"]',
+                        '100 g',
+                        250.0,
+                        1000,
+                        2000
+                    )
+                """.trimIndent(),
+                parameters = 0
+            )
+
+            WellnessWingmanDatabase.Schema.migrate(
+                driver = migrationDriver,
+                oldVersion = 8,
+                newVersion = 9
+            )
+
+            val migratedRepository = SqlDelightNutritionalProfileRepository(
+                WellnessWingmanDatabase(migrationDriver)
+            )
+            val migrated = migratedRepository.getByExternalId("legacy-profile")
+
+            assertNotNull(migrated)
+            assertEquals("Legacy Profile", migrated.primaryName)
+            assertEquals(listOf("legacy"), migrated.aliases)
+            assertEquals("100 g", migrated.servingSize)
+            assertEquals(250.0, migrated.calories)
+            assertNull(migrated.measurementSize)
+            assertEquals(Instant.fromEpochMilliseconds(1000), migrated.createdAt)
+            assertEquals(Instant.fromEpochMilliseconds(2000), migrated.updatedAt)
+        } finally {
+            migrationDriver.close()
+        }
     }
 
     @Test
@@ -160,6 +242,7 @@ class SqlDelightNutritionalProfileRepositoryTest {
                 primaryName = "Core Power Elite",
                 aliases = listOf("elite shake"),
                 servingSize = "414 ml",
+                measurementSize = "1 cup = 240 g",
                 calories = 230.0,
                 protein = 42.0,
                 sourceImagePath = "/tmp/core-power.jpg",
@@ -173,6 +256,7 @@ class SqlDelightNutritionalProfileRepositoryTest {
         assertEquals("Core Power Elite", stored.primaryName)
         assertEquals(listOf("elite shake"), stored.aliases)
         assertEquals("414 ml", stored.servingSize)
+        assertEquals("1 cup = 240 g", stored.measurementSize)
         assertEquals(230.0, stored.calories)
         assertEquals(42.0, stored.protein)
         assertEquals("/tmp/core-power.jpg", stored.sourceImagePath)
@@ -243,6 +327,7 @@ class SqlDelightNutritionalProfileRepositoryTest {
             primaryName = "Broken Aliases",
             aliases = "{not valid json",
             servingSize = null,
+            measurementSize = null,
             calories = null,
             protein = null,
             carbohydrates = null,
@@ -273,6 +358,7 @@ class SqlDelightNutritionalProfileRepositoryTest {
         primaryName: String,
         aliases: List<String> = emptyList(),
         servingSize: String? = null,
+        measurementSize: String? = null,
         calories: Double? = null,
         protein: Double? = null,
         carbohydrates: Double? = null,
@@ -293,6 +379,7 @@ class SqlDelightNutritionalProfileRepositoryTest {
         primaryName = primaryName,
         aliases = aliases,
         servingSize = servingSize,
+        measurementSize = measurementSize,
         calories = calories,
         protein = protein,
         carbohydrates = carbohydrates,

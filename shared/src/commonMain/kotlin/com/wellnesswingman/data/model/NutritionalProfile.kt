@@ -11,6 +11,7 @@ data class NutritionalProfile(
     val primaryName: String,
     val aliases: List<String> = emptyList(),
     val servingSize: String? = null,
+    val measurementSize: String? = null,
     val calories: Double? = null,
     val protein: Double? = null,
     val carbohydrates: Double? = null,
@@ -37,6 +38,8 @@ data class NutritionalProfileLookupResult(
     val aliases: List<String> = emptyList(),
     @SerialName("servingSize")
     val servingSize: String? = null,
+    @SerialName("measurementSize")
+    val measurementSize: String? = null,
     @SerialName("nutrition")
     val nutrition: NutritionalProfileNutrition = NutritionalProfileNutrition(),
     @SerialName("source")

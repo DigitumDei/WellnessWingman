@@ -133,6 +133,13 @@ data class NutritionLabelScanScreen(
                             label = { Text("Serving size") },
                             modifier = Modifier.fillMaxWidth()
                         )
+                        OutlinedTextField(
+                            value = uiState.measurementSize,
+                            onValueChange = viewModel::updateMeasurementSize,
+                            label = { Text("Measurement-to-gram guidance (optional)") },
+                            supportingText = { Text("For example: 1 tbsp = 15 g or 1 scoop = 32 g") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
                     }
                 }
 

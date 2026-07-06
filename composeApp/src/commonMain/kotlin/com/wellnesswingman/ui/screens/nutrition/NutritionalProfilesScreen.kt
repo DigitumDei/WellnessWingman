@@ -161,6 +161,13 @@ private fun NutritionalProfileRow(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+            profile.measurementSize?.takeIf { it.isNotBlank() }?.let {
+                Text(
+                    text = "Measurement: $it",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
             if (profile.aliases.isNotEmpty()) {
                 Text(
                     text = "Aliases: ${profile.aliases.joinToString(", ")}",

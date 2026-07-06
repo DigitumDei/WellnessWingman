@@ -191,6 +191,7 @@ class NutritionLabelScanViewModelTest {
         viewModel.updatePrimaryName("  Quest Bar  ")
         viewModel.updateAliases("protein bar, quest bar, protein bar")
         viewModel.updateServingSize(" 1 bar ")
+        viewModel.updateMeasurementSize(" 1 tbsp = 15 g ")
         viewModel.updateNutrition { it.copy(totalCalories = 190.0, protein = 21.0) }
         viewModel.save { savedCalled = true }
         advanceUntilIdle()
@@ -200,6 +201,7 @@ class NutritionLabelScanViewModelTest {
         assertEquals("Quest Bar", inserted.primaryName)
         assertEquals(listOf("protein bar", "quest bar"), inserted.aliases)
         assertEquals("1 bar", inserted.servingSize)
+        assertEquals("1 tbsp = 15 g", inserted.measurementSize)
         assertEquals(190.0, inserted.calories)
         assertEquals(21.0, inserted.protein)
         assertTrue(viewModel.uiState.value.saveCompleted)
@@ -212,6 +214,7 @@ class NutritionLabelScanViewModelTest {
             profileId = 7L,
             externalId = "core-power",
             primaryName = "Core Power",
+            measurementSize = "1 cup = 240 g",
             rawJson = """{"confidence":0.9}""",
             createdAt = createdAt,
             updatedAt = createdAt
@@ -234,6 +237,7 @@ class NutritionLabelScanViewModelTest {
         assertNotNull(updated)
         assertEquals("""{"confidence":0.9}""", updated.rawJson)
         assertEquals("Core Power Elite", updated.primaryName)
+        assertEquals("1 cup = 240 g", updated.measurementSize)
     }
 
     @Test

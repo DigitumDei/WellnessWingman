@@ -1,0 +1,4 @@
+-- Migration from version 8 to version 9
+-- Adds measurementSize column to NutritionalProfile for household-measure-to-gram conversion guidance
+
+ALTER TABLE NutritionalProfile ADD COLUMN measurementSize TEXT;

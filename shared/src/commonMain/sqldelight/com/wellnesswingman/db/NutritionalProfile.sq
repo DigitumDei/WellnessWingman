@@ -17,7 +17,8 @@ CREATE TABLE NutritionalProfile (
     rawJson TEXT,
     sourceImagePath TEXT,
     createdAt INTEGER NOT NULL,
-    updatedAt INTEGER NOT NULL
+    updatedAt INTEGER NOT NULL,
+    measurementSize TEXT
 );
 
 CREATE INDEX idx_nutritional_profile_name ON NutritionalProfile(primaryName);
@@ -53,6 +54,7 @@ INSERT INTO NutritionalProfile(
     primaryName,
     aliases,
     servingSize,
+    measurementSize,
     calories,
     protein,
     carbohydrates,
@@ -67,13 +69,14 @@ INSERT INTO NutritionalProfile(
     sourceImagePath,
     createdAt,
     updatedAt
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 update:
 UPDATE NutritionalProfile
 SET primaryName = ?,
     aliases = ?,
     servingSize = ?,
+    measurementSize = ?,
     calories = ?,
     protein = ?,
     carbohydrates = ?,
@@ -100,6 +103,7 @@ INSERT OR REPLACE INTO NutritionalProfile(
     primaryName,
     aliases,
     servingSize,
+    measurementSize,
     calories,
     protein,
     carbohydrates,
@@ -114,7 +118,7 @@ INSERT OR REPLACE INTO NutritionalProfile(
     sourceImagePath,
     createdAt,
     updatedAt
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 lastInsertRowId:
 SELECT last_insert_rowid();

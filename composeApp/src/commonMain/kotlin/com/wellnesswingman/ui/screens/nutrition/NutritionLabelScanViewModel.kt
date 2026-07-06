@@ -54,6 +54,7 @@ class NutritionLabelScanViewModel(
                     primaryName = profile.primaryName,
                     aliases = profile.aliases.joinToString(", "),
                     servingSize = profile.servingSize.orEmpty(),
+                    measurementSize = profile.measurementSize.orEmpty(),
                     nutrition = ExtractedNutrition(
                         totalCalories = profile.calories,
                         protein = profile.protein,
@@ -182,6 +183,10 @@ class NutritionLabelScanViewModel(
         _uiState.value = _uiState.value.copy(servingSize = value)
     }
 
+    fun updateMeasurementSize(value: String) {
+        _uiState.value = _uiState.value.copy(measurementSize = value)
+    }
+
     fun updateNutrition(update: (ExtractedNutrition) -> ExtractedNutrition) {
         _uiState.value = _uiState.value.copy(nutrition = update(_uiState.value.nutrition))
     }
@@ -204,6 +209,7 @@ class NutritionLabelScanViewModel(
                     primaryName = primaryName,
                     aliases = parseAliases(state.aliases),
                     servingSize = state.servingSize.trim().ifBlank { null },
+                    measurementSize = state.measurementSize.trim().ifBlank { null },
                     calories = state.nutrition.totalCalories,
                     protein = state.nutrition.protein,
                     carbohydrates = state.nutrition.carbohydrates,
@@ -260,6 +266,7 @@ data class NutritionLabelScanUiState(
     val primaryName: String = "",
     val aliases: String = "",
     val servingSize: String = "",
+    val measurementSize: String = "",
     val nutrition: ExtractedNutrition = ExtractedNutrition(),
     val extractionWarnings: List<String> = emptyList(),
     val rawJson: String? = null,

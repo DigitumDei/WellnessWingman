@@ -87,7 +87,7 @@ SQLDelight schemas and migrations live under:
 
 `shared/src/commonMain/sqldelight/com/wellnesswingman/db/`
 
-The database version is currently `7`. Migrations exist for versions:
+The database schema version is currently `9`. Migration files exist for prior schema versions:
 
 - `1.sqm`
 - `2.sqm`
@@ -96,6 +96,7 @@ The database version is currently `7`. Migrations exist for versions:
 - `5.sqm`
 - `6.sqm`
 - `7.sqm`
+- `8.sqm`
 
 ## Android Runtime Flow
 
