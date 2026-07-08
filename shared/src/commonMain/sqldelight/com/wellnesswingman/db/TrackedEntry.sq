@@ -37,6 +37,12 @@ getEntryByExternalId:
 SELECT * FROM TrackedEntry
 WHERE externalId = ?;
 
+-- Get entry by blob path (idempotent photo entry creation across recreation)
+getEntryByBlobPath:
+SELECT * FROM TrackedEntry
+WHERE blobPath = ?
+LIMIT 1;
+
 -- Get entries for a specific day (expects epoch milliseconds for start and end of day)
 getEntriesForDay:
 SELECT * FROM TrackedEntry

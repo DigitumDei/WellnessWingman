@@ -2,7 +2,6 @@ package com.wellnesswingman.ui.screens.photo
 
 import android.Manifest
 import android.content.pm.PackageManager
-import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
@@ -12,10 +11,10 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -26,13 +25,19 @@ import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.koin.getScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import com.wellnesswingman.domain.capture.CapturePhase
+import com.wellnesswingman.domain.capture.CaptureSource
 import com.wellnesswingman.domain.capture.PendingCapture
 import com.wellnesswingman.domain.capture.PendingCaptureStore
+import com.wellnesswingman.domain.capture.PhotoEntryProcessor
 import com.wellnesswingman.platform.decodeWithExifRotation
 import com.wellnesswingman.ui.components.ErrorMessage
 import com.wellnesswingman.ui.components.LoadingIndicator
 import com.wellnesswingman.ui.screens.detail.EntryDetailScreen
+import io.github.aakira.napier.Napier
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.koin.compose.koinInject
 import java.io.File
 
@@ -43,7 +48,18 @@ actual fun createPhotoReviewScreen(): Screen = PhotoReviewScreen()
 
 /**
  * Android-specific PhotoReviewScreen with actual camera and gallery support.
- * Includes process death recovery via PendingCaptureStore.
+ *
+ * The in-progress workflow (photo file path, notes, workflow phase, resulting
+ * entry id) is held in [rememberSaveable] state so it survives orientation
+ * changes (activity recreation) without relying on in-memory composition state
+ * or the ScreenModel scope. The pending-capture record is also persisted via
+ * [PendingCaptureStore] so the workflow can be reconciled after process death.
+ *
+ * Image bytes are re-read from the persisted file path on recreation rather
+ * than being retained only in composition. The heavy normalization, preview
+ * generation, and entry insertion run in the app-scoped [PhotoEntryProcessor]
+ * (which survives configuration changes) and are idempotent on the derived blob
+ * path, so rotation during processing never creates a duplicate entry.
  */
 private class PhotoReviewScreen : Screen {
     @Composable
@@ -51,35 +67,111 @@ private class PhotoReviewScreen : Screen {
         val navigator = LocalNavigator.currentOrThrow
         val context = LocalContext.current
         val viewModel = getScreenModel<PhotoReviewViewModel>()
-        val uiState by viewModel.uiState.collectAsState()
         val pendingCaptureStore: PendingCaptureStore = koinInject()
+        val photoEntryProcessor: PhotoEntryProcessor = koinInject()
         val coroutineScope = rememberCoroutineScope()
 
-        var capturedImageBytes by remember { mutableStateOf<ByteArray?>(null) }
-        var capturedImageUri by remember { mutableStateOf<Uri?>(null) }
+        // Lifecycle-safe workflow state: survives configuration changes via the
+        // saved state registry (Bundle). These are the durable source of truth.
+        // Non-null primitives/strings with sentinels are used so they are
+        // always saveable by the default state saver (nullable state is not
+        // restored reliably across all configurations).
+        var photoFilePath by rememberSaveable { mutableStateOf("") }
+        var notes by rememberSaveable { mutableStateOf("") }
+        var workflowPhase by rememberSaveable { mutableStateOf(WORKFLOW_IDLE) }
+        var resultEntryId by rememberSaveable { mutableStateOf(0L) }
+        var apiKeyMissing by rememberSaveable { mutableStateOf(false) }
+        var errorMessage by rememberSaveable { mutableStateOf("") }
+
+        // Recomputed (not persisted) — loaded from the persisted file path.
+        var imageBytes by remember { mutableStateOf<ByteArray?>(null) }
         var showPermissionDialog by remember { mutableStateOf(false) }
 
-        // Recovery: check for pending capture on composition (after process death)
-        LaunchedEffect(Unit) {
-            val pending = pendingCaptureStore.get()
-            if (pending != null && capturedImageBytes == null) {
-                val file = File(pending.photoFilePath)
-                if (file.exists()) {
+        // Commit the workflow: clear the recovery record, delete the now-redundant
+        // pending photo file (the normalized blob already lives under photos/), and
+        // navigate to the entry detail screen. Shared by the auto-navigate and the
+        // API-key-missing dialog paths so cleanup runs exactly once.
+        val commitAndNavigate: (Long) -> Unit = { entryId ->
+            coroutineScope.launch {
+                pendingCaptureStore.clear()
+                val pendingPath = photoFilePath
+                if (pendingPath.isNotEmpty()) {
+                    withContext(Dispatchers.IO) { runCatching { File(pendingPath).delete() } }
+                }
+                navigator.replace(EntryDetailScreen(entryId))
+            }
+        }
+
+        // Re-read image bytes whenever the persisted photo path or review phase
+        // changes. Re-keying on the phase handles the camera case, where the
+        // file is created before launch but only populated on return. Runs off
+        // the main thread to avoid blocking the UI.
+        LaunchedEffect(photoFilePath, workflowPhase) {
+            val path = photoFilePath
+            imageBytes = if (path.isNotEmpty() && workflowPhase == WORKFLOW_REVIEW) {
+                withContext(Dispatchers.IO) {
                     try {
-                        val bytes = file.readBytes()
-                        if (bytes.isNotEmpty()) {
-                            capturedImageBytes = bytes
-                            capturedImageUri = FileProvider.getUriForFile(
-                                context,
-                                "${context.packageName}.provider",
-                                file
-                            )
-                        }
-                    } catch (_: Exception) {
-                        // File corrupted or unreadable, clear the pending capture
+                        val file = File(path)
+                        if (file.exists()) file.readBytes().takeIf { it.isNotEmpty() } else null
+                    } catch (e: Exception) {
+                        Napier.w("Failed to read photo file $path", e)
+                        null
                     }
                 }
-                pendingCaptureStore.clear()
+            } else null
+        }
+
+        // Recovery on first composition (e.g. process death): if no saveable
+        // workflow state survived, restore from the persisted pending capture.
+        LaunchedEffect(Unit) {
+            if (photoFilePath.isEmpty()) {
+                val pending = pendingCaptureStore.get()
+                if (pending != null) {
+                    val file = File(pending.photoFilePath)
+                    if (file.exists()) {
+                        photoFilePath = pending.photoFilePath
+                        notes = pending.notes
+                        resultEntryId = pending.entryId ?: 0L
+                        workflowPhase = when (pending.phase) {
+                            CapturePhase.DONE -> if (pending.entryId != null) WORKFLOW_DONE else WORKFLOW_PROCESSING
+                            CapturePhase.PROCESSING -> WORKFLOW_PROCESSING
+                            CapturePhase.CAPTURED -> WORKFLOW_REVIEW
+                        }
+                    } else {
+                        // File gone; nothing to recover. Clear stale record.
+                        pendingCaptureStore.clear()
+                    }
+                }
+            }
+        }
+
+        // Processing: run the idempotent app-scoped processor. Re-entrant across
+        // recreation because the processor coalesces calls for the same file and
+        // returns the existing entry id if one was already persisted.
+        LaunchedEffect(workflowPhase, photoFilePath) {
+            if (workflowPhase == WORKFLOW_PROCESSING && resultEntryId == 0L && photoFilePath.isNotEmpty()) {
+                val path = photoFilePath
+                pendingCaptureStore.update { it?.copy(phase = CapturePhase.PROCESSING, notes = notes) }
+                try {
+                    val result = photoEntryProcessor.process(path, notes)
+                    resultEntryId = result.entryId
+                    apiKeyMissing = result.apiKeyMissing
+                    workflowPhase = WORKFLOW_DONE
+                    pendingCaptureStore.update { it?.copy(phase = CapturePhase.DONE, entryId = result.entryId) }
+                } catch (e: Exception) {
+                    Napier.e("Failed to create entry from photo", e)
+                    errorMessage = e.message ?: "Unknown error"
+                    workflowPhase = WORKFLOW_ERROR
+                }
+            }
+        }
+
+        // Done: navigate to the entry detail and clear the recovery record.
+        // Only auto-navigates when analysis could be queued; the API-key-missing
+        // case is gated by the dialog, which calls commitAndNavigate on dismiss.
+        LaunchedEffect(workflowPhase, resultEntryId) {
+            if (workflowPhase == WORKFLOW_DONE && resultEntryId != 0L && !apiKeyMissing) {
+                commitAndNavigate(resultEntryId)
             }
         }
 
@@ -96,30 +188,21 @@ private class PhotoReviewScreen : Screen {
         val cameraLauncher = rememberLauncherForActivityResult(
             ActivityResultContracts.TakePicture()
         ) { success ->
-            if (success && capturedImageUri != null) {
-                try {
-                    val bytes = context.contentResolver.openInputStream(capturedImageUri!!)?.use {
-                        it.readBytes()
+            if (success && photoFilePath.isNotEmpty()) {
+                // Photo was written to our pending file; advance to review.
+                workflowPhase = WORKFLOW_REVIEW
+            } else {
+                // Camera cancelled — clean up temp file and recovery state.
+                coroutineScope.launch {
+                    val path = photoFilePath
+                    if (path.isNotEmpty()) {
+                        withContext(Dispatchers.IO) { runCatching { File(path).delete() } }
                     }
-                    if (bytes != null) {
-                        capturedImageBytes = bytes
-                    }
-                } catch (e: Exception) {
-                    // Handle error
+                    pendingCaptureStore.clear()
+                    photoFilePath = ""
+                    notes = ""
+                    workflowPhase = WORKFLOW_IDLE
                 }
-            }
-            // Clear pending capture on camera return (success or cancel)
-            coroutineScope.launch {
-                if (!success) {
-                    // Camera was cancelled — delete the temp file and clear store
-                    capturedImageUri?.let { uri ->
-                        try {
-                            val path = uri.path
-                            if (path != null) File(path).delete()
-                        } catch (_: Exception) {}
-                    }
-                }
-                pendingCaptureStore.clear()
             }
         }
 
@@ -128,21 +211,40 @@ private class PhotoReviewScreen : Screen {
             ActivityResultContracts.GetContent()
         ) { uri ->
             if (uri != null) {
-                try {
-                    val bytes = context.contentResolver.openInputStream(uri)?.use {
-                        it.readBytes()
+                coroutineScope.launch {
+                    val pendingDir = pendingCaptureStore.getPendingPhotosDirectory()
+                    val timestamp = System.currentTimeMillis()
+                    val destPath = "$pendingDir/gallery_$timestamp.jpg"
+                    val copied = withContext(Dispatchers.IO) {
+                        try {
+                            val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                            if (bytes != null) {
+                                File(destPath).parentFile?.mkdirs()
+                                File(destPath).writeBytes(bytes)
+                                true
+                            } else {
+                                false
+                            }
+                        } catch (e: Exception) {
+                            Napier.e("Failed to copy gallery image", e)
+                            false
+                        }
                     }
-                    if (bytes != null) {
-                        capturedImageBytes = bytes
-                        capturedImageUri = uri
+                    if (copied) {
+                        photoFilePath = destPath
+                        workflowPhase = WORKFLOW_REVIEW
+                        pendingCaptureStore.save(
+                            PendingCapture(
+                                photoFilePath = destPath,
+                                capturedAtMillis = timestamp,
+                                source = CaptureSource.GALLERY
+                            )
+                        )
                     }
-                } catch (e: Exception) {
-                    // Handle error
                 }
             }
         }
 
-        // Handle camera button click
         val onCameraClick: () -> Unit = {
             val hasPermission = ContextCompat.checkSelfPermission(
                 context,
@@ -150,7 +252,7 @@ private class PhotoReviewScreen : Screen {
             ) == PackageManager.PERMISSION_GRANTED
 
             if (hasPermission) {
-                // Create temp file in persistent directory (survives process death)
+                // Create a temp file in the persistent pending directory.
                 val pendingDir = File(pendingCaptureStore.getPendingPhotosDirectory())
                 val photoFile = File(pendingDir, "photo_${System.currentTimeMillis()}.jpg")
                 val photoUri = FileProvider.getUriForFile(
@@ -158,14 +260,17 @@ private class PhotoReviewScreen : Screen {
                     "${context.packageName}.provider",
                     photoFile
                 )
-                capturedImageUri = photoUri
 
-                // Save pending capture before launching camera
+                // Persist recovery state and the photo path BEFORE launching the
+                // camera, so the workflow survives process death or recreation
+                // while the system camera is in the foreground.
+                photoFilePath = photoFile.absolutePath
                 coroutineScope.launch {
                     pendingCaptureStore.save(
                         PendingCapture(
                             photoFilePath = photoFile.absolutePath,
-                            capturedAtMillis = System.currentTimeMillis()
+                            capturedAtMillis = System.currentTimeMillis(),
+                            source = CaptureSource.CAMERA
                         )
                     )
                     cameraLauncher.launch(photoUri)
@@ -175,9 +280,51 @@ private class PhotoReviewScreen : Screen {
             }
         }
 
-        // Handle gallery button click
         val onGalleryClick = {
             galleryLauncher.launch("image/*")
+        }
+
+        val onRetake: () -> Unit = {
+            coroutineScope.launch {
+                val path = photoFilePath
+                if (path.isNotEmpty()) {
+                    withContext(Dispatchers.IO) { runCatching { File(path).delete() } }
+                }
+                pendingCaptureStore.clear()
+                photoFilePath = ""
+                notes = ""
+                resultEntryId = 0L
+                apiKeyMissing = false
+                errorMessage = ""
+                workflowPhase = WORKFLOW_IDLE
+            }
+        }
+
+        val onCancel: () -> Unit = {
+            coroutineScope.launch {
+                val path = photoFilePath
+                if (path.isNotEmpty()) {
+                    withContext(Dispatchers.IO) { runCatching { File(path).delete() } }
+                }
+                pendingCaptureStore.clear()
+                navigator.pop()
+            }
+        }
+
+        val onConfirm: (String) -> Unit = { confirmNotes ->
+            notes = confirmNotes
+            resultEntryId = 0L
+            apiKeyMissing = false
+            errorMessage = ""
+            workflowPhase = WORKFLOW_PROCESSING
+        }
+
+        val onRetry: () -> Unit = {
+            // Return to the review so the user can re-confirm. The processor is
+            // idempotent, so re-submitting is safe even if a partial entry exists.
+            resultEntryId = 0L
+            errorMessage = ""
+            workflowPhase = WORKFLOW_REVIEW
         }
 
         Scaffold(
@@ -185,69 +332,67 @@ private class PhotoReviewScreen : Screen {
                 TopAppBar(
                     title = { Text("Add Entry") },
                     navigationIcon = {
-                        IconButton(onClick = { navigator.pop() }) {
+                        IconButton(onClick = onCancel) {
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
                         }
                     }
                 )
             }
         ) { paddingValues ->
-            when (val state = uiState) {
-                is PhotoReviewUiState.Initial -> {
-                    if (capturedImageBytes != null) {
+            when (workflowPhase) {
+                WORKFLOW_IDLE -> {
+                    CaptureOptions(
+                        onCameraClick = onCameraClick,
+                        onGalleryClick = onGalleryClick,
+                        modifier = Modifier.padding(paddingValues)
+                    )
+                }
+                WORKFLOW_REVIEW -> {
+                    val bytes = imageBytes
+                    if (bytes != null) {
                         PhotoReview(
-                            imageBytes = capturedImageBytes!!,
+                            imageBytes = bytes,
+                            notes = notes,
+                            onNotesChange = { notes = it },
                             viewModel = viewModel,
-                            onConfirm = { notes ->
-                                viewModel.createEntryFromPhoto(
-                                    photoBytes = capturedImageBytes!!,
-                                    userNotes = notes
-                                )
-                            },
-                            onRetake = {
-                                capturedImageBytes = null
-                                capturedImageUri = null
-                            },
-                            onCancel = { navigator.pop() },
+                            onConfirm = onConfirm,
+                            onRetake = onRetake,
+                            onCancel = onCancel,
                             modifier = Modifier.padding(paddingValues)
                         )
                     } else {
-                        CaptureOptions(
-                            onCameraClick = onCameraClick,
-                            onGalleryClick = onGalleryClick,
-                            modifier = Modifier.padding(paddingValues)
-                        )
+                        LoadingIndicator(Modifier.padding(paddingValues))
                     }
                 }
-                is PhotoReviewUiState.Processing -> {
+                WORKFLOW_PROCESSING -> {
                     LoadingIndicator(Modifier.padding(paddingValues))
                 }
-                is PhotoReviewUiState.Success -> {
-                    if (state.apiKeyMissing) {
-                        AlertDialog(
-                            onDismissRequest = {
-                                navigator.replace(EntryDetailScreen(state.entryId))
-                            },
-                            title = { Text("API Key Required") },
-                            text = { Text("No API key is configured. Your entry was saved but cannot be analyzed. Please add an API key in Settings to enable analysis.") },
-                            confirmButton = {
-                                TextButton(onClick = {
-                                    navigator.replace(EntryDetailScreen(state.entryId))
-                                }) {
-                                    Text("OK")
+                WORKFLOW_DONE -> {
+                    if (resultEntryId != 0L) {
+                        if (apiKeyMissing) {
+                            AlertDialog(
+                                onDismissRequest = { commitAndNavigate(resultEntryId) },
+                                title = { Text("API Key Required") },
+                                text = { Text("No API key is configured. Your entry was saved but cannot be analyzed. Please add an API key in Settings to enable analysis.") },
+                                confirmButton = {
+                                    TextButton(onClick = { commitAndNavigate(resultEntryId) }) {
+                                        Text("OK")
+                                    }
                                 }
-                            }
-                        )
-                    } else {
-                        LaunchedEffect(state.entryId) {
-                            navigator.replace(EntryDetailScreen(state.entryId))
+                            )
+                        } else {
+                            // Navigation handled by the done LaunchedEffect; show
+                            // a loading indicator while the transition runs.
+                            LoadingIndicator(Modifier.padding(paddingValues))
                         }
+                    } else {
+                        LoadingIndicator(Modifier.padding(paddingValues))
                     }
                 }
-                is PhotoReviewUiState.Error -> {
+                WORKFLOW_ERROR -> {
                     ErrorMessage(
-                        message = state.message,
-                        onRetry = { viewModel.retry() },
+                        message = errorMessage.ifEmpty { "Unknown error" },
+                        onRetry = onRetry,
                         modifier = Modifier.padding(paddingValues)
                     )
                 }
@@ -275,6 +420,12 @@ private class PhotoReviewScreen : Screen {
         }
     }
 }
+
+private const val WORKFLOW_IDLE = "idle"
+private const val WORKFLOW_REVIEW = "review"
+private const val WORKFLOW_PROCESSING = "processing"
+private const val WORKFLOW_DONE = "done"
+private const val WORKFLOW_ERROR = "error"
 
 @Composable
 private fun CaptureOptions(
@@ -335,28 +486,24 @@ private fun CaptureOptions(
 @Composable
 private fun PhotoReview(
     imageBytes: ByteArray,
+    notes: String,
+    onNotesChange: (String) -> Unit,
     viewModel: PhotoReviewViewModel,
     onConfirm: (String) -> Unit,
     onRetake: () -> Unit,
     onCancel: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var notes by remember { mutableStateOf("") }
-
     val context = LocalContext.current
     val isRecording by viewModel.isRecording.collectAsState()
     val recordingDuration by viewModel.recordingDuration.collectAsState()
     val isTranscribing by viewModel.isTranscribing.collectAsState()
     val transcriptionError by viewModel.transcriptionError.collectAsState()
 
-    // Append transcriptions directly into the notes field
+    // Append transcriptions into the hoisted notes field.
     LaunchedEffect(Unit) {
         viewModel.newTranscription.collect { transcription ->
-            notes = if (notes.isBlank()) {
-                transcription
-            } else {
-                "$notes\n$transcription"
-            }
+            onNotesChange(if (notes.isBlank()) transcription else "$notes\n$transcription")
         }
     }
 
@@ -403,7 +550,7 @@ private fun PhotoReview(
             // Notes field
             OutlinedTextField(
                 value = notes,
-                onValueChange = { notes = it },
+                onValueChange = onNotesChange,
                 label = { Text("Notes (optional)") },
                 modifier = Modifier.fillMaxWidth(),
                 maxLines = 3
@@ -418,9 +565,9 @@ private fun PhotoReview(
                         viewModel.toggleRecording()
                     } else {
                         if (ContextCompat.checkSelfPermission(
-                            context,
-                            Manifest.permission.RECORD_AUDIO
-                        ) == PackageManager.PERMISSION_GRANTED) {
+                                context,
+                                Manifest.permission.RECORD_AUDIO
+                            ) == PackageManager.PERMISSION_GRANTED) {
                             viewModel.toggleRecording()
                         } else {
                             micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
@@ -502,4 +649,3 @@ private fun formatDuration(millis: Long): String {
     val seconds = millis / 1000
     return String.format("%d:%02d", seconds / 60, seconds % 60)
 }
-

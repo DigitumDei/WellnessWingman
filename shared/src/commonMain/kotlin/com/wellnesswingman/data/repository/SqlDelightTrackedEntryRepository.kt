@@ -53,6 +53,11 @@ class SqlDelightTrackedEntryRepository(
             queries.getEntryByExternalId(externalId).executeAsOneOrNull()?.toTrackedEntry()
         }
 
+    override suspend fun getEntryByBlobPath(blobPath: String): TrackedEntry? =
+        withContext(Dispatchers.IO) {
+            queries.getEntryByBlobPath(blobPath).executeAsOneOrNull()?.toTrackedEntry()
+        }
+
     override suspend fun getEntriesForDay(
         startMillis: Long,
         endMillis: Long

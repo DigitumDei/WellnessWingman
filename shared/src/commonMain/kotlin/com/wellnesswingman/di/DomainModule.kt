@@ -11,6 +11,7 @@ import com.wellnesswingman.domain.analysis.NutritionLabelAnalyzer
 import com.wellnesswingman.domain.analysis.NutritionLabelAnalyzing
 import com.wellnesswingman.domain.analysis.StaleEntryRecoveryService
 import com.wellnesswingman.domain.capture.PendingCaptureStore
+import com.wellnesswingman.domain.capture.PhotoEntryProcessor
 import com.wellnesswingman.domain.events.DefaultStatusChangeNotifier
 import com.wellnesswingman.domain.events.StatusChangeNotifier
 import com.wellnesswingman.domain.llm.LlmClientFactory
@@ -35,6 +36,9 @@ val domainModule = module {
 
     // Capture recovery
     singleOf(::PendingCaptureStore)
+
+    // Idempotent photo entry processing (app-scoped; survives configuration changes)
+    singleOf(::PhotoEntryProcessor)
 
     // OAuth
     singleOf(::PendingOAuthResultStore)
