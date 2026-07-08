@@ -1,6 +1,7 @@
 package com.wellnesswingman.domain.capture
 
 import com.wellnesswingman.data.model.EntryType
+import com.wellnesswingman.data.model.ProcessingStatus
 import com.wellnesswingman.data.model.TrackedEntry
 import com.wellnesswingman.data.repository.TrackedEntryRepository
 import com.wellnesswingman.domain.analysis.BackgroundAnalysisService
@@ -8,6 +9,7 @@ import com.wellnesswingman.domain.llm.LlmClientFactory
 import com.wellnesswingman.platform.FileSystemOperations
 import com.wellnesswingman.platform.PhotoResizer
 import io.github.aakira.napier.Napier
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -62,9 +64,17 @@ class PhotoEntryProcessor(
         val blobPath = deriveBlobPath(photoFilePath)
 
         // Fast path: an entry for this blob already exists (e.g. resumed after
-        // process death where the in-flight deferred is gone).
-        trackedEntryRepository.getEntryByBlobPath(blobPath)?.let {
-            return PhotoEntryProcessorResult(it.entryId, apiKeyMissing = !llmClientFactory.hasCurrentApiKey())
+        // process death where the in-flight deferred is gone). Re-queue analysis
+        // when the entry is still PENDING or FAILED and an API key is available,
+        // so we don't leave orphaned entries that were created before analysis
+        // could be queued but never assigned.
+        trackedEntryRepository.getEntryByBlobPath(blobPath)?.let { entry ->
+            val apiKeyMissing = !llmClientFactory.hasCurrentApiKey()
+            if (!apiKeyMissing && (entry.processingStatus == ProcessingStatus.PENDING
+                        || entry.processingStatus == ProcessingStatus.FAILED)) {
+                backgroundAnalysisService.queueEntry(entry.entryId, userNotes)
+            }
+            return PhotoEntryProcessorResult(entry.entryId, apiKeyMissing)
         }
 
         // Coalesce concurrent/re-entrant calls for the same file.
@@ -88,20 +98,25 @@ class PhotoEntryProcessor(
         try {
             // Re-check after acquiring the in-flight slot, in case a parallel
             // call completed an insert between the fast path and the lock.
-            trackedEntryRepository.getEntryByBlobPath(blobPath)?.let {
+            // Also re-queue analysis for stale entries.
+            trackedEntryRepository.getEntryByBlobPath(blobPath)?.let { entry ->
+                val apiKeyMissing = !llmClientFactory.hasCurrentApiKey()
+                if (!apiKeyMissing && (entry.processingStatus == ProcessingStatus.PENDING
+                            || entry.processingStatus == ProcessingStatus.FAILED)) {
+                    backgroundAnalysisService.queueEntry(entry.entryId, userNotes)
+                }
                 deferred.complete(
-                    PhotoEntryProcessorResult(it.entryId, apiKeyMissing = !llmClientFactory.hasCurrentApiKey())
+                    PhotoEntryProcessorResult(entry.entryId, apiKeyMissing)
                 )
                 return
             }
 
             val bytes = fileSystem.readBytes(photoFilePath)
-            // Normalize to JPEG and bake in EXIF orientation without resizing.
-            // Using max dimensions far beyond any real image avoids downscaling.
+            // Normalize to JPEG and bake in EXIF orientation.
             val jpegBytes = photoResizer.resize(
                 photoBytes = bytes,
-                maxWidth = 16_384,
-                maxHeight = 16_384,
+                maxWidth = 4096,
+                maxHeight = 4096,
                 quality = 95
             )
 
@@ -124,6 +139,10 @@ class PhotoEntryProcessor(
             }
             deferred.complete(PhotoEntryProcessorResult(entryId, apiKeyMissing))
         } catch (e: Exception) {
+            if (e is CancellationException) {
+                deferred.cancel(e)
+                throw e
+            }
             Napier.e("Failed to process photo entry from $photoFilePath", e)
             deferred.completeExceptionally(e)
         } finally {
@@ -144,6 +163,7 @@ class PhotoEntryProcessor(
             fileSystem.writeBytes(previewPath, previewBytes)
             Napier.d("Generated preview at $previewPath (${previewBytes.size} bytes)")
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             Napier.w("Failed to generate preview for $blobPath", e)
         }
     }

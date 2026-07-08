@@ -18,5 +18,6 @@ data class PendingCapture(
     val notes: String = "",
     val phase: CapturePhase = CapturePhase.CAPTURED,
     val entryId: Long? = null,
-    val source: CaptureSource = CaptureSource.CAMERA
+    val source: CaptureSource = CaptureSource.CAMERA,
+    val apiKeyMissing: Boolean = false
 )

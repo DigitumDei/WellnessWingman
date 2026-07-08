@@ -68,6 +68,7 @@ class WeeklySummaryServiceTest {
         override fun observeAllEntries(): Flow<List<TrackedEntry>> = emptyFlow()
         override suspend fun getEntryById(id: Long) = entriesToReturn.find { it.entryId == id }
         override suspend fun getEntryByExternalId(externalId: String) = null
+        override suspend fun getEntryByBlobPath(blobPath: String): TrackedEntry? = null
         override fun observeEntriesForDay(date: LocalDate): Flow<List<TrackedEntry>> = emptyFlow()
         override suspend fun getEntriesForWeek(startMillis: Long, endMillis: Long) = entriesToReturn
         override suspend fun getEntriesForMonth(startMillis: Long, endMillis: Long) = entriesToReturn

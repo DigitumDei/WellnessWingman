@@ -26,7 +26,7 @@ interface TrackedEntryRepository {
      * Default returns null so test fakes that do not exercise this path keep
      * compiling without an override.
      */
-    suspend fun getEntryByBlobPath(blobPath: String): TrackedEntry? = null
+    suspend fun getEntryByBlobPath(blobPath: String): TrackedEntry?
     suspend fun getEntriesForDay(startMillis: Long, endMillis: Long): List<TrackedEntry>
     suspend fun getEntriesForDay(date: LocalDate): List<TrackedEntry>
     fun observeEntriesForDay(date: LocalDate): Flow<List<TrackedEntry>>

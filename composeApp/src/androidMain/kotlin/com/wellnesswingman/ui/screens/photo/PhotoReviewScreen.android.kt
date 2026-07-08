@@ -35,6 +35,7 @@ import com.wellnesswingman.ui.components.ErrorMessage
 import com.wellnesswingman.ui.components.LoadingIndicator
 import com.wellnesswingman.ui.screens.detail.EntryDetailScreen
 import io.github.aakira.napier.Napier
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -90,8 +91,12 @@ private class PhotoReviewScreen : Screen {
         // Commit the workflow: clear the recovery record, delete the now-redundant
         // pending photo file (the normalized blob already lives under photos/), and
         // navigate to the entry detail screen. Shared by the auto-navigate and the
-        // API-key-missing dialog paths so cleanup runs exactly once.
+        // API-key-missing dialog paths so cleanup runs exactly once. Guarded
+        // against multiple triggers to prevent duplicate navigation actions.
+        var isCommitting by remember { mutableStateOf(false) }
         val commitAndNavigate: (Long) -> Unit = { entryId ->
+            if (isCommitting) return@Unit
+            isCommitting = true
             coroutineScope.launch {
                 pendingCaptureStore.clear()
                 val pendingPath = photoFilePath
@@ -114,6 +119,7 @@ private class PhotoReviewScreen : Screen {
                         val file = File(path)
                         if (file.exists()) file.readBytes().takeIf { it.isNotEmpty() } else null
                     } catch (e: Exception) {
+                        if (e is CancellationException) throw e
                         Napier.w("Failed to read photo file $path", e)
                         null
                     }
@@ -132,6 +138,7 @@ private class PhotoReviewScreen : Screen {
                         photoFilePath = pending.photoFilePath
                         notes = pending.notes
                         resultEntryId = pending.entryId ?: 0L
+                        apiKeyMissing = pending.apiKeyMissing
                         workflowPhase = when (pending.phase) {
                             CapturePhase.DONE -> if (pending.entryId != null) WORKFLOW_DONE else WORKFLOW_PROCESSING
                             CapturePhase.PROCESSING -> WORKFLOW_PROCESSING
@@ -157,8 +164,9 @@ private class PhotoReviewScreen : Screen {
                     resultEntryId = result.entryId
                     apiKeyMissing = result.apiKeyMissing
                     workflowPhase = WORKFLOW_DONE
-                    pendingCaptureStore.update { it?.copy(phase = CapturePhase.DONE, entryId = result.entryId) }
+                    pendingCaptureStore.update { it?.copy(phase = CapturePhase.DONE, entryId = result.entryId, apiKeyMissing = result.apiKeyMissing) }
                 } catch (e: Exception) {
+                    if (e is CancellationException) throw e
                     Napier.e("Failed to create entry from photo", e)
                     errorMessage = e.message ?: "Unknown error"
                     workflowPhase = WORKFLOW_ERROR
@@ -217,11 +225,15 @@ private class PhotoReviewScreen : Screen {
                     val destPath = "$pendingDir/gallery_$timestamp.jpg"
                     val copied = withContext(Dispatchers.IO) {
                         try {
-                            val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                            if (bytes != null) {
+                            val inputStream = context.contentResolver.openInputStream(uri)
+                            if (inputStream != null) {
                                 File(destPath).parentFile?.mkdirs()
-                                File(destPath).writeBytes(bytes)
-                                true
+                                inputStream.use { input ->
+                                    File(destPath).outputStream().use { output ->
+                                        input.copyTo(output)
+                                    }
+                                }
+                                File(destPath).length() > 0L
                             } else {
                                 false
                             }
@@ -500,10 +512,13 @@ private fun PhotoReview(
     val isTranscribing by viewModel.isTranscribing.collectAsState()
     val transcriptionError by viewModel.transcriptionError.collectAsState()
 
-    // Append transcriptions into the hoisted notes field.
+    // Append transcriptions into the hoisted notes field. Capture the latest
+    // notes value via rememberUpdatedState so the collector always appends
+    // to the current text rather than the stale snapshot captured at composition.
+    val currentNotes by rememberUpdatedState(notes)
     LaunchedEffect(Unit) {
         viewModel.newTranscription.collect { transcription ->
-            onNotesChange(if (notes.isBlank()) transcription else "$notes\n$transcription")
+            onNotesChange(if (currentNotes.isBlank()) transcription else "$currentNotes\n$transcription")
         }
     }
 

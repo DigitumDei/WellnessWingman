@@ -9,6 +9,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 class PendingCaptureStoreTest {
 
@@ -109,6 +110,20 @@ class PendingCaptureStoreTest {
         store.clear()
 
         assertNull(store.get())
+    }
+
+    @Test
+    fun `apiKeyMissing survives round-trip`() = runTest {
+        val capture = PendingCapture(
+            photoFilePath = "/app/data/pending_photos/photo_key.jpg",
+            capturedAtMillis = 1000L,
+            apiKeyMissing = true
+        )
+        store.save(capture)
+
+        val recovered = store.get()
+        assertNotNull(recovered)
+        assertTrue(recovered.apiKeyMissing)
     }
 
     @Test

@@ -180,6 +180,96 @@ class PhotoEntryProcessorTest {
         )
     }
 
+    @Test
+    fun `fast path re-queues analysis when existing entry is still PENDING`() = runTest {
+        val pendingPath = "/app/data/pending_photos/photo_9.jpg"
+        files[pendingPath] = "image-bytes".toByteArray()
+
+        // Pre-insert an entry with PENDING status (simulates crash between
+        // insertEntry and queueEntry).
+        val blobPath = processor.deriveBlobPath(pendingPath)
+        val orphaned = TrackedEntry(
+            entryId = 1L,
+            entryType = EntryType.UNKNOWN,
+            capturedAt = Clock.System.now(),
+            blobPath = blobPath,
+            processingStatus = ProcessingStatus.PENDING
+        )
+        repository.all += orphaned
+
+        val result = processor.process(pendingPath, "notes")
+
+        assertEquals(1L, result.entryId)
+        assertFalse(result.apiKeyMissing)
+        verify { backgroundAnalysisService.queueEntry(1L, "notes") }
+    }
+
+    @Test
+    fun `fast path re-queues analysis when existing entry is FAILED`() = runTest {
+        val pendingPath = "/app/data/pending_photos/photo_10.jpg"
+        files[pendingPath] = "image-bytes".toByteArray()
+
+        val blobPath = processor.deriveBlobPath(pendingPath)
+        val orphaned = TrackedEntry(
+            entryId = 2L,
+            entryType = EntryType.UNKNOWN,
+            capturedAt = Clock.System.now(),
+            blobPath = blobPath,
+            processingStatus = ProcessingStatus.FAILED
+        )
+        repository.all += orphaned
+
+        val result = processor.process(pendingPath, "notes")
+
+        assertEquals(2L, result.entryId)
+        verify { backgroundAnalysisService.queueEntry(2L, "notes") }
+    }
+
+    @Test
+    fun `fast path does not re-queue analysis when entry is COMPLETED`() = runTest {
+        val pendingPath = "/app/data/pending_photos/photo_11.jpg"
+        files[pendingPath] = "image-bytes".toByteArray()
+
+        val blobPath = processor.deriveBlobPath(pendingPath)
+        val completed = TrackedEntry(
+            entryId = 3L,
+            entryType = EntryType.UNKNOWN,
+            capturedAt = Clock.System.now(),
+            blobPath = blobPath,
+            processingStatus = ProcessingStatus.COMPLETED
+        )
+        repository.all += completed
+
+        val result = processor.process(pendingPath, "notes")
+
+        assertEquals(3L, result.entryId)
+        verify(exactly = 0) { backgroundAnalysisService.queueEntry(any(), any()) }
+    }
+
+    @Test
+    fun `fast path does not re-queue when api key is missing regardless of status`() = runTest {
+        every { llmClientFactory.hasCurrentApiKey() } returns false
+
+        val pendingPath = "/app/data/pending_photos/photo_12.jpg"
+        files[pendingPath] = "image-bytes".toByteArray()
+
+        val blobPath = processor.deriveBlobPath(pendingPath)
+        val orphaned = TrackedEntry(
+            entryId = 4L,
+            entryType = EntryType.UNKNOWN,
+            capturedAt = Clock.System.now(),
+            blobPath = blobPath,
+            processingStatus = ProcessingStatus.PENDING
+        )
+        repository.all += orphaned
+
+        val result = processor.process(pendingPath, "notes")
+
+        assertEquals(4L, result.entryId)
+        assertTrue(result.apiKeyMissing)
+        verify(exactly = 0) { backgroundAnalysisService.queueEntry(any(), any()) }
+    }
+
     private class InMemoryTrackedEntryRepository : TrackedEntryRepository {
         val all = mutableListOf<TrackedEntry>()
         private var nextId = 1L

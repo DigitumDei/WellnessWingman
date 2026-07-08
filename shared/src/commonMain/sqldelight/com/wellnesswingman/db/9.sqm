@@ -1,0 +1,4 @@
+-- Migration from version 9 to version 10
+-- Adds index on TrackedEntry.blobPath for idempotent photo entry lookup
+
+CREATE INDEX IF NOT EXISTS idx_tracked_entry_blob_path ON TrackedEntry(blobPath);

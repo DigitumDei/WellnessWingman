@@ -19,6 +19,7 @@ CREATE INDEX idx_tracked_entry_captured_at ON TrackedEntry(capturedAt);
 
 CREATE INDEX idx_tracked_entry_entry_type ON TrackedEntry(entryType);
 CREATE INDEX idx_tracked_entry_processing_status ON TrackedEntry(processingStatus);
+CREATE INDEX idx_tracked_entry_blob_path ON TrackedEntry(blobPath);
 
 -- Queries
 
