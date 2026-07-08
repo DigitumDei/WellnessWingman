@@ -95,15 +95,16 @@ private class PhotoReviewScreen : Screen {
         // against multiple triggers to prevent duplicate navigation actions.
         var isCommitting by remember { mutableStateOf(false) }
         val commitAndNavigate: (Long) -> Unit = { entryId ->
-            if (isCommitting) return@Unit
-            isCommitting = true
-            coroutineScope.launch {
+            if (!isCommitting) {
+                isCommitting = true
+                coroutineScope.launch {
                 pendingCaptureStore.clear()
                 val pendingPath = photoFilePath
                 if (pendingPath.isNotEmpty()) {
                     withContext(Dispatchers.IO) { runCatching { File(pendingPath).delete() } }
                 }
                 navigator.replace(EntryDetailScreen(entryId))
+                }
             }
         }
 
