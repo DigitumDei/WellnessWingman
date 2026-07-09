@@ -50,7 +50,7 @@ class PhotoEntryProcessor(
     private val backgroundAnalysisService: BackgroundAnalysisService,
     private val llmClientFactory: LlmClientFactory
 ) {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val inFlight = mutableMapOf<String, CompletableDeferred<PhotoEntryProcessorResult>>()
     private val inFlightMutex = Mutex()
 
@@ -175,7 +175,7 @@ class PhotoEntryProcessor(
      */
     fun deriveBlobPath(photoFilePath: String): String {
         val photosDir = "${fileSystem.getAppDataDirectory()}/photos"
-        val name = photoFilePath.substringAfterLast('/').substringBeforeLast('.')
+        val name = photoFilePath.replace('\\', '/').substringAfterLast('/').substringBeforeLast('.')
         return "$photosDir/$name.jpg"
     }
 

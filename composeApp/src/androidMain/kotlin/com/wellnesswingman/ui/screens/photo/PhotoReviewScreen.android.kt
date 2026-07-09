@@ -239,6 +239,7 @@ private class PhotoReviewScreen : Screen {
                                 false
                             }
                         } catch (e: Exception) {
+                            if (e is CancellationException) throw e
                             Napier.e("Failed to copy gallery image", e)
                             false
                         }
