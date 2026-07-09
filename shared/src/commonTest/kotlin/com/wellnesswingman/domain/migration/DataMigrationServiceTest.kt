@@ -49,6 +49,7 @@ private class FakeTrackedEntryRepository : TrackedEntryRepository {
     override fun observeAllEntries(): Flow<List<TrackedEntry>> = flowOf(entries)
     override suspend fun getEntryById(id: Long): TrackedEntry? = entries.find { it.entryId == id }
     override suspend fun getEntryByExternalId(externalId: String): TrackedEntry? = entries.find { it.externalId == externalId }
+    override suspend fun getEntryByBlobPath(blobPath: String): TrackedEntry? = null
     override suspend fun getEntriesForDay(startMillis: Long, endMillis: Long): List<TrackedEntry> = emptyList()
     override suspend fun getEntriesForDay(date: LocalDate): List<TrackedEntry> = emptyList()
     override fun observeEntriesForDay(date: LocalDate): Flow<List<TrackedEntry>> = flowOf(emptyList())

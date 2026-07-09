@@ -16,6 +16,17 @@ interface TrackedEntryRepository {
     fun observeAllEntries(): Flow<List<TrackedEntry>>
     suspend fun getEntryById(id: Long): TrackedEntry?
     suspend fun getEntryByExternalId(externalId: String): TrackedEntry?
+
+    /**
+     * Returns the entry whose blob path matches, or null. Used to make photo
+     * entry creation idempotent across configuration changes and process death:
+     * the derived blob path is deterministic, so a re-entrant or resumed
+     * creation finds the already-persisted entry instead of duplicating it.
+     *
+     * Default returns null so test fakes that do not exercise this path keep
+     * compiling without an override.
+     */
+    suspend fun getEntryByBlobPath(blobPath: String): TrackedEntry?
     suspend fun getEntriesForDay(startMillis: Long, endMillis: Long): List<TrackedEntry>
     suspend fun getEntriesForDay(date: LocalDate): List<TrackedEntry>
     fun observeEntriesForDay(date: LocalDate): Flow<List<TrackedEntry>>

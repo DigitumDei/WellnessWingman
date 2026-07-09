@@ -70,6 +70,26 @@ class SqlDelightTrackedEntryRepositoryTest {
     }
 
     @Test
+    fun `getEntryByBlobPath returns the entry with a matching blob path`() = runTest {
+        val entry = TrackedEntry(
+            entryType = EntryType.UNKNOWN,
+            capturedAt = Clock.System.now(),
+            blobPath = "/app/data/photos/photo_123.jpg"
+        )
+        repository.insertEntry(entry)
+
+        val retrieved = repository.getEntryByBlobPath("/app/data/photos/photo_123.jpg")
+
+        assertNotNull(retrieved)
+        assertEquals(entry.blobPath, retrieved.blobPath)
+    }
+
+    @Test
+    fun `getEntryByBlobPath returns null when no entry matches`() = runTest {
+        assertNull(repository.getEntryByBlobPath("/app/data/photos/missing.jpg"))
+    }
+
+    @Test
     fun `getAllEntries returns all entries sorted by capture time desc`() = runTest {
         val now = Clock.System.now()
         val entry1 = TrackedEntry(

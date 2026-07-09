@@ -480,6 +480,7 @@ class ToolRegistryTest {
         override fun observeAllEntries(): Flow<List<TrackedEntry>> = emptyFlow()
         override suspend fun getEntryById(id: Long): TrackedEntry? = entries.find { it.entryId == id }
         override suspend fun getEntryByExternalId(externalId: String): TrackedEntry? = null
+        override suspend fun getEntryByBlobPath(blobPath: String): TrackedEntry? = null
         override suspend fun getEntriesForDay(startMillis: Long, endMillis: Long): List<TrackedEntry> = entries
         override suspend fun getEntriesForDay(date: LocalDate): List<TrackedEntry> = entries
         override fun observeEntriesForDay(date: LocalDate): Flow<List<TrackedEntry>> = emptyFlow()

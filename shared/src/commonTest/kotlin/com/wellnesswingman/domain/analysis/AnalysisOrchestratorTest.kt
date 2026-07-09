@@ -248,6 +248,7 @@ class AnalysisOrchestratorTest {
         override fun observeAllEntries(): Flow<List<TrackedEntry>> = emptyFlow()
         override suspend fun getEntryById(id: Long): TrackedEntry? = null
         override suspend fun getEntryByExternalId(externalId: String): TrackedEntry? = null
+        override suspend fun getEntryByBlobPath(blobPath: String): TrackedEntry? = null
         override suspend fun getEntriesForDay(startMillis: Long, endMillis: Long): List<TrackedEntry> = emptyList()
         override suspend fun getEntriesForDay(date: LocalDate): List<TrackedEntry> = emptyList()
         override fun observeEntriesForDay(date: LocalDate): Flow<List<TrackedEntry>> = emptyFlow()
