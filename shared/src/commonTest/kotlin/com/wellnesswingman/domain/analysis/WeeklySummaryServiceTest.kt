@@ -255,6 +255,7 @@ class WeeklySummaryServiceTest {
             ) = LlmAnalysisResult(response, LlmDiagnostics())
         }
         val factory = mockk<LlmClientFactory>()
+        every { factory.hasCurrentApiKey() } returns hasKey
         if (hasKey) every { factory.createForCurrentProvider() } returns fakeLlmClient
         return factory
     }
@@ -298,6 +299,7 @@ class WeeklySummaryServiceTest {
             }
         }
         val factory = mockk<LlmClientFactory>()
+        every { factory.hasCurrentApiKey() } returns true
         every { factory.createForCurrentProvider() } returns fakeLlmClient
         return factory
     }
@@ -420,6 +422,7 @@ class WeeklySummaryServiceTest {
             }
         }
         val factory = mockk<LlmClientFactory>()
+        every { factory.hasCurrentApiKey() } returns true
         every { factory.createForCurrentProvider() } returns fakeLlmClient
 
         val weekStart = LocalDate(2025, 3, 1)
