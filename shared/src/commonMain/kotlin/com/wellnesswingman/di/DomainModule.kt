@@ -4,6 +4,7 @@ import com.wellnesswingman.domain.analysis.AnalysisOrchestrator
 import com.wellnesswingman.domain.analysis.BackgroundAnalysisService
 import com.wellnesswingman.domain.analysis.DailySummaryService
 import com.wellnesswingman.domain.analysis.WeeklySummaryService
+import com.wellnesswingman.domain.chat.HealthChatService
 import com.wellnesswingman.domain.analysis.DailyTotalsCalculator
 import com.wellnesswingman.domain.analysis.DefaultBackgroundAnalysisService
 import com.wellnesswingman.domain.analysis.DefaultStaleEntryRecoveryService
@@ -136,4 +137,13 @@ val domainModule = module {
 
     // Media
     single { com.wellnesswingman.domain.media.ImageRetentionService(get(), get(), get(), get()) }
+
+    // Health Chat
+    single {
+        HealthChatService(
+            healthChatRepository = get(),
+            llmClientFactory = get(),
+            toolRegistry = get()
+        )
+    }
 }
