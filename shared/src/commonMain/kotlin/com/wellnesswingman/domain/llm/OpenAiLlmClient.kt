@@ -6,16 +6,20 @@ import com.aallam.openai.api.chat.ChatMessage
 import com.aallam.openai.api.chat.ToolCall as OpenAiToolCall
 import com.aallam.openai.api.chat.ChatResponseFormat
 import com.aallam.openai.api.chat.ChatRole
+import com.aallam.openai.api.chat.FunctionCall
 import com.aallam.openai.api.chat.ImagePart
 import com.aallam.openai.api.chat.Parameters
 import com.aallam.openai.api.chat.TextPart
 import com.aallam.openai.api.chat.ToolChoice
+import com.aallam.openai.api.chat.ToolId
 import com.aallam.openai.api.chat.chatCompletionRequest
 import com.aallam.openai.api.file.FileSource
 import com.aallam.openai.api.model.ModelId
 import com.aallam.openai.client.LoggingConfig
 import com.aallam.openai.client.OpenAI
 import com.aallam.openai.api.http.Timeout
+import com.wellnesswingman.data.model.llm.LlmChatMessage
+import com.wellnesswingman.data.model.llm.LlmChatRole
 import com.wellnesswingman.data.model.llm.ToolCall
 import com.wellnesswingman.data.model.llm.ToolDefinition
 import kotlinx.serialization.json.Json
@@ -119,6 +123,23 @@ class OpenAiLlmClient(
                     content = prompt
                 )
             ),
+            jsonSchema = jsonSchema,
+            tools = tools,
+            toolExecutor = toolExecutor,
+            startTime = Clock.System.now()
+        )
+    }
+
+    override suspend fun generateChatResponse(
+        messages: List<LlmChatMessage>,
+        systemInstruction: String?,
+        jsonSchema: String?,
+        tools: List<ToolDefinition>,
+        toolExecutor: ToolExecutor?
+    ): LlmAnalysisResult {
+        val openAiMessages = toOpenAiMessages(messages, systemInstruction)
+        return runConversation(
+            messages = openAiMessages,
             jsonSchema = jsonSchema,
             tools = tools,
             toolExecutor = toolExecutor,
@@ -275,5 +296,57 @@ class OpenAiLlmClient(
             put("content", toolResult.content)
         }
         return json.encodeToString(JsonElement.serializer(), payload)
+    }
+
+    private fun toOpenAiMessages(
+        messages: List<LlmChatMessage>,
+        systemInstruction: String?
+    ): MutableList<ChatMessage> {
+        val result = mutableListOf<ChatMessage>()
+        if (systemInstruction != null) {
+            result.add(
+                ChatMessage(
+                    role = ChatRole.System,
+                    content = systemInstruction
+                )
+            )
+        }
+        for (msg in messages) {
+            when (msg.role) {
+                LlmChatRole.USER -> result.add(
+                    ChatMessage(role = ChatRole.User, content = msg.content ?: "")
+                )
+                LlmChatRole.ASSISTANT -> {
+                    val openAiToolCalls = msg.toolCalls?.map { tc ->
+                        OpenAiToolCall.Function(
+                            id = ToolId(tc.id ?: ""),
+                            function = FunctionCall(
+                                nameOrNull = tc.name,
+                                argumentsOrNull = json.encodeToString(JsonElement.serializer(), tc.arguments)
+                            )
+                        )
+                    }
+                    result.add(
+                        ChatMessage(
+                            role = ChatRole.Assistant,
+                            content = msg.content,
+                            toolCalls = openAiToolCalls
+                        )
+                    )
+                }
+                LlmChatRole.TOOL -> {
+                    val content = msg.toolResultJson ?: msg.content ?: ""
+                    result.add(
+                        ChatMessage(
+                            role = ChatRole.Tool,
+                            toolCallId = msg.toolCallId?.let(::ToolId),
+                            name = msg.toolName,
+                            content = content
+                        )
+                    )
+                }
+            }
+        }
+        return result
     }
 }

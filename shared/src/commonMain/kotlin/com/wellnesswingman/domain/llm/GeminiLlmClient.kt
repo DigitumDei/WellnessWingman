@@ -1,5 +1,7 @@
 package com.wellnesswingman.domain.llm
 
+import com.wellnesswingman.data.model.llm.LlmChatMessage
+import com.wellnesswingman.data.model.llm.LlmChatRole
 import com.wellnesswingman.data.model.llm.ToolCall
 import com.wellnesswingman.data.model.llm.ToolDefinition
 import io.github.aakira.napier.Napier
@@ -20,6 +22,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonObject
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 
@@ -161,12 +164,31 @@ class GeminiLlmClient(
         )
     }
 
+    override suspend fun generateChatResponse(
+        messages: List<LlmChatMessage>,
+        systemInstruction: String?,
+        jsonSchema: String?,
+        tools: List<ToolDefinition>,
+        toolExecutor: ToolExecutor?
+    ): LlmAnalysisResult {
+        val contents = toGeminiContents(messages)
+        return runConversation(
+            contents = contents,
+            jsonSchema = jsonSchema,
+            tools = tools,
+            toolExecutor = toolExecutor,
+            startTime = Clock.System.now(),
+            chatSystemInstruction = systemInstruction
+        )
+    }
+
     private suspend fun runConversation(
         contents: MutableList<GeminiContent>,
         jsonSchema: String?,
         tools: List<ToolDefinition>,
         toolExecutor: ToolExecutor?,
-        startTime: kotlinx.datetime.Instant
+        startTime: kotlinx.datetime.Instant,
+        chatSystemInstruction: String? = null
     ): LlmAnalysisResult {
         var promptTokens = 0
         var completionTokens = 0
@@ -178,7 +200,8 @@ class GeminiLlmClient(
                     contents = contents,
                     tools = tools.takeIf { it.isNotEmpty() }?.let(::geminiTools),
                     toolConfig = toolConfig(tools),
-                    systemInstruction = systemInstruction(tools),
+                    systemInstruction = chatSystemInstruction?.let { GeminiContent(parts = listOf(GeminiPart(text = it))) }
+                        ?: systemInstruction(tools),
                     generationConfig = GenerationConfig(
                         responseMimeType = if (jsonSchema != null) "application/json" else null
                     )
@@ -260,7 +283,8 @@ class GeminiLlmClient(
                 contents = contents,
                 tools = tools.takeIf { it.isNotEmpty() }?.let(::geminiTools),
                 toolConfig = toolConfig(tools),
-                systemInstruction = systemInstruction(tools),
+                systemInstruction = chatSystemInstruction?.let { GeminiContent(parts = listOf(GeminiPart(text = it))) }
+                    ?: systemInstruction(tools),
                 generationConfig = GenerationConfig(
                     responseMimeType = if (jsonSchema != null) "application/json" else null
                 )
@@ -338,6 +362,68 @@ class GeminiLlmClient(
                 )
             )
         }
+
+    private fun toGeminiContents(messages: List<LlmChatMessage>): MutableList<GeminiContent> {
+        val contents = mutableListOf<GeminiContent>()
+        for (msg in messages) {
+            when (msg.role) {
+                LlmChatRole.USER -> contents.add(
+                    GeminiContent(
+                        role = "user",
+                        parts = listOf(GeminiPart(text = msg.content ?: ""))
+                    )
+                )
+                LlmChatRole.ASSISTANT -> {
+                    val parts = mutableListOf<GeminiPart>()
+                    if (msg.content != null) {
+                        parts.add(GeminiPart(text = msg.content))
+                    }
+                    msg.toolCalls?.forEach { tc ->
+                        parts.add(
+                            GeminiPart(
+                                functionCall = GeminiFunctionCall(
+                                    id = tc.id,
+                                    name = tc.name,
+                                    args = tc.arguments
+                                )
+                            )
+                        )
+                    }
+                    contents.add(
+                        GeminiContent(
+                            role = "model",
+                            parts = parts.ifEmpty { listOf(GeminiPart(text = "")) }
+                        )
+                    )
+                }
+                LlmChatRole.TOOL -> {
+                    val responseJson = if (msg.toolResultJson != null) {
+                        json.parseToJsonElement(msg.toolResultJson).jsonObject
+                    } else {
+                        buildJsonObject {
+                            put("ok", JsonPrimitive(true))
+                            put("content", JsonPrimitive(msg.content ?: ""))
+                        }
+                    }
+                    contents.add(
+                        GeminiContent(
+                            role = "user",
+                            parts = listOf(
+                                GeminiPart(
+                                    functionResponse = GeminiFunctionResponse(
+                                        id = msg.toolCallId,
+                                        name = msg.toolName ?: "",
+                                        response = responseJson
+                                    )
+                                )
+                            )
+                        )
+                    )
+                }
+            }
+        }
+        return contents
+    }
 }
 
 // Gemini API request/response models
