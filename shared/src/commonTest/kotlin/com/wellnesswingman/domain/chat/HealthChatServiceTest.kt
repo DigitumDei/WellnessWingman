@@ -245,10 +245,10 @@ class HealthChatServiceTest {
 
     private class FakeEntryAnalysisRepository : com.wellnesswingman.data.repository.EntryAnalysisRepository {
         override suspend fun getLatestAnalysisForEntry(entryId: Long) = null
-        override suspend fun getAllAnalyses() = emptyList()
+        override suspend fun getAllAnalyses(): List<com.wellnesswingman.data.model.EntryAnalysis> = emptyList()
         override suspend fun getAnalysisById(id: Long) = null
         override suspend fun getAnalysisByExternalId(externalId: String) = null
-        override suspend fun getAnalysesForEntry(entryId: Long) = emptyList()
+        override suspend fun getAnalysesForEntry(entryId: Long): List<com.wellnesswingman.data.model.EntryAnalysis> = emptyList()
         override suspend fun insertAnalysis(analysis: com.wellnesswingman.data.model.EntryAnalysis) = 1L
         override suspend fun updateAnalysis(id: Long, insightsJson: String, schemaVersion: String) {}
         override suspend fun deleteAnalysis(id: Long) {}
@@ -401,7 +401,7 @@ class HealthChatServiceTest {
         val result = service.sendMessage(request)
 
         assertTrue(result is ChatResult.Success)
-        assertEquals(4L, chatRepo.messages.size)
+        assertEquals(4, chatRepo.messages.size)
 
         val userMsg = chatRepo.messages[2]
         assertEquals(ChatRole.USER, userMsg.role)
