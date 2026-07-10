@@ -1,0 +1,100 @@
+CREATE TABLE ChatConversation (
+    conversationId INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    externalId TEXT NOT NULL UNIQUE,
+    title TEXT NOT NULL DEFAULT '',
+    provider TEXT,
+    model TEXT,
+    createdAt INTEGER NOT NULL,
+    updatedAt INTEGER NOT NULL
+);
+
+CREATE TABLE ChatMessage (
+    messageId INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    conversationId INTEGER NOT NULL,
+    role TEXT NOT NULL,
+    content TEXT NOT NULL,
+    createdAt INTEGER NOT NULL,
+    provider TEXT,
+    model TEXT,
+    toolCallsJson TEXT,
+    toolResultJson TEXT,
+    FOREIGN KEY (conversationId) REFERENCES ChatConversation(conversationId) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_chat_message_conversation ON ChatMessage(conversationId, createdAt);
+
+getAllConversations:
+SELECT * FROM ChatConversation
+ORDER BY updatedAt DESC;
+
+getConversationById:
+SELECT * FROM ChatConversation
+WHERE conversationId = ?;
+
+getConversationByExternalId:
+SELECT * FROM ChatConversation
+WHERE externalId = ?;
+
+getMessagesForConversation:
+SELECT * FROM ChatMessage
+WHERE conversationId = ?
+ORDER BY createdAt ASC;
+
+insertConversation:
+INSERT INTO ChatConversation(
+    externalId,
+    title,
+    provider,
+    model,
+    createdAt,
+    updatedAt
+) VALUES (?, ?, ?, ?, ?, ?);
+
+updateConversationTitle:
+UPDATE ChatConversation
+SET title = ?, updatedAt = ?
+WHERE conversationId = ?;
+
+updateConversationProvider:
+UPDATE ChatConversation
+SET provider = ?, model = ?, updatedAt = ?
+WHERE conversationId = ?;
+
+touchConversation:
+UPDATE ChatConversation
+SET updatedAt = ?
+WHERE conversationId = ?;
+
+insertMessage:
+INSERT INTO ChatMessage(
+    conversationId,
+    role,
+    content,
+    createdAt,
+    provider,
+    model,
+    toolCallsJson,
+    toolResultJson
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+
+deleteConversation:
+DELETE FROM ChatConversation
+WHERE conversationId = ?;
+
+deleteMessagesForConversation:
+DELETE FROM ChatMessage
+WHERE conversationId = ?;
+
+deleteMessage:
+DELETE FROM ChatMessage
+WHERE messageId = ?;
+
+getConversationCount:
+SELECT COUNT(*) FROM ChatConversation;
+
+getMessageCountForConversation:
+SELECT COUNT(*) FROM ChatMessage
+WHERE conversationId = ?;
+
+lastInsertRowId:
+SELECT last_insert_rowid();
