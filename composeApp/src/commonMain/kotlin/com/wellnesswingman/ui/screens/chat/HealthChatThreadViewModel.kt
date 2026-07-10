@@ -10,6 +10,7 @@ import com.wellnesswingman.domain.chat.ChatConversationResult
 import com.wellnesswingman.domain.chat.ChatRequest
 import com.wellnesswingman.domain.chat.ChatResult
 import com.wellnesswingman.domain.chat.HealthChatService
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -40,6 +41,7 @@ class HealthChatThreadViewModel(
                     ChatConversationResult.NotFound -> _uiState.value = HealthChatThreadUiState.Empty
                 }
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 _uiState.value = HealthChatThreadUiState.Error(e.message ?: "Failed to load conversation")
             }
         }
@@ -66,6 +68,7 @@ class HealthChatThreadViewModel(
                     is ChatResult.ProviderError -> _uiState.value = HealthChatThreadUiState.Error(result.message)
                 }
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 _uiState.value = HealthChatThreadUiState.Error(e.message ?: "Failed to send message")
             } finally {
                 _isSending.value = false
@@ -78,18 +81,27 @@ class HealthChatThreadViewModel(
             try {
                 val provider = settingsRepository.getSelectedProvider()
                 val key = settingsRepository.getApiKey(provider)
-                if (key.isNullOrBlank()) return@launch
+                if (key.isNullOrBlank()) {
+                    _uiState.value = HealthChatThreadUiState.Error("API key not configured")
+                    return@launch
+                }
                 _uiState.value = HealthChatThreadUiState.Loading
                 load()
-            } catch (_: Exception) {
-                // Silently return on config read failure
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                _uiState.value = HealthChatThreadUiState.Error(e.message ?: "Failed to check configuration")
             }
         }
     }
 
     private suspend fun showConversation(conversation: HealthChatConversation) {
-        val messages = healthChatRepository.getMessagesForConversation(conversation.conversationId)
-        _uiState.value = HealthChatThreadUiState.Success(conversation, messages)
+        try {
+            val messages = healthChatRepository.getMessagesForConversation(conversation.conversationId)
+            _uiState.value = HealthChatThreadUiState.Success(conversation, messages)
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            _uiState.value = HealthChatThreadUiState.Error(e.message ?: "Failed to load messages")
+        }
     }
 }
 
