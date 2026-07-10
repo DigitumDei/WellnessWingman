@@ -34,9 +34,13 @@ class HealthChatThreadViewModel(
 
     fun load() {
         screenModelScope.launch {
-            when (val result = healthChatService.getConversation(conversationExternalId)) {
-                is ChatConversationResult.Found -> showConversation(result.conversation)
-                ChatConversationResult.NotFound -> _uiState.value = HealthChatThreadUiState.Empty
+            try {
+                when (val result = healthChatService.getConversation(conversationExternalId)) {
+                    is ChatConversationResult.Found -> showConversation(result.conversation)
+                    ChatConversationResult.NotFound -> _uiState.value = HealthChatThreadUiState.Empty
+                }
+            } catch (e: Exception) {
+                _uiState.value = HealthChatThreadUiState.Error(e.message ?: "Failed to load conversation")
             }
         }
     }
@@ -50,35 +54,42 @@ class HealthChatThreadViewModel(
         if (content.isBlank() || _isSending.value) return
         screenModelScope.launch {
             _isSending.value = true
-            val provider = settingsRepository.getSelectedProvider()
-            val model = settingsRepository.getModel(provider).orEmpty()
-            when (val result = healthChatService.sendMessage(ChatRequest(conversationExternalId, content.trim(), provider, model))) {
-                is ChatResult.Success -> {
-                    _draft.value = ""
-                    showConversation(result.conversation)
+            try {
+                val provider = settingsRepository.getSelectedProvider()
+                val model = settingsRepository.getModel(provider).orEmpty()
+                when (val result = healthChatService.sendMessage(ChatRequest(conversationExternalId, content.trim(), provider, model))) {
+                    is ChatResult.Success -> {
+                        _draft.value = ""
+                        showConversation(result.conversation)
+                    }
+                    ChatResult.ApiKeyMissing -> _uiState.value = HealthChatThreadUiState.ApiKeyMissing
+                    is ChatResult.ProviderError -> _uiState.value = HealthChatThreadUiState.Error(result.message)
                 }
-                ChatResult.ApiKeyMissing -> _uiState.value = HealthChatThreadUiState.ApiKeyMissing
-                is ChatResult.ProviderError -> _uiState.value = HealthChatThreadUiState.Error(result.message)
+            } catch (e: Exception) {
+                _uiState.value = HealthChatThreadUiState.Error(e.message ?: "Failed to send message")
+            } finally {
+                _isSending.value = false
             }
-            _isSending.value = false
         }
     }
 
     fun recheckConfiguration() {
         screenModelScope.launch {
-            val provider = settingsRepository.getSelectedProvider()
-            val key = settingsRepository.getApiKey(provider)
-            if (key.isNullOrBlank()) return@launch
-            _uiState.value = HealthChatThreadUiState.Loading
-            load()
+            try {
+                val provider = settingsRepository.getSelectedProvider()
+                val key = settingsRepository.getApiKey(provider)
+                if (key.isNullOrBlank()) return@launch
+                _uiState.value = HealthChatThreadUiState.Loading
+                load()
+            } catch (_: Exception) {
+                // Silently return on config read failure
+            }
         }
     }
 
     private suspend fun showConversation(conversation: HealthChatConversation) {
-        _uiState.value = HealthChatThreadUiState.Success(
-            conversation,
-            healthChatRepository.getMessagesForConversation(conversation.conversationId),
-        )
+        val messages = healthChatRepository.getMessagesForConversation(conversation.conversationId)
+        _uiState.value = HealthChatThreadUiState.Success(conversation, messages)
     }
 }
 
