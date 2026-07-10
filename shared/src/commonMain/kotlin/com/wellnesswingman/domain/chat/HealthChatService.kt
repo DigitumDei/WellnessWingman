@@ -93,8 +93,8 @@ IMPORTANT LIMITATIONS:
             val conversation = getOrCreateConversation(request, now)
             conversationId = conversation.conversationId
 
-            healthChatRepository.transaction {
-                userMessageId = healthChatRepository.insertMessage(
+            healthChatRepository.transaction { scope ->
+                userMessageId = scope.insertMessage(
                     conversationId = conversationId,
                     role = ChatRole.USER,
                     content = request.messageContent,
@@ -104,7 +104,7 @@ IMPORTANT LIMITATIONS:
                     status = ChatMessageStatus.PENDING,
                 )
 
-                assistantMessageId = healthChatRepository.insertMessage(
+                assistantMessageId = scope.insertMessage(
                     conversationId = conversationId,
                     role = ChatRole.ASSISTANT,
                     content = "",
@@ -116,10 +116,10 @@ IMPORTANT LIMITATIONS:
             }
 
             if (!llmClientFactory.hasApiKey(request.provider)) {
-                healthChatRepository.transaction {
-                    healthChatRepository.updateMessageStatus(userMessageId, ChatMessageStatus.ERROR)
-                    healthChatRepository.updateMessageStatus(assistantMessageId, ChatMessageStatus.ERROR)
-                    healthChatRepository.touchConversation(conversationId, Clock.System.now())
+                healthChatRepository.transaction { scope ->
+                    scope.updateMessageStatus(userMessageId, ChatMessageStatus.ERROR)
+                    scope.updateMessageStatus(assistantMessageId, ChatMessageStatus.ERROR)
+                    scope.touchConversation(conversationId, Clock.System.now())
                 }
                 return ChatResult.ApiKeyMissing
             }
@@ -153,23 +153,22 @@ IMPORTANT LIMITATIONS:
                 json.encodeToString(JsonElement.serializer(), callsArray)
             } else null
 
-            for (toolResult in capturingExecutor.capturedResults) {
-                healthChatRepository.insertMessage(
-                    conversationId = conversationId,
-                    role = ChatRole.TOOL,
-                    content = "",
-                    createdAt = responseNow,
-                    provider = request.provider.name.lowercase(),
-                    model = result.diagnostics.model.ifBlank { request.model },
-                    toolResultJson = json.encodeToString(ToolResult.serializer(), toolResult),
-                    status = ChatMessageStatus.COMPLETED,
-                )
-            }
-
             val responseModel = result.diagnostics.model.ifBlank { request.model }
-            healthChatRepository.transaction {
-                healthChatRepository.updateMessageStatus(userMessageId, ChatMessageStatus.COMPLETED)
-                healthChatRepository.updateAssistantMessage(
+            healthChatRepository.transaction { scope ->
+                for (toolResult in capturingExecutor.capturedResults) {
+                    scope.insertMessage(
+                        conversationId = conversationId,
+                        role = ChatRole.TOOL,
+                        content = "",
+                        createdAt = responseNow,
+                        provider = request.provider.name.lowercase(),
+                        model = responseModel,
+                        toolResultJson = json.encodeToString(ToolResult.serializer(), toolResult),
+                        status = ChatMessageStatus.COMPLETED,
+                    )
+                }
+                scope.updateMessageStatus(userMessageId, ChatMessageStatus.COMPLETED)
+                scope.updateAssistantMessage(
                     messageId = assistantMessageId,
                     content = result.content,
                     toolCallsJson = toolCallsJson,
@@ -208,24 +207,24 @@ IMPORTANT LIMITATIONS:
             )
         } catch (e: CancellationException) {
             withContext(NonCancellable) {
-                healthChatRepository.transaction {
+                healthChatRepository.transaction { scope ->
                     if (userMessageId > 0L) {
-                        healthChatRepository.updateMessageStatus(userMessageId, ChatMessageStatus.ERROR)
+                        scope.updateMessageStatus(userMessageId, ChatMessageStatus.ERROR)
                     }
                     if (assistantMessageId > 0L) {
-                        healthChatRepository.updateMessageStatus(assistantMessageId, ChatMessageStatus.ERROR)
+                        scope.updateMessageStatus(assistantMessageId, ChatMessageStatus.ERROR)
                     }
                 }
             }
             throw e
         } catch (e: Exception) {
             Napier.e("Chat failed", e)
-            healthChatRepository.transaction {
+            healthChatRepository.transaction { scope ->
                 if (userMessageId > 0L) {
-                    healthChatRepository.updateMessageStatus(userMessageId, ChatMessageStatus.ERROR)
+                    scope.updateMessageStatus(userMessageId, ChatMessageStatus.ERROR)
                 }
                 if (assistantMessageId > 0L) {
-                    healthChatRepository.updateMessageStatus(assistantMessageId, ChatMessageStatus.ERROR)
+                    scope.updateMessageStatus(assistantMessageId, ChatMessageStatus.ERROR)
                 }
             }
             ChatResult.ProviderError(

@@ -7,7 +7,6 @@ import com.wellnesswingman.data.model.HealthChatMessage
 import com.wellnesswingman.db.WellnessWingmanDatabase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.Instant
 
@@ -17,9 +16,66 @@ class SqlDelightHealthChatRepository(
 
     private val queries = database.chatConversationQueries
 
-    override suspend fun <T> transaction(block: suspend () -> T): T = withContext(Dispatchers.IO) {
+    private inner class TransactionScopeImpl : TransactionScope {
+        override fun insertMessage(
+            conversationId: Long,
+            role: ChatRole,
+            content: String,
+            createdAt: Instant,
+            provider: String?,
+            model: String?,
+            toolCallsJson: String?,
+            toolResultJson: String?,
+            status: ChatMessageStatus,
+        ): Long {
+            queries.insertMessage(
+                conversationId = conversationId,
+                role = ChatRole.toStorageString(role),
+                content = content,
+                createdAt = createdAt.toEpochMilliseconds(),
+                provider = provider,
+                model = model,
+                toolCallsJson = toolCallsJson,
+                toolResultJson = toolResultJson,
+                status = ChatMessageStatus.toString(status),
+            )
+            return queries.lastInsertRowId().executeAsOne()
+        }
+
+        override fun updateMessageStatus(messageId: Long, status: ChatMessageStatus) {
+            queries.updateMessageStatus(
+                status = ChatMessageStatus.toString(status),
+                messageId = messageId,
+            )
+        }
+
+        override fun updateAssistantMessage(
+            messageId: Long,
+            content: String,
+            toolCallsJson: String?,
+            model: String?,
+            status: ChatMessageStatus,
+        ) {
+            queries.updateMessageContent(
+                content = content,
+                toolCallsJson = toolCallsJson,
+                model = model,
+                status = ChatMessageStatus.toString(status),
+                messageId = messageId,
+            )
+        }
+
+        override fun touchConversation(id: Long, updatedAt: Instant) {
+            queries.touchConversation(
+                updatedAt = updatedAt.toEpochMilliseconds(),
+                conversationId = id,
+            )
+        }
+    }
+
+    override suspend fun <T> transaction(block: (TransactionScope) -> T): T = withContext(Dispatchers.IO) {
         database.transactionWithResult {
-            runBlocking(Dispatchers.IO) { block() }
+            block(TransactionScopeImpl())
         }
     }
 

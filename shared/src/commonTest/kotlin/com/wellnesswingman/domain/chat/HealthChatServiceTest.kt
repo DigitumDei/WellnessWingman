@@ -13,6 +13,7 @@ import com.wellnesswingman.data.model.llm.ToolResult
 import com.wellnesswingman.data.repository.AppSettingsRepository
 import com.wellnesswingman.data.repository.HealthChatRepository
 import com.wellnesswingman.data.repository.LlmProvider
+import com.wellnesswingman.data.repository.TransactionScope
 import com.wellnesswingman.domain.llm.LlmAnalysisResult
 import com.wellnesswingman.domain.llm.LlmClient
 import com.wellnesswingman.domain.llm.LlmClientFactory
@@ -49,7 +50,72 @@ class HealthChatServiceTest {
         var lastRenamedTitle: String? = null
         var lastRenamedConversationId: Long? = null
 
-        override suspend fun <T> transaction(block: suspend () -> T): T = block()
+        private inner class FakeTransactionScope : TransactionScope {
+            override fun insertMessage(
+                conversationId: Long,
+                role: ChatRole,
+                content: String,
+                createdAt: Instant,
+                provider: String?,
+                model: String?,
+                toolCallsJson: String?,
+                toolResultJson: String?,
+                status: ChatMessageStatus,
+            ): Long {
+                val id = nextMessageId++
+                messages.add(
+                    HealthChatMessage(
+                        messageId = id,
+                        conversationId = conversationId,
+                        role = role,
+                        content = content,
+                        createdAt = createdAt,
+                        provider = provider,
+                        model = model,
+                        toolCallsJson = toolCallsJson,
+                        toolResultJson = toolResultJson,
+                        status = status,
+                    )
+                )
+                return id
+            }
+
+            override fun updateMessageStatus(messageId: Long, status: ChatMessageStatus) {
+                val idx = messages.indexOfFirst { it.messageId == messageId }
+                if (idx >= 0) {
+                    messages[idx] = messages[idx].copy(status = status)
+                }
+            }
+
+            override fun updateAssistantMessage(
+                messageId: Long,
+                content: String,
+                toolCallsJson: String?,
+                model: String?,
+                status: ChatMessageStatus,
+            ) {
+                val idx = messages.indexOfFirst { it.messageId == messageId }
+                if (idx >= 0) {
+                    messages[idx] = messages[idx].copy(
+                        content = content,
+                        toolCallsJson = toolCallsJson,
+                        model = model,
+                        status = status,
+                    )
+                }
+            }
+
+            override fun touchConversation(id: Long, updatedAt: Instant) {
+                lastTouchedConversationId = id
+                val idx = conversations.indexOfFirst { it.conversationId == id }
+                if (idx >= 0) {
+                    conversations[idx] = conversations[idx].copy(updatedAt = updatedAt)
+                }
+            }
+        }
+
+        override suspend fun <T> transaction(block: (TransactionScope) -> T): T =
+            block(FakeTransactionScope())
 
         override suspend fun createConversation(
             externalId: String,

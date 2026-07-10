@@ -6,8 +6,34 @@ import com.wellnesswingman.data.model.HealthChatConversation
 import com.wellnesswingman.data.model.HealthChatMessage
 import kotlinx.datetime.Instant
 
+interface TransactionScope {
+    fun insertMessage(
+        conversationId: Long,
+        role: ChatRole,
+        content: String,
+        createdAt: Instant,
+        provider: String? = null,
+        model: String? = null,
+        toolCallsJson: String? = null,
+        toolResultJson: String? = null,
+        status: ChatMessageStatus = ChatMessageStatus.COMPLETED,
+    ): Long
+
+    fun updateMessageStatus(messageId: Long, status: ChatMessageStatus)
+
+    fun updateAssistantMessage(
+        messageId: Long,
+        content: String,
+        toolCallsJson: String?,
+        model: String?,
+        status: ChatMessageStatus,
+    )
+
+    fun touchConversation(id: Long, updatedAt: Instant)
+}
+
 interface HealthChatRepository {
-    suspend fun <T> transaction(block: suspend () -> T): T
+    suspend fun <T> transaction(block: (TransactionScope) -> T): T
 
     suspend fun createConversation(
         externalId: String,
