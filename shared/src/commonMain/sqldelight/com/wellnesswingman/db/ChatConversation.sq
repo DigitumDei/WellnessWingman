@@ -18,15 +18,26 @@ CREATE TABLE ChatMessage (
     model TEXT,
     toolCallsJson TEXT,
     toolResultJson TEXT,
+    status TEXT NOT NULL DEFAULT 'completed',
     FOREIGN KEY (conversationId) REFERENCES ChatConversation(conversationId) ON DELETE CASCADE
 );
 
 CREATE INDEX idx_chat_message_conversation ON ChatMessage(conversationId, createdAt);
 CREATE INDEX idx_chat_conversation_updated ON ChatConversation(updatedAt DESC);
 
-getAllConversations:
-SELECT * FROM ChatConversation
-ORDER BY updatedAt DESC;
+getAllConversationsWithLastMessage:
+SELECT c.*,
+       lm.content AS lastMessageContent,
+       lm.role AS lastMessageRole,
+       lm.createdAt AS lastMessageCreatedAt
+FROM ChatConversation c
+LEFT JOIN ChatMessage lm ON lm.messageId = (
+    SELECT m.messageId FROM ChatMessage m
+    WHERE m.conversationId = c.conversationId
+    ORDER BY m.createdAt DESC
+    LIMIT 1
+)
+ORDER BY c.updatedAt DESC;
 
 getConversationById:
 SELECT * FROM ChatConversation
@@ -75,8 +86,14 @@ INSERT INTO ChatMessage(
     provider,
     model,
     toolCallsJson,
-    toolResultJson
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+    toolResultJson,
+    status
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+updateMessageStatus:
+UPDATE ChatMessage
+SET status = ?
+WHERE messageId = ?;
 
 deleteConversation:
 DELETE FROM ChatConversation

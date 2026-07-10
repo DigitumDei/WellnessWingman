@@ -44,6 +44,9 @@ data class HealthChatConversation(
     val model: String? = null,
     val createdAt: Instant,
     val updatedAt: Instant,
+    val lastMessageContent: String? = null,
+    val lastMessageRole: ChatRole? = null,
+    val lastMessageCreatedAt: Instant? = null,
 )
 
 data class HealthChatMessage(

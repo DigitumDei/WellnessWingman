@@ -39,7 +39,10 @@ interface HealthChatRepository {
         model: String? = null,
         toolCallsJson: String? = null,
         toolResultJson: String? = null,
+        status: ChatMessageStatus = ChatMessageStatus.COMPLETED,
     ): Long
+
+    suspend fun updateMessageStatus(messageId: Long, status: ChatMessageStatus)
 
     suspend fun deleteMessage(messageId: Long)
 

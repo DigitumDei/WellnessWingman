@@ -5,6 +5,7 @@ import com.wellnesswingman.data.model.ChatRole
 import com.wellnesswingman.data.model.HealthChatConversation
 import com.wellnesswingman.data.model.HealthChatMessage
 import com.wellnesswingman.db.WellnessWingmanDatabase
+import com.wellnesswingman.db.ChatConversationWithLastMessage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.withContext
@@ -37,7 +38,8 @@ class SqlDelightHealthChatRepository(
 
     override suspend fun getAllConversations(): List<HealthChatConversation> =
         withContext(Dispatchers.IO) {
-            queries.getAllConversations().executeAsList().map { it.toHealthChatConversation() }
+            queries.getAllConversationsWithLastMessage().executeAsList()
+                .map { it.toHealthChatConversation() }
         }
 
     override suspend fun getConversationById(id: Long): HealthChatConversation? =
@@ -87,6 +89,7 @@ class SqlDelightHealthChatRepository(
         model: String?,
         toolCallsJson: String?,
         toolResultJson: String?,
+        status: ChatMessageStatus,
     ): Long = withContext(Dispatchers.IO) {
         queries.insertMessage(
             conversationId = conversationId,
@@ -97,9 +100,18 @@ class SqlDelightHealthChatRepository(
             model = model,
             toolCallsJson = toolCallsJson,
             toolResultJson = toolResultJson,
+            status = ChatMessageStatus.toString(status),
         )
         queries.lastInsertRowId().executeAsOne()
     }
+
+    override suspend fun updateMessageStatus(messageId: Long, status: ChatMessageStatus) =
+        withContext(Dispatchers.IO) {
+            queries.updateMessageStatus(
+                status = ChatMessageStatus.toString(status),
+                messageId = messageId,
+            )
+        }
 
     override suspend fun deleteMessage(messageId: Long) = withContext(Dispatchers.IO) {
         queries.deleteMessage(messageId)
@@ -114,7 +126,7 @@ class SqlDelightHealthChatRepository(
             queries.getMessageCountForConversation(conversationId).executeAsOne()
         }
 
-    private fun com.wellnesswingman.db.ChatConversation.toHealthChatConversation():
+    private fun ChatConversationWithLastMessage.toHealthChatConversation():
         HealthChatConversation {
         return HealthChatConversation(
             conversationId = conversationId,
@@ -124,6 +136,9 @@ class SqlDelightHealthChatRepository(
             model = model,
             createdAt = Instant.fromEpochMilliseconds(createdAt),
             updatedAt = Instant.fromEpochMilliseconds(updatedAt),
+            lastMessageContent = lastMessageContent,
+            lastMessageRole = lastMessageRole?.let { ChatRole.fromStorageString(it) },
+            lastMessageCreatedAt = lastMessageCreatedAt?.let { Instant.fromEpochMilliseconds(it) },
         )
     }
 
@@ -138,6 +153,7 @@ class SqlDelightHealthChatRepository(
             model = model,
             toolCallsJson = toolCallsJson,
             toolResultJson = toolResultJson,
+            status = ChatMessageStatus.fromString(status),
         )
     }
 }
