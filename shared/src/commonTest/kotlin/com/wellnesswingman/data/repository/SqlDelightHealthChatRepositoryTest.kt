@@ -22,6 +22,7 @@ class SqlDelightHealthChatRepositoryTest {
     fun setup() {
         driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
         WellnessWingmanDatabase.Schema.create(driver)
+        driver.execute(null, "PRAGMA foreign_keys = ON", 0)
         database = WellnessWingmanDatabase(driver)
         repository = SqlDelightHealthChatRepository(database)
     }
@@ -100,7 +101,7 @@ class SqlDelightHealthChatRepositoryTest {
         val retrieved = repository.getConversationById(id)
         assertNotNull(retrieved)
         assertEquals("Renamed", retrieved.title)
-        assertEquals(later, retrieved.updatedAt)
+        assertEquals(later.toEpochMilliseconds(), retrieved.updatedAt.toEpochMilliseconds())
     }
 
     @Test
@@ -117,7 +118,7 @@ class SqlDelightHealthChatRepositoryTest {
 
         val retrieved = repository.getConversationById(id)
         assertNotNull(retrieved)
-        assertEquals(later, retrieved.updatedAt)
+        assertEquals(later.toEpochMilliseconds(), retrieved.updatedAt.toEpochMilliseconds())
     }
 
     @Test
