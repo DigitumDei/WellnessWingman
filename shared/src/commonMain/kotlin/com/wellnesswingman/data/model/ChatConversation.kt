@@ -29,7 +29,7 @@ enum class ChatMessageStatus {
             "pending" -> PENDING
             "completed" -> COMPLETED
             "error" -> ERROR
-            else -> COMPLETED
+            else -> ERROR
         }
 
         fun toString(status: ChatMessageStatus): String = status.name.lowercase()

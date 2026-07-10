@@ -31,8 +31,8 @@ ORDER BY updatedAt DESC;
 
 getLatestMessageForConversation:
 SELECT * FROM ChatMessage
-WHERE conversationId = ?
-ORDER BY createdAt DESC
+WHERE conversationId = ? AND status = 'completed' AND role != 'tool'
+ORDER BY createdAt DESC, messageId DESC
 LIMIT 1;
 
 getConversationById:
@@ -46,7 +46,7 @@ WHERE externalId = ?;
 getMessagesForConversation:
 SELECT * FROM ChatMessage
 WHERE conversationId = ?
-ORDER BY createdAt ASC;
+ORDER BY createdAt ASC, messageId ASC;
 
 insertConversation:
 INSERT INTO ChatConversation(
