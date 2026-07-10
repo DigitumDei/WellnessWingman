@@ -5,7 +5,6 @@ import com.wellnesswingman.data.model.ChatRole
 import com.wellnesswingman.data.model.HealthChatConversation
 import com.wellnesswingman.data.model.HealthChatMessage
 import com.wellnesswingman.db.WellnessWingmanDatabase
-import com.wellnesswingman.db.ChatConversationWithLastMessage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.withContext
@@ -38,8 +37,11 @@ class SqlDelightHealthChatRepository(
 
     override suspend fun getAllConversations(): List<HealthChatConversation> =
         withContext(Dispatchers.IO) {
-            queries.getAllConversationsWithLastMessage().executeAsList()
-                .map { it.toHealthChatConversation() }
+            queries.getAllConversations().executeAsList().map { conversation ->
+                val lastMessage = queries.getLatestMessageForConversation(conversation.conversationId)
+                    .executeAsOneOrNull()
+                conversation.toHealthChatConversation(lastMessage)
+            }
         }
 
     override suspend fun getConversationById(id: Long): HealthChatConversation? =
@@ -126,8 +128,9 @@ class SqlDelightHealthChatRepository(
             queries.getMessageCountForConversation(conversationId).executeAsOne()
         }
 
-    private fun ChatConversationWithLastMessage.toHealthChatConversation():
-        HealthChatConversation {
+    private fun com.wellnesswingman.db.ChatConversation.toHealthChatConversation(
+        lastMessage: com.wellnesswingman.db.ChatMessage? = null,
+    ): HealthChatConversation {
         return HealthChatConversation(
             conversationId = conversationId,
             externalId = externalId,
@@ -136,9 +139,9 @@ class SqlDelightHealthChatRepository(
             model = model,
             createdAt = Instant.fromEpochMilliseconds(createdAt),
             updatedAt = Instant.fromEpochMilliseconds(updatedAt),
-            lastMessageContent = lastMessageContent,
-            lastMessageRole = lastMessageRole?.let { ChatRole.fromStorageString(it) },
-            lastMessageCreatedAt = lastMessageCreatedAt?.let { Instant.fromEpochMilliseconds(it) },
+            lastMessageContent = lastMessage?.content,
+            lastMessageRole = lastMessage?.let { ChatRole.fromStorageString(it.role) },
+            lastMessageCreatedAt = lastMessage?.createdAt?.let { Instant.fromEpochMilliseconds(it) },
         )
     }
 

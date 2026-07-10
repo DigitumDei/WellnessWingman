@@ -25,19 +25,15 @@ CREATE TABLE ChatMessage (
 CREATE INDEX idx_chat_message_conversation ON ChatMessage(conversationId, createdAt);
 CREATE INDEX idx_chat_conversation_updated ON ChatConversation(updatedAt DESC);
 
-getAllConversationsWithLastMessage:
-SELECT c.*,
-       lm.content AS lastMessageContent,
-       lm.role AS lastMessageRole,
-       lm.createdAt AS lastMessageCreatedAt
-FROM ChatConversation c
-LEFT JOIN ChatMessage lm ON lm.messageId = (
-    SELECT m.messageId FROM ChatMessage m
-    WHERE m.conversationId = c.conversationId
-    ORDER BY m.createdAt DESC
-    LIMIT 1
-)
-ORDER BY c.updatedAt DESC;
+getAllConversations:
+SELECT * FROM ChatConversation
+ORDER BY updatedAt DESC;
+
+getLatestMessageForConversation:
+SELECT * FROM ChatMessage
+WHERE conversationId = ?
+ORDER BY createdAt DESC
+LIMIT 1;
 
 getConversationById:
 SELECT * FROM ChatConversation
