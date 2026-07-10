@@ -27,6 +27,9 @@ class HealthChatThreadViewModel(
     private val _isSending = MutableStateFlow(false)
     val isSending: StateFlow<Boolean> = _isSending.asStateFlow()
 
+    private val _draft = MutableStateFlow("")
+    val draft: StateFlow<String> = _draft.asStateFlow()
+
     init { load() }
 
     fun load() {
@@ -38,18 +41,36 @@ class HealthChatThreadViewModel(
         }
     }
 
-    fun send(content: String) {
+    fun updateDraft(content: String) {
+        _draft.value = content
+    }
+
+    fun send() {
+        val content = _draft.value
         if (content.isBlank() || _isSending.value) return
         screenModelScope.launch {
             _isSending.value = true
             val provider = settingsRepository.getSelectedProvider()
             val model = settingsRepository.getModel(provider).orEmpty()
             when (val result = healthChatService.sendMessage(ChatRequest(conversationExternalId, content.trim(), provider, model))) {
-                is ChatResult.Success -> showConversation(result.conversation)
+                is ChatResult.Success -> {
+                    _draft.value = ""
+                    showConversation(result.conversation)
+                }
                 ChatResult.ApiKeyMissing -> _uiState.value = HealthChatThreadUiState.ApiKeyMissing
                 is ChatResult.ProviderError -> _uiState.value = HealthChatThreadUiState.Error(result.message)
             }
             _isSending.value = false
+        }
+    }
+
+    fun recheckConfiguration() {
+        screenModelScope.launch {
+            val provider = settingsRepository.getSelectedProvider()
+            val key = settingsRepository.getApiKey(provider)
+            if (key.isNullOrBlank()) return@launch
+            _uiState.value = HealthChatThreadUiState.Loading
+            load()
         }
     }
 

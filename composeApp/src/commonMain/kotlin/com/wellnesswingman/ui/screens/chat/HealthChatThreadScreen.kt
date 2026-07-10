@@ -51,7 +51,7 @@ data class HealthChatThreadScreen(val conversationExternalId: String) : Screen {
         val viewModel = getScreenModel<HealthChatThreadViewModel> { parametersOf(conversationExternalId) }
         val state by viewModel.uiState.collectAsState()
         val isSending by viewModel.isSending.collectAsState()
-        var draft by remember { mutableStateOf("") }
+        val draft by viewModel.draft.collectAsState()
 
         Scaffold(
             topBar = {
@@ -66,10 +66,7 @@ data class HealthChatThreadScreen(val conversationExternalId: String) : Screen {
             },
             bottomBar = {
                 if (state is HealthChatThreadUiState.Success || state is HealthChatThreadUiState.Empty) {
-                    ChatComposer(draft, { draft = it }, {
-                        viewModel.send(draft)
-                        draft = ""
-                    }, isSending)
+                    ChatComposer(draft, viewModel::updateDraft, viewModel::send, isSending)
                 }
             },
         ) { padding ->
@@ -77,7 +74,11 @@ data class HealthChatThreadScreen(val conversationExternalId: String) : Screen {
                 HealthChatThreadUiState.Loading -> LoadingIndicator(Modifier.padding(padding))
                 HealthChatThreadUiState.Empty -> EmptyState("Ask about your entries, nutrition, or wellness goals.", Modifier.padding(padding))
                 is HealthChatThreadUiState.Success -> MessageList(ui.messages, Modifier.padding(padding))
-                HealthChatThreadUiState.ApiKeyMissing -> ApiKeyMissingState({ navigator.push(LlmProviderSettingsScreen()) }, Modifier.padding(padding))
+                HealthChatThreadUiState.ApiKeyMissing -> ApiKeyMissingState(
+                    onOpenSettings = { navigator.push(LlmProviderSettingsScreen()) },
+                    onRetry = { viewModel.recheckConfiguration() },
+                    modifier = Modifier.padding(padding),
+                )
                 is HealthChatThreadUiState.Error -> ErrorMessage(ui.message, viewModel::load, Modifier.padding(padding))
             }
         }
@@ -114,9 +115,17 @@ private fun ChatComposer(draft: String, onChange: (String) -> Unit, onSend: () -
 }
 
 @Composable
-private fun ApiKeyMissingState(onOpenSettings: () -> Unit, modifier: Modifier = Modifier) {
+private fun ApiKeyMissingState(onOpenSettings: () -> Unit, onRetry: () -> Unit, modifier: Modifier = Modifier) {
+    var visitedSettings by remember { mutableStateOf(false) }
+
     Column(modifier = modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Text("Set an API key for the selected provider before starting a health chat.", style = MaterialTheme.typography.bodyLarge)
-        Button(onClick = onOpenSettings) { Text("Open LLM settings") }
+        Button(onClick = {
+            visitedSettings = true
+            onOpenSettings()
+        }) { Text("Open LLM settings") }
+        if (visitedSettings) {
+            Button(onClick = onRetry) { Text("I've set my API key") }
+        }
     }
 }
