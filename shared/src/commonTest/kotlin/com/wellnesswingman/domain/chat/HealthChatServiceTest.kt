@@ -27,8 +27,12 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import kotlin.test.*
 
 class HealthChatServiceTest {
@@ -1042,7 +1046,13 @@ class HealthChatServiceTest {
         val toolCalls = listOf(
             ToolCall(id = "call1", name = "get_user_profile", arguments = JsonObject(emptyMap())),
         )
-        val toolCallsJson = json.encodeToString(toolCalls)
+        val toolCallsJson = json.encodeToString(JsonElement.serializer(), buildJsonArray {
+            toolCalls.forEach { add(buildJsonObject {
+                put("id", it.id ?: "")
+                put("name", it.name)
+                put("arguments", it.arguments)
+            }) }
+        })
 
         val chatRepo = FakeHealthChatRepository()
         val convId = chatRepo.createConversation("conv-replay", "Replay", "openai", "gpt-4o-mini", now, now)
@@ -1083,7 +1093,7 @@ class HealthChatServiceTest {
         chatRepo.insertMessage(
             convId, ChatRole.TOOL, "",
             now, "openai", "gpt-4o-mini",
-            toolResultJson = json.encodeToString(toolResult),
+            toolResultJson = json.encodeToString(ToolResult.serializer(), toolResult),
             status = ChatMessageStatus.COMPLETED,
         )
 
@@ -1112,7 +1122,7 @@ class HealthChatServiceTest {
             name = "get_user_profile",
             content = JsonPrimitive("{\"name\": \"Test\"}"),
         )
-        val toolResultJson = json.encodeToString(toolResult)
+        val toolResultJson = json.encodeToString(ToolResult.serializer(), toolResult)
 
         val chatRepo = FakeHealthChatRepository()
         val convId = chatRepo.createConversation("conv-tool-msg", "Tool Msg", "openai", "gpt-4o-mini", now, now)
