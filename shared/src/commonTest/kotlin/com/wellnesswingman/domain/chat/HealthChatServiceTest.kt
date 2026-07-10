@@ -21,6 +21,7 @@ import com.wellnesswingman.domain.llm.ToolExecutor
 import com.wellnesswingman.domain.llm.ToolRegistry
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.test.runTest
@@ -527,7 +528,7 @@ class HealthChatServiceTest {
         val userMsg = chatRepo.messages[0]
         assertEquals(ChatRole.USER, userMsg.role)
         assertEquals("Hello", userMsg.content)
-        assertEquals(ChatMessageStatus.COMPLETED, userMsg.status)
+        assertEquals(ChatMessageStatus.ERROR, userMsg.status)
         val pendingAssistant = chatRepo.messages[1]
         assertEquals(ChatRole.ASSISTANT, pendingAssistant.role)
         assertEquals(ChatMessageStatus.ERROR, pendingAssistant.status)
@@ -594,6 +595,9 @@ class HealthChatServiceTest {
         assertTrue(result is ChatResult.ProviderError)
         assertTrue(result.message.contains("API error"))
         assertTrue(result.conversationId > 0L)
+        val userMsg = chatRepo.messages.find { it.role == ChatRole.USER }
+        assertNotNull(userMsg)
+        assertEquals(ChatMessageStatus.ERROR, userMsg.status)
         val assistantMsg = chatRepo.messages.find { it.role == ChatRole.ASSISTANT }
         assertNotNull(assistantMsg)
         assertEquals(ChatMessageStatus.ERROR, assistantMsg.status)
@@ -1177,5 +1181,74 @@ class HealthChatServiceTest {
         assertEquals("call1", toolInHistory.toolCallId)
         assertEquals("get_user_profile", toolInHistory.toolName)
         assertNotNull(toolInHistory.toolResultJson)
+    }
+
+    @Test
+    fun `sendMessage marks both messages as ERROR on cancellation`() = runTest {
+        val chatRepo = FakeHealthChatRepository()
+
+        val cancellingClient = object : LlmClient {
+            override val providerId: String get() = "openai"
+            override suspend fun analyzeImage(
+                imageBytes: ByteArray,
+                prompt: String,
+                jsonSchema: String?,
+                tools: List<ToolDefinition>,
+                toolExecutor: ToolExecutor?,
+            ) = throw CancellationException()
+            override suspend fun transcribeAudio(imageBytes: ByteArray, mimeType: String) = ""
+            override suspend fun generateCompletion(
+                prompt: String,
+                jsonSchema: String?,
+                tools: List<ToolDefinition>,
+                toolExecutor: ToolExecutor?,
+            ) = throw CancellationException()
+            override suspend fun generateChatResponse(
+                messages: List<LlmChatMessage>,
+                systemInstruction: String?,
+                jsonSchema: String?,
+                tools: List<ToolDefinition>,
+                toolExecutor: ToolExecutor?,
+            ) = throw CancellationException()
+        }
+
+        val factory = mockk<LlmClientFactory>()
+        every { factory.create(LlmProvider.OPENAI) } returns cancellingClient
+        every { factory.hasApiKey(LlmProvider.OPENAI) } returns true
+        every { factory.hasCurrentApiKey() } returns true
+
+        val toolRegistry = ToolRegistry(
+            trackedEntryRepository = FakeTrackedEntryRepository(),
+            entryAnalysisRepository = FakeEntryAnalysisRepository(),
+            weightHistoryRepository = FakeWeightHistoryRepository(),
+            appSettingsRepository = FakeAppSettingsRepository(),
+            nutritionalProfileRepository = FakeNutritionalProfileRepository(),
+        )
+
+        val service = HealthChatService(chatRepo, factory, toolRegistry)
+
+        val request = ChatRequest(
+            conversationExternalId = "conv-cancel",
+            messageContent = "Hello",
+            provider = LlmProvider.OPENAI,
+            model = "gpt-4o-mini",
+        )
+
+        try {
+            service.sendMessage(request)
+            fail("Expected CancellationException to propagate")
+        } catch (e: CancellationException) {
+            // expected
+        }
+
+        assertEquals(2, chatRepo.messages.size)
+
+        val userMsg = chatRepo.messages.find { it.role == ChatRole.USER }
+        assertNotNull(userMsg)
+        assertEquals(ChatMessageStatus.ERROR, userMsg.status)
+
+        val assistantMsg = chatRepo.messages.find { it.role == ChatRole.ASSISTANT }
+        assertNotNull(assistantMsg)
+        assertEquals(ChatMessageStatus.ERROR, assistantMsg.status)
     }
 }

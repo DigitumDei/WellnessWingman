@@ -83,6 +83,7 @@ IMPORTANT LIMITATIONS:
 
     suspend fun sendMessage(request: ChatRequest): ChatResult {
         var conversationId = 0L
+        var userMessageId = 0L
         var assistantMessageId = 0L
         return try {
             val now = Clock.System.now()
@@ -90,7 +91,7 @@ IMPORTANT LIMITATIONS:
             val conversation = getOrCreateConversation(request, now)
             conversationId = conversation.conversationId
 
-            val userMessageId = healthChatRepository.insertMessage(
+            userMessageId = healthChatRepository.insertMessage(
                 conversationId = conversationId,
                 role = ChatRole.USER,
                 content = request.messageContent,
@@ -99,7 +100,6 @@ IMPORTANT LIMITATIONS:
                 model = request.model,
                 status = ChatMessageStatus.PENDING,
             )
-            healthChatRepository.updateMessageStatus(userMessageId, ChatMessageStatus.COMPLETED)
 
             assistantMessageId = healthChatRepository.insertMessage(
                 conversationId = conversationId,
@@ -112,13 +112,14 @@ IMPORTANT LIMITATIONS:
             )
 
             if (!llmClientFactory.hasApiKey(request.provider)) {
+                healthChatRepository.updateMessageStatus(userMessageId, ChatMessageStatus.ERROR)
                 healthChatRepository.updateMessageStatus(assistantMessageId, ChatMessageStatus.ERROR)
                 healthChatRepository.touchConversation(conversationId, Clock.System.now())
                 return ChatResult.ApiKeyMissing
             }
 
             val history = healthChatRepository.getMessagesForConversation(conversationId)
-                .filter { it.status == ChatMessageStatus.COMPLETED }
+                .filter { it.status == ChatMessageStatus.COMPLETED || it.messageId == userMessageId }
             val boundedHistory = history.takeLast(MAX_HISTORY_MESSAGES)
             val llmMessages = boundedHistory.map { it.toLlmChatMessage() }
 
@@ -160,6 +161,7 @@ IMPORTANT LIMITATIONS:
             }
 
             val responseModel = result.diagnostics.model.ifBlank { request.model }
+            healthChatRepository.updateMessageStatus(userMessageId, ChatMessageStatus.COMPLETED)
             healthChatRepository.updateAssistantMessage(
                 messageId = assistantMessageId,
                 content = result.content,
@@ -197,9 +199,18 @@ IMPORTANT LIMITATIONS:
                 diagnostics = result.diagnostics,
             )
         } catch (e: CancellationException) {
+            if (userMessageId > 0L) {
+                healthChatRepository.updateMessageStatus(userMessageId, ChatMessageStatus.ERROR)
+            }
+            if (assistantMessageId > 0L) {
+                healthChatRepository.updateMessageStatus(assistantMessageId, ChatMessageStatus.ERROR)
+            }
             throw e
         } catch (e: Exception) {
             Napier.e("Chat failed", e)
+            if (userMessageId > 0L) {
+                healthChatRepository.updateMessageStatus(userMessageId, ChatMessageStatus.ERROR)
+            }
             if (assistantMessageId > 0L) {
                 healthChatRepository.updateMessageStatus(assistantMessageId, ChatMessageStatus.ERROR)
             }
