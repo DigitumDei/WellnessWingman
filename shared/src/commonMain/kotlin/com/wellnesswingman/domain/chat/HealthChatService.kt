@@ -130,7 +130,8 @@ IMPORTANT LIMITATIONS:
             val responseNow = Clock.System.now()
 
             val toolCallsJson: String? = if (capturingExecutor.capturedCalls.isNotEmpty()) {
-                json.encodeToString<List<ToolCall>>(capturingExecutor.capturedCalls)
+                val capturedCallsList: List<ToolCall> = capturingExecutor.capturedCalls.toList()
+                json.encodeToString(capturedCallsList)
             } else null
 
             for (toolResult in capturingExecutor.capturedResults) {
@@ -141,7 +142,7 @@ IMPORTANT LIMITATIONS:
                     createdAt = responseNow,
                     provider = request.provider.name.lowercase(),
                     model = result.diagnostics.model.ifBlank { request.model },
-                    toolResultJson = json.encodeToString<ToolResult>(toolResult),
+                    toolResultJson = json.encodeToString(ToolResult.serializer(), toolResult),
                     status = ChatMessageStatus.COMPLETED,
                 )
             }
