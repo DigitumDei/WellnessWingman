@@ -7,6 +7,7 @@ import com.wellnesswingman.data.model.HealthChatMessage
 import com.wellnesswingman.db.WellnessWingmanDatabase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.Instant
 
@@ -15,6 +16,12 @@ class SqlDelightHealthChatRepository(
 ) : HealthChatRepository {
 
     private val queries = database.chatConversationQueries
+
+    override suspend fun <T> transaction(block: suspend () -> T): T = withContext(Dispatchers.IO) {
+        database.transactionWithResult {
+            runBlocking(Dispatchers.IO) { block() }
+        }
+    }
 
     override suspend fun createConversation(
         externalId: String,

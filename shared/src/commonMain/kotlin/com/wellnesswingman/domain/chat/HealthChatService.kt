@@ -16,6 +16,8 @@ import com.wellnesswingman.domain.llm.ToolExecutor
 import com.wellnesswingman.domain.llm.ToolRegistry
 import io.github.aakira.napier.Napier
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.serialization.json.Json
@@ -91,30 +93,34 @@ IMPORTANT LIMITATIONS:
             val conversation = getOrCreateConversation(request, now)
             conversationId = conversation.conversationId
 
-            userMessageId = healthChatRepository.insertMessage(
-                conversationId = conversationId,
-                role = ChatRole.USER,
-                content = request.messageContent,
-                createdAt = now,
-                provider = request.provider.name.lowercase(),
-                model = request.model,
-                status = ChatMessageStatus.PENDING,
-            )
+            healthChatRepository.transaction {
+                userMessageId = healthChatRepository.insertMessage(
+                    conversationId = conversationId,
+                    role = ChatRole.USER,
+                    content = request.messageContent,
+                    createdAt = now,
+                    provider = request.provider.name.lowercase(),
+                    model = request.model,
+                    status = ChatMessageStatus.PENDING,
+                )
 
-            assistantMessageId = healthChatRepository.insertMessage(
-                conversationId = conversationId,
-                role = ChatRole.ASSISTANT,
-                content = "",
-                createdAt = now,
-                provider = request.provider.name.lowercase(),
-                model = request.model,
-                status = ChatMessageStatus.PENDING,
-            )
+                assistantMessageId = healthChatRepository.insertMessage(
+                    conversationId = conversationId,
+                    role = ChatRole.ASSISTANT,
+                    content = "",
+                    createdAt = now,
+                    provider = request.provider.name.lowercase(),
+                    model = request.model,
+                    status = ChatMessageStatus.PENDING,
+                )
+            }
 
             if (!llmClientFactory.hasApiKey(request.provider)) {
-                healthChatRepository.updateMessageStatus(userMessageId, ChatMessageStatus.ERROR)
-                healthChatRepository.updateMessageStatus(assistantMessageId, ChatMessageStatus.ERROR)
-                healthChatRepository.touchConversation(conversationId, Clock.System.now())
+                healthChatRepository.transaction {
+                    healthChatRepository.updateMessageStatus(userMessageId, ChatMessageStatus.ERROR)
+                    healthChatRepository.updateMessageStatus(assistantMessageId, ChatMessageStatus.ERROR)
+                    healthChatRepository.touchConversation(conversationId, Clock.System.now())
+                }
                 return ChatResult.ApiKeyMissing
             }
 
@@ -161,14 +167,16 @@ IMPORTANT LIMITATIONS:
             }
 
             val responseModel = result.diagnostics.model.ifBlank { request.model }
-            healthChatRepository.updateMessageStatus(userMessageId, ChatMessageStatus.COMPLETED)
-            healthChatRepository.updateAssistantMessage(
-                messageId = assistantMessageId,
-                content = result.content,
-                toolCallsJson = toolCallsJson,
-                model = responseModel,
-                status = ChatMessageStatus.COMPLETED,
-            )
+            healthChatRepository.transaction {
+                healthChatRepository.updateMessageStatus(userMessageId, ChatMessageStatus.COMPLETED)
+                healthChatRepository.updateAssistantMessage(
+                    messageId = assistantMessageId,
+                    content = result.content,
+                    toolCallsJson = toolCallsJson,
+                    model = responseModel,
+                    status = ChatMessageStatus.COMPLETED,
+                )
+            }
 
             val assistantMessage = HealthChatMessage(
                 messageId = assistantMessageId,
@@ -199,20 +207,26 @@ IMPORTANT LIMITATIONS:
                 diagnostics = result.diagnostics,
             )
         } catch (e: CancellationException) {
-            if (userMessageId > 0L) {
-                healthChatRepository.updateMessageStatus(userMessageId, ChatMessageStatus.ERROR)
-            }
-            if (assistantMessageId > 0L) {
-                healthChatRepository.updateMessageStatus(assistantMessageId, ChatMessageStatus.ERROR)
+            withContext(NonCancellable) {
+                healthChatRepository.transaction {
+                    if (userMessageId > 0L) {
+                        healthChatRepository.updateMessageStatus(userMessageId, ChatMessageStatus.ERROR)
+                    }
+                    if (assistantMessageId > 0L) {
+                        healthChatRepository.updateMessageStatus(assistantMessageId, ChatMessageStatus.ERROR)
+                    }
+                }
             }
             throw e
         } catch (e: Exception) {
             Napier.e("Chat failed", e)
-            if (userMessageId > 0L) {
-                healthChatRepository.updateMessageStatus(userMessageId, ChatMessageStatus.ERROR)
-            }
-            if (assistantMessageId > 0L) {
-                healthChatRepository.updateMessageStatus(assistantMessageId, ChatMessageStatus.ERROR)
+            healthChatRepository.transaction {
+                if (userMessageId > 0L) {
+                    healthChatRepository.updateMessageStatus(userMessageId, ChatMessageStatus.ERROR)
+                }
+                if (assistantMessageId > 0L) {
+                    healthChatRepository.updateMessageStatus(assistantMessageId, ChatMessageStatus.ERROR)
+                }
             }
             ChatResult.ProviderError(
                 message = e.message ?: "Unknown error",

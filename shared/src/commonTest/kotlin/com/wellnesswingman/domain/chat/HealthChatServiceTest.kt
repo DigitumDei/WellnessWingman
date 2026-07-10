@@ -49,6 +49,8 @@ class HealthChatServiceTest {
         var lastRenamedTitle: String? = null
         var lastRenamedConversationId: Long? = null
 
+        override suspend fun <T> transaction(block: suspend () -> T): T = block()
+
         override suspend fun createConversation(
             externalId: String,
             title: String,
@@ -1250,5 +1252,202 @@ class HealthChatServiceTest {
         val assistantMsg = chatRepo.messages.find { it.role == ChatRole.ASSISTANT }
         assertNotNull(assistantMsg)
         assertEquals(ChatMessageStatus.ERROR, assistantMsg.status)
+    }
+
+    @Test
+    fun `failed provider turn excluded from subsequent send history`() = runTest {
+        val chatRepo = FakeHealthChatRepository()
+        val appSettings = FakeAppSettingsRepository()
+        val convId = chatRepo.createConversation(
+            "conv-fail-hist", "Prior chat", "openai", "gpt-4o-mini", now, now,
+        )
+        chatRepo.insertMessage(convId, ChatRole.USER, "Hello", now, "openai", "gpt-4o-mini", status = ChatMessageStatus.COMPLETED)
+        chatRepo.insertMessage(convId, ChatRole.ASSISTANT, "Hi there!", now, "openai", "gpt-4o-mini", status = ChatMessageStatus.COMPLETED)
+
+        val failingClient = object : LlmClient {
+            override val providerId: String get() = "openai"
+            override suspend fun analyzeImage(imageBytes: ByteArray, prompt: String, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?) = throw RuntimeException("API error")
+            override suspend fun transcribeAudio(imageBytes: ByteArray, mimeType: String) = ""
+            override suspend fun generateCompletion(prompt: String, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?) = throw RuntimeException("API error")
+            override suspend fun generateChatResponse(messages: List<LlmChatMessage>, systemInstruction: String?, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?) = throw RuntimeException("API error")
+        }
+
+        val factory = mockk<LlmClientFactory>()
+        every { factory.create(LlmProvider.OPENAI) } returns failingClient
+        every { factory.hasApiKey(LlmProvider.OPENAI) } returns true
+        every { factory.hasCurrentApiKey() } returns true
+
+        val toolRegistry = ToolRegistry(
+            trackedEntryRepository = FakeTrackedEntryRepository(),
+            entryAnalysisRepository = FakeEntryAnalysisRepository(),
+            weightHistoryRepository = FakeWeightHistoryRepository(),
+            appSettingsRepository = appSettings,
+            nutritionalProfileRepository = FakeNutritionalProfileRepository(),
+        )
+
+        val service = HealthChatService(chatRepo, factory, toolRegistry)
+        val failRequest = ChatRequest("conv-fail-hist", "What is my weight?", LlmProvider.OPENAI, "gpt-4o-mini")
+        val failResult = service.sendMessage(failRequest)
+
+        assertTrue(failResult is ChatResult.ProviderError)
+        val failedUser = chatRepo.messages.find { it.content == "What is my weight?" }
+        assertNotNull(failedUser)
+        assertEquals(ChatMessageStatus.ERROR, failedUser.status)
+
+        val capturedMessages = mutableListOf<List<LlmChatMessage>>()
+        val capturingClient = object : LlmClient {
+            override val providerId: String get() = "openai"
+            override suspend fun analyzeImage(imageBytes: ByteArray, prompt: String, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?) = LlmAnalysisResult("ok", LlmDiagnostics())
+            override suspend fun transcribeAudio(imageBytes: ByteArray, mimeType: String) = ""
+            override suspend fun generateCompletion(prompt: String, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?) = LlmAnalysisResult("ok", LlmDiagnostics())
+            override suspend fun generateChatResponse(messages: List<LlmChatMessage>, systemInstruction: String?, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?): LlmAnalysisResult {
+                capturedMessages.add(messages)
+                return LlmAnalysisResult("Sure!", LlmDiagnostics(model = "gpt-4o-mini"))
+            }
+        }
+        every { factory.create(LlmProvider.OPENAI) } returns capturingClient
+
+        val successRequest = ChatRequest("conv-fail-hist", "Tell me more", LlmProvider.OPENAI, "gpt-4o-mini")
+        val successResult = service.sendMessage(successRequest)
+
+        assertTrue(successResult is ChatResult.Success)
+        assertTrue(capturedMessages.isNotEmpty())
+        val sentMessages = capturedMessages.first()
+
+        val failedContentInHistory = sentMessages.any { it.content == "What is my weight?" }
+        assertFalse(failedContentInHistory, "Failed turn content must not appear in subsequent LLM history")
+
+        val priorHelloInHistory = sentMessages.any { it.content == "Hello" }
+        assertTrue(priorHelloInHistory, "Prior successfully completed messages must appear in LLM history")
+    }
+
+    @Test
+    fun `api key missing turn excluded from subsequent send history`() = runTest {
+        val chatRepo = FakeHealthChatRepository()
+        val convId = chatRepo.createConversation(
+            "conv-nokey-hist", "Health chat", "openai", "gpt-4o-mini", now, now,
+        )
+        chatRepo.insertMessage(convId, ChatRole.USER, "Hello", now, "openai", "gpt-4o-mini", status = ChatMessageStatus.COMPLETED)
+        chatRepo.insertMessage(convId, ChatRole.ASSISTANT, "Hi there!", now, "openai", "gpt-4o-mini", status = ChatMessageStatus.COMPLETED)
+
+        val factory = mockk<LlmClientFactory>()
+        every { factory.hasApiKey(LlmProvider.OPENAI) } returns false
+        every { factory.hasCurrentApiKey() } returns false
+
+        val toolRegistry = ToolRegistry(
+            trackedEntryRepository = FakeTrackedEntryRepository(),
+            entryAnalysisRepository = FakeEntryAnalysisRepository(),
+            weightHistoryRepository = FakeWeightHistoryRepository(),
+            appSettingsRepository = FakeAppSettingsRepository(),
+            nutritionalProfileRepository = FakeNutritionalProfileRepository(),
+        )
+
+        val service = HealthChatService(chatRepo, factory, toolRegistry)
+        val failRequest = ChatRequest("conv-nokey-hist", "What is my weight?", LlmProvider.OPENAI, "gpt-4o-mini")
+        val failResult = service.sendMessage(failRequest)
+
+        assertTrue(failResult is ChatResult.ApiKeyMissing)
+        val failedUser = chatRepo.messages.find { it.content == "What is my weight?" }
+        assertNotNull(failedUser)
+        assertEquals(ChatMessageStatus.ERROR, failedUser.status)
+
+        val capturedMessages = mutableListOf<List<LlmChatMessage>>()
+        val capturingClient = object : LlmClient {
+            override val providerId: String get() = "openai"
+            override suspend fun analyzeImage(imageBytes: ByteArray, prompt: String, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?) = LlmAnalysisResult("ok", LlmDiagnostics())
+            override suspend fun transcribeAudio(imageBytes: ByteArray, mimeType: String) = ""
+            override suspend fun generateCompletion(prompt: String, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?) = LlmAnalysisResult("ok", LlmDiagnostics())
+            override suspend fun generateChatResponse(messages: List<LlmChatMessage>, systemInstruction: String?, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?): LlmAnalysisResult {
+                capturedMessages.add(messages)
+                return LlmAnalysisResult("Sure!", LlmDiagnostics(model = "gpt-4o-mini"))
+            }
+        }
+        every { factory.create(LlmProvider.OPENAI) } returns capturingClient
+        every { factory.hasApiKey(LlmProvider.OPENAI) } returns true
+        every { factory.hasCurrentApiKey() } returns true
+
+        val successRequest = ChatRequest("conv-nokey-hist", "Tell me more", LlmProvider.OPENAI, "gpt-4o-mini")
+        val successResult = service.sendMessage(successRequest)
+
+        assertTrue(successResult is ChatResult.Success)
+        assertTrue(capturedMessages.isNotEmpty())
+        val sentMessages = capturedMessages.first()
+
+        val failedContentInHistory = sentMessages.any { it.content == "What is my weight?" }
+        assertFalse(failedContentInHistory, "Failed turn content must not appear in subsequent LLM history after API key missing")
+
+        val priorHelloInHistory = sentMessages.any { it.content == "Hello" }
+        assertTrue(priorHelloInHistory, "Prior successfully completed messages must appear in LLM history")
+    }
+
+    @Test
+    fun `cancelled turn excluded from subsequent send history`() = runTest {
+        val chatRepo = FakeHealthChatRepository()
+        val convId = chatRepo.createConversation(
+            "conv-cancel-hist", "Health chat", "openai", "gpt-4o-mini", now, now,
+        )
+        chatRepo.insertMessage(convId, ChatRole.USER, "Hello", now, "openai", "gpt-4o-mini", status = ChatMessageStatus.COMPLETED)
+        chatRepo.insertMessage(convId, ChatRole.ASSISTANT, "Hi there!", now, "openai", "gpt-4o-mini", status = ChatMessageStatus.COMPLETED)
+
+        val cancellingClient = object : LlmClient {
+            override val providerId: String get() = "openai"
+            override suspend fun analyzeImage(imageBytes: ByteArray, prompt: String, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?) = throw CancellationException()
+            override suspend fun transcribeAudio(imageBytes: ByteArray, mimeType: String) = ""
+            override suspend fun generateCompletion(prompt: String, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?) = throw CancellationException()
+            override suspend fun generateChatResponse(messages: List<LlmChatMessage>, systemInstruction: String?, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?) = throw CancellationException()
+        }
+
+        val factory = mockk<LlmClientFactory>()
+        every { factory.create(LlmProvider.OPENAI) } returns cancellingClient
+        every { factory.hasApiKey(LlmProvider.OPENAI) } returns true
+        every { factory.hasCurrentApiKey() } returns true
+
+        val toolRegistry = ToolRegistry(
+            trackedEntryRepository = FakeTrackedEntryRepository(),
+            entryAnalysisRepository = FakeEntryAnalysisRepository(),
+            weightHistoryRepository = FakeWeightHistoryRepository(),
+            appSettingsRepository = FakeAppSettingsRepository(),
+            nutritionalProfileRepository = FakeNutritionalProfileRepository(),
+        )
+
+        val service = HealthChatService(chatRepo, factory, toolRegistry)
+        val cancelRequest = ChatRequest("conv-cancel-hist", "What is my weight?", LlmProvider.OPENAI, "gpt-4o-mini")
+
+        try {
+            service.sendMessage(cancelRequest)
+            fail("Expected CancellationException to propagate")
+        } catch (e: CancellationException) {
+            // expected
+        }
+
+        val failedUser = chatRepo.messages.find { it.content == "What is my weight?" }
+        assertNotNull(failedUser)
+        assertEquals(ChatMessageStatus.ERROR, failedUser.status)
+
+        val capturedMessages = mutableListOf<List<LlmChatMessage>>()
+        val capturingClient = object : LlmClient {
+            override val providerId: String get() = "openai"
+            override suspend fun analyzeImage(imageBytes: ByteArray, prompt: String, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?) = LlmAnalysisResult("ok", LlmDiagnostics())
+            override suspend fun transcribeAudio(imageBytes: ByteArray, mimeType: String) = ""
+            override suspend fun generateCompletion(prompt: String, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?) = LlmAnalysisResult("ok", LlmDiagnostics())
+            override suspend fun generateChatResponse(messages: List<LlmChatMessage>, systemInstruction: String?, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?): LlmAnalysisResult {
+                capturedMessages.add(messages)
+                return LlmAnalysisResult("Sure!", LlmDiagnostics(model = "gpt-4o-mini"))
+            }
+        }
+        every { factory.create(LlmProvider.OPENAI) } returns capturingClient
+
+        val successRequest = ChatRequest("conv-cancel-hist", "Tell me more", LlmProvider.OPENAI, "gpt-4o-mini")
+        val successResult = service.sendMessage(successRequest)
+
+        assertTrue(successResult is ChatResult.Success)
+        assertTrue(capturedMessages.isNotEmpty())
+        val sentMessages = capturedMessages.first()
+
+        val failedContentInHistory = sentMessages.any { it.content == "What is my weight?" }
+        assertFalse(failedContentInHistory, "Cancelled turn content must not appear in subsequent LLM history")
+
+        val priorHelloInHistory = sentMessages.any { it.content == "Hello" }
+        assertTrue(priorHelloInHistory, "Prior successfully completed messages must appear in LLM history")
     }
 }

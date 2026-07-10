@@ -7,6 +7,8 @@ import com.wellnesswingman.data.model.HealthChatMessage
 import kotlinx.datetime.Instant
 
 interface HealthChatRepository {
+    suspend fun <T> transaction(block: suspend () -> T): T
+
     suspend fun createConversation(
         externalId: String,
         title: String = "",
