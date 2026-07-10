@@ -660,7 +660,9 @@ class ChatLlmClientTest {
             ?.let { it["parts"]?.jsonArray?.get(0)?.jsonObject?.get("text")?.jsonPrimitive?.content }
 
     private fun JsonObject.contentRole(index: Int): String? =
-        (this["contents"]?.jsonArray?.get(index)?.jsonObject)?.get("role")?.jsonPrimitive?.content
+        // Gemini treats an omitted role as "user". Kotlin serialization omits this
+        // field because it is GeminiContent's default value.
+        (this["contents"]?.jsonArray?.get(index)?.jsonObject)?.get("role")?.jsonPrimitive?.content ?: "user"
 
     private fun JsonObject.contentText(index: Int): String? =
         (this["contents"]?.jsonArray?.get(index)?.jsonObject)
