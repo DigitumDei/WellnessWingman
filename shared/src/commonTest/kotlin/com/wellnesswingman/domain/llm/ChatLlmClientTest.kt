@@ -2,6 +2,7 @@ package com.wellnesswingman.domain.llm
 
 import com.aallam.openai.api.chat.ChatChoice
 import com.aallam.openai.api.chat.ChatCompletion
+import com.aallam.openai.api.chat.ChatCompletionRequest
 import com.aallam.openai.api.chat.ChatMessage
 import com.aallam.openai.api.chat.ChatRole as OpenAiChatRole
 import com.aallam.openai.api.chat.FunctionCall
@@ -20,9 +21,12 @@ import com.wellnesswingman.data.repository.LlmProvider
 import io.ktor.client.*
 import io.ktor.client.engine.mock.*
 import io.ktor.client.plugins.contentnegotiation.*
+import io.ktor.client.request.*
 import io.ktor.http.*
 import io.ktor.http.content.*
+import io.ktor.serialization.kotlinx.json.*
 import io.ktor.utils.io.*
+import io.ktor.utils.io.core.*
 import io.mockk.coEvery
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest

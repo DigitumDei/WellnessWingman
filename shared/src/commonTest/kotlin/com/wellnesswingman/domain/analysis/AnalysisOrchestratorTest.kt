@@ -237,6 +237,14 @@ class AnalysisOrchestratorTest {
             content = """{"schemaVersion":"1.0","entryType":"Other","confidence":0.9,"otherAnalysis":{"summary":"Reviewed"},"warnings":[]}""",
             diagnostics = LlmDiagnostics(model = "openrouter-test")
         )
+
+        override suspend fun generateChatResponse(
+            messages: List<com.wellnesswingman.data.model.llm.LlmChatMessage>,
+            systemInstruction: String?,
+            jsonSchema: String?,
+            tools: List<com.wellnesswingman.data.model.llm.ToolDefinition>,
+            toolExecutor: ToolExecutor?
+        ): LlmAnalysisResult = throw NotImplementedError()
     }
 
     private class FakeTrackedEntryRepository : TrackedEntryRepository {

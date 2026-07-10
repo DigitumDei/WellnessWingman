@@ -245,9 +245,16 @@ class WeeklySummaryServiceTest {
                 toolExecutor: ToolExecutor?
             ) =
                 LlmAnalysisResult(response, LlmDiagnostics())
+
+            override suspend fun generateChatResponse(
+                messages: List<com.wellnesswingman.data.model.llm.LlmChatMessage>,
+                systemInstruction: String?,
+                jsonSchema: String?,
+                tools: List<com.wellnesswingman.data.model.llm.ToolDefinition>,
+                toolExecutor: ToolExecutor?
+            ) = LlmAnalysisResult(response, LlmDiagnostics())
         }
         val factory = mockk<LlmClientFactory>()
-        every { factory.hasCurrentApiKey() } returns hasKey
         if (hasKey) every { factory.createForCurrentProvider() } returns fakeLlmClient
         return factory
     }
@@ -279,9 +286,18 @@ class WeeklySummaryServiceTest {
                 capturedPrompts.add(prompt)
                 return LlmAnalysisResult(response, LlmDiagnostics())
             }
+
+            override suspend fun generateChatResponse(
+                messages: List<com.wellnesswingman.data.model.llm.LlmChatMessage>,
+                systemInstruction: String?,
+                jsonSchema: String?,
+                tools: List<com.wellnesswingman.data.model.llm.ToolDefinition>,
+                toolExecutor: ToolExecutor?
+            ): LlmAnalysisResult {
+                return LlmAnalysisResult(response, LlmDiagnostics())
+            }
         }
         val factory = mockk<LlmClientFactory>()
-        every { factory.hasCurrentApiKey() } returns true
         every { factory.createForCurrentProvider() } returns fakeLlmClient
         return factory
     }
@@ -392,9 +408,18 @@ class WeeklySummaryServiceTest {
                 capturedExecutor = toolExecutor
                 return LlmAnalysisResult(VALID_WEEKLY_JSON, LlmDiagnostics())
             }
+
+            override suspend fun generateChatResponse(
+                messages: List<com.wellnesswingman.data.model.llm.LlmChatMessage>,
+                systemInstruction: String?,
+                jsonSchema: String?,
+                tools: List<com.wellnesswingman.data.model.llm.ToolDefinition>,
+                toolExecutor: ToolExecutor?
+            ): LlmAnalysisResult {
+                return LlmAnalysisResult(VALID_WEEKLY_JSON, LlmDiagnostics())
+            }
         }
         val factory = mockk<LlmClientFactory>()
-        every { factory.hasCurrentApiKey() } returns true
         every { factory.createForCurrentProvider() } returns fakeLlmClient
 
         val weekStart = LocalDate(2025, 3, 1)

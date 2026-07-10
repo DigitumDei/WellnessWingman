@@ -225,6 +225,14 @@ class DailySummaryServiceTest {
                 toolExecutor: ToolExecutor?
             ) =
                 LlmAnalysisResult(response, LlmDiagnostics())
+
+            override suspend fun generateChatResponse(
+                messages: List<com.wellnesswingman.data.model.llm.LlmChatMessage>,
+                systemInstruction: String?,
+                jsonSchema: String?,
+                tools: List<com.wellnesswingman.data.model.llm.ToolDefinition>,
+                toolExecutor: ToolExecutor?
+            ) = LlmAnalysisResult(response, LlmDiagnostics())
         }
         val factory = mockk<LlmClientFactory>()
         every { factory.hasCurrentApiKey() } returns hasKey
@@ -257,6 +265,16 @@ class DailySummaryServiceTest {
                 toolExecutor: ToolExecutor?
             ): LlmAnalysisResult {
                 capturedPrompts.add(prompt)
+                return LlmAnalysisResult(response, LlmDiagnostics())
+            }
+
+            override suspend fun generateChatResponse(
+                messages: List<com.wellnesswingman.data.model.llm.LlmChatMessage>,
+                systemInstruction: String?,
+                jsonSchema: String?,
+                tools: List<com.wellnesswingman.data.model.llm.ToolDefinition>,
+                toolExecutor: ToolExecutor?
+            ): LlmAnalysisResult {
                 return LlmAnalysisResult(response, LlmDiagnostics())
             }
         }
@@ -344,6 +362,16 @@ class DailySummaryServiceTest {
             ): LlmAnalysisResult {
                 capturedToolNames = tools.map { it.name }
                 capturedExecutor = toolExecutor
+                return LlmAnalysisResult("""{"insights":[],"recommendations":[]}""", LlmDiagnostics())
+            }
+
+            override suspend fun generateChatResponse(
+                messages: List<com.wellnesswingman.data.model.llm.LlmChatMessage>,
+                systemInstruction: String?,
+                jsonSchema: String?,
+                tools: List<com.wellnesswingman.data.model.llm.ToolDefinition>,
+                toolExecutor: ToolExecutor?
+            ): LlmAnalysisResult {
                 return LlmAnalysisResult("""{"insights":[],"recommendations":[]}""", LlmDiagnostics())
             }
         }
