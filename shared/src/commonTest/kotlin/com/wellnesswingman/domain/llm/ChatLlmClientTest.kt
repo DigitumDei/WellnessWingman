@@ -31,8 +31,12 @@ import io.mockk.coEvery
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.putJsonObject
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -218,6 +222,7 @@ class ChatLlmClientTest {
     @Test
     fun `gemini chat preserves serialized history with user model and tool turns`() = runTest {
         val requests = mutableListOf<String>()
+        val requestUrls = mutableListOf<String>()
         val responses = ArrayDeque(
             listOf(
                 """{
@@ -236,7 +241,7 @@ class ChatLlmClientTest {
             )
         )
 
-        val httpClient = mockGeminiClient(requests, responses)
+        val httpClient = mockGeminiClient(requests, responses, requestUrls)
 
         val client = GeminiLlmClient(
             apiKey = "test-key",
@@ -257,11 +262,23 @@ class ChatLlmClientTest {
 
         assertEquals("I can help with that!", result.content)
         assertEquals(1, requests.size)
+
+        assertTrue(requestUrls[0].contains("models/gemini-1.5-flash"), "Request URL must contain configured model")
+
+        val body = parseJsonBody(requests[0])
+        assertEquals("You are a health assistant.", body.systemInstructionText(), "System instruction must be present")
+        assertEquals("user", body.contentRole(0), "First message role must be user")
+        assertEquals("Hello", body.contentText(0), "First message text must match")
+        assertEquals("model", body.contentRole(1), "Second message role must be model")
+        assertEquals("Hi! How can I help?", body.contentText(1), "Second message text must match")
+        assertEquals("user", body.contentRole(2), "Third message role must be user")
+        assertEquals("What is my weight?", body.contentText(2), "Third message text must match")
     }
 
     @Test
     fun `gemini chat continues tool response with existing tool call history`() = runTest {
         val requests = mutableListOf<String>()
+        val requestUrls = mutableListOf<String>()
         val responses = ArrayDeque(
             listOf(
                 """{
@@ -280,10 +297,11 @@ class ChatLlmClientTest {
             )
         )
 
-        val httpClient = mockGeminiClient(requests, responses)
+        val httpClient = mockGeminiClient(requests, responses, requestUrls)
 
         val client = GeminiLlmClient(
             apiKey = "test-key",
+            model = "gemini-1.5-pro",
             httpClient = httpClient
         )
 
@@ -305,11 +323,29 @@ class ChatLlmClientTest {
         assertEquals("Your weight is 75 kg.", result.content)
         assertEquals(1, requests.size)
 
-        val body = requests[0]
-        assertTrue(body.contains("\"functionCall\""), "Should include prior function call")
-        assertTrue(body.contains("\"fc-1\""), "Should include prior function call id")
-        assertTrue(body.contains("\"functionResponse\""), "Should include prior function response")
-        assertTrue(body.contains("\"currentWeight\":75"), "Should include tool result content")
+        assertTrue(requestUrls[0].contains("models/gemini-1.5-pro"), "Request URL must contain configured model")
+
+        val body = parseJsonBody(requests[0])
+
+        assertEquals("user", body.contentRole(0), "First content role must be user")
+        assertEquals("What is my weight?", body.contentText(0), "First content text must match")
+
+        val secondParts = body.contentParts(1)
+        assertEquals(1, secondParts.size, "Second content must have one part")
+        val functionCall = secondParts[0].jsonObject["functionCall"]?.jsonObject
+        assertNotNull(functionCall, "Second content must contain a functionCall")
+        assertEquals("fc-1", functionCall["id"]?.jsonPrimitive?.content, "functionCall id must match")
+        assertEquals("get_user_profile", functionCall["name"]?.jsonPrimitive?.content, "functionCall name must match")
+        assertEquals("model", body.contentRole(1), "Assistant tool-call message must be role model")
+
+        val thirdParts = body.contentParts(2)
+        assertEquals(1, thirdParts.size, "Third content must have one part")
+        val functionResponse = thirdParts[0].jsonObject["functionResponse"]?.jsonObject
+        assertNotNull(functionResponse, "Third content must contain a functionResponse")
+        assertEquals("fc-1", functionResponse["id"]?.jsonPrimitive?.content, "functionResponse id must match")
+        assertEquals("get_user_profile", functionResponse["name"]?.jsonPrimitive?.content, "functionResponse name must match")
+        assertEquals(75, functionResponse["response"]?.jsonObject?.get("content")?.jsonObject?.get("currentWeight")?.jsonPrimitive?.int, "functionResponse must include tool result")
+        assertEquals("user", body.contentRole(2), "Tool response message must be role user")
     }
 
     @Test
@@ -543,10 +579,100 @@ class ChatLlmClientTest {
         assertEquals("gpt-4o-0613", result.diagnostics.model)
     }
 
+    @Test
+    fun `openai sends configured model to provider`() = runTest {
+        val requests = mutableListOf<ChatCompletionRequest>()
+        val api = mockk<OpenAI>()
+        coEvery { api.chatCompletion(any()) } answers {
+            requests += firstArg<ChatCompletionRequest>()
+            finalCompletion("ok")
+        }
+
+        val client = OpenAiLlmClient(
+            apiKey = "test-key",
+            model = "gpt-4o-2024-08",
+            client = api
+        )
+
+        client.generateChatResponse(
+            messages = listOf(LlmChatMessage(role = LlmChatRole.USER, content = "test"))
+        )
+
+        assertEquals("gpt-4o-2024-08", requests[0].model.id)
+    }
+
+    @Test
+    fun `gemini sends configured model to provider`() = runTest {
+        val requests = mutableListOf<String>()
+        val requestUrls = mutableListOf<String>()
+        val responses = ArrayDeque(
+            listOf(
+                """{"candidates":[{"content":{"role":"model","parts":[{"text":"ok"}]}}],"usageMetadata":{"promptTokenCount":1,"candidatesTokenCount":1,"totalTokenCount":2}}""".trimIndent()
+            )
+        )
+
+        val httpClient = mockGeminiClient(requests, responses, requestUrls)
+
+        val client = GeminiLlmClient(
+            apiKey = "test-key",
+            model = "gemini-2.0-flash",
+            httpClient = httpClient
+        )
+
+        client.generateChatResponse(
+            messages = listOf(LlmChatMessage(role = LlmChatRole.USER, content = "test"))
+        )
+
+        assertTrue(requestUrls[0].contains("models/gemini-2.0-flash"), "Request URL must contain configured model")
+    }
+
+    @Test
+    fun `openrouter sends configured model to provider`() = runTest {
+        val requests = mutableListOf<ChatCompletionRequest>()
+        val api = mockk<OpenAI>()
+        coEvery { api.chatCompletion(any()) } answers {
+            requests += firstArg<ChatCompletionRequest>()
+            finalCompletion("ok")
+        }
+
+        val client = OpenRouterLlmClient(
+            apiKey = "sk-or-v1-test-key",
+            model = "openai/gpt-4o-2024-08",
+            client = api
+        )
+
+        client.generateChatResponse(
+            messages = listOf(LlmChatMessage(role = LlmChatRole.USER, content = "test"))
+        )
+
+        assertEquals("openai/gpt-4o-2024-08", requests[0].model.id)
+    }
+
+    private fun parseJsonBody(raw: String): JsonObject =
+        Json { ignoreUnknownKeys = true; isLenient = true }.parseToJsonElement(raw).jsonObject
+
+    private fun JsonObject.systemInstructionText(): String? =
+        this["system_instruction"]?.jsonObject
+            ?.let { it["parts"]?.jsonArray?.get(0)?.jsonObject?.get("text")?.jsonPrimitive?.content }
+
+    private fun JsonObject.contentRole(index: Int): String? =
+        (this["contents"]?.jsonArray?.get(index)?.jsonObject)?.get("role")?.jsonPrimitive?.content
+
+    private fun JsonObject.contentText(index: Int): String? =
+        (this["contents"]?.jsonArray?.get(index)?.jsonObject)
+            ?.let { it["parts"]?.jsonArray?.get(0)?.jsonObject?.get("text")?.jsonPrimitive?.content }
+
+    private fun JsonObject.contentParts(index: Int): JsonArray =
+        (this["contents"]?.jsonArray?.get(index)?.jsonObject)
+            ?.let { it["parts"]?.jsonArray }
+            ?: JsonArray(emptyList())
+
     private fun mockGeminiClient(
         requests: MutableList<String>,
-        responses: ArrayDeque<String>
+        responses: ArrayDeque<String>,
+        requestUrls: MutableList<String>? = null
     ): HttpClient = HttpClient(MockEngine { request: HttpRequestData ->
+        requestUrls?.add(request.url.toString())
         requests += when (val body = request.body) {
             is OutgoingContent.ByteArrayContent -> body.bytes().decodeToString()
             is OutgoingContent.ReadChannelContent -> body.readFrom().readRemaining().readText()
