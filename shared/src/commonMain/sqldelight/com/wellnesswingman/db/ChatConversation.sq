@@ -93,7 +93,7 @@ WHERE messageId = ?;
 
 updateMessageContent:
 UPDATE ChatMessage
-SET content = ?, toolCallsJson = ?, status = ?
+SET content = ?, toolCallsJson = ?, model = ?, status = ?
 WHERE messageId = ?;
 
 deleteConversation:

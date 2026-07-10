@@ -83,6 +83,7 @@ IMPORTANT LIMITATIONS:
 
     suspend fun sendMessage(request: ChatRequest): ChatResult {
         var conversationId = 0L
+        var assistantMessageId = 0L
         return try {
             val now = Clock.System.now()
 
@@ -100,7 +101,7 @@ IMPORTANT LIMITATIONS:
             )
             healthChatRepository.updateMessageStatus(userMessageId, ChatMessageStatus.COMPLETED)
 
-            val assistantMessageId = healthChatRepository.insertMessage(
+            assistantMessageId = healthChatRepository.insertMessage(
                 conversationId = conversationId,
                 role = ChatRole.ASSISTANT,
                 content = "",
@@ -163,6 +164,7 @@ IMPORTANT LIMITATIONS:
                 messageId = assistantMessageId,
                 content = result.content,
                 toolCallsJson = toolCallsJson,
+                model = responseModel,
                 status = ChatMessageStatus.COMPLETED,
             )
 
@@ -198,6 +200,9 @@ IMPORTANT LIMITATIONS:
             throw e
         } catch (e: Exception) {
             Napier.e("Chat failed", e)
+            if (assistantMessageId > 0L) {
+                healthChatRepository.updateMessageStatus(assistantMessageId, ChatMessageStatus.ERROR)
+            }
             ChatResult.ProviderError(
                 message = e.message ?: "Unknown error",
                 conversationId = conversationId,

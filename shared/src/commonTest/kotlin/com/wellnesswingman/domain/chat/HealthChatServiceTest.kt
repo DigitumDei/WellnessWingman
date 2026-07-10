@@ -144,6 +144,7 @@ class HealthChatServiceTest {
             messageId: Long,
             content: String,
             toolCallsJson: String?,
+            model: String?,
             status: ChatMessageStatus,
         ) {
             val idx = messages.indexOfFirst { it.messageId == messageId }
@@ -151,6 +152,7 @@ class HealthChatServiceTest {
                 messages[idx] = messages[idx].copy(
                     content = content,
                     toolCallsJson = toolCallsJson,
+                    model = model,
                     status = status,
                 )
             }

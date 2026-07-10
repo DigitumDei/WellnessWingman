@@ -119,11 +119,13 @@ class SqlDelightHealthChatRepository(
         messageId: Long,
         content: String,
         toolCallsJson: String?,
+        model: String?,
         status: ChatMessageStatus,
     ) = withContext(Dispatchers.IO) {
         queries.updateMessageContent(
             content = content,
             toolCallsJson = toolCallsJson,
+            model = model,
             status = ChatMessageStatus.toString(status),
             messageId = messageId,
         )

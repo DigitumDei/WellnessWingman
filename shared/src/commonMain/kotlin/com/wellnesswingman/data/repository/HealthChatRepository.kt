@@ -48,6 +48,7 @@ interface HealthChatRepository {
         messageId: Long,
         content: String,
         toolCallsJson: String?,
+        model: String?,
         status: ChatMessageStatus,
     )
 
