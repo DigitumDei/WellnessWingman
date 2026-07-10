@@ -6,16 +6,20 @@ import com.wellnesswingman.data.model.HealthChatConversation
 import com.wellnesswingman.data.model.HealthChatMessage
 import com.wellnesswingman.data.model.llm.LlmChatMessage
 import com.wellnesswingman.data.model.llm.LlmChatRole
+import com.wellnesswingman.data.model.llm.ToolCall
+import com.wellnesswingman.data.model.llm.ToolResult
 import com.wellnesswingman.data.repository.HealthChatRepository
 import com.wellnesswingman.data.repository.LlmProvider
 import com.wellnesswingman.domain.llm.LlmClientFactory
 import com.wellnesswingman.domain.llm.LlmDiagnostics
+import com.wellnesswingman.domain.llm.ToolExecutor
 import com.wellnesswingman.domain.llm.ToolRegistry
 import io.github.aakira.napier.Napier
 import kotlinx.coroutines.CancellationException
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
 
 data class ChatRequest(
     val conversationExternalId: String,
@@ -69,15 +73,18 @@ IMPORTANT LIMITATIONS:
 - Do not provide medical diagnoses, prescribe medications, or replace professional medical advice.
 - Encourage users to consult healthcare professionals for medical concerns.
 - Do not make specific health claims that require clinical validation.
+- Never expose unnecessary personal or sensitive data in responses. Only share information directly relevant to the user's question.
+- If a user indicates a medical emergency (e.g., chest pain, severe injury, difficulty breathing), instruct them to call local emergency services immediately.
         """.trimIndent()
     }
 
     suspend fun sendMessage(request: ChatRequest): ChatResult {
+        var conversationId = 0L
         return try {
             val now = Clock.System.now()
 
             val conversation = getOrCreateConversation(request, now)
-            val conversationId = conversation.conversationId
+            conversationId = conversation.conversationId
 
             val userMessageId = healthChatRepository.insertMessage(
                 conversationId = conversationId,
@@ -90,31 +97,60 @@ IMPORTANT LIMITATIONS:
             )
             healthChatRepository.updateMessageStatus(userMessageId, ChatMessageStatus.COMPLETED)
 
+            val assistantMessageId = healthChatRepository.insertMessage(
+                conversationId = conversationId,
+                role = ChatRole.ASSISTANT,
+                content = "",
+                createdAt = now,
+                provider = request.provider.name.lowercase(),
+                model = request.model,
+                status = ChatMessageStatus.PENDING,
+            )
+
             if (!llmClientFactory.hasApiKey(request.provider)) {
+                healthChatRepository.updateMessageStatus(assistantMessageId, ChatMessageStatus.ERROR)
                 healthChatRepository.touchConversation(conversationId, Clock.System.now())
                 return ChatResult.ApiKeyMissing
             }
 
             val history = healthChatRepository.getMessagesForConversation(conversationId)
+                .filter { it.status != ChatMessageStatus.PENDING }
             val boundedHistory = history.takeLast(MAX_HISTORY_MESSAGES)
             val llmMessages = boundedHistory.map { it.toLlmChatMessage() }
 
             val llmClient = llmClientFactory.create(request.provider)
+            val capturingExecutor = CapturingToolExecutor(toolRegistry::execute)
             val result = llmClient.generateChatResponse(
                 messages = llmMessages,
                 systemInstruction = SYSTEM_INSTRUCTION,
                 tools = toolRegistry.definitions(),
-                toolExecutor = toolRegistry::execute,
+                toolExecutor = capturingExecutor::execute,
             )
 
             val responseNow = Clock.System.now()
-            val assistantMessageId = healthChatRepository.insertMessage(
-                conversationId = conversationId,
-                role = ChatRole.ASSISTANT,
+
+            val toolCallsJson: String? = if (capturingExecutor.capturedCalls.isNotEmpty()) {
+                json.encodeToString(capturingExecutor.capturedCalls)
+            } else null
+
+            for (toolResult in capturingExecutor.capturedResults) {
+                healthChatRepository.insertMessage(
+                    conversationId = conversationId,
+                    role = ChatRole.TOOL,
+                    content = "",
+                    createdAt = responseNow,
+                    provider = request.provider.name.lowercase(),
+                    model = result.diagnostics.model.ifBlank { request.model },
+                    toolResultJson = json.encodeToString(toolResult),
+                    status = ChatMessageStatus.COMPLETED,
+                )
+            }
+
+            val responseModel = result.diagnostics.model.ifBlank { request.model }
+            healthChatRepository.updateAssistantMessage(
+                messageId = assistantMessageId,
                 content = result.content,
-                createdAt = responseNow,
-                provider = request.provider.name.lowercase(),
-                model = result.diagnostics.model.ifBlank { request.model },
+                toolCallsJson = toolCallsJson,
                 status = ChatMessageStatus.COMPLETED,
             )
 
@@ -123,9 +159,10 @@ IMPORTANT LIMITATIONS:
                 conversationId = conversationId,
                 role = ChatRole.ASSISTANT,
                 content = result.content,
-                createdAt = responseNow,
+                createdAt = now,
                 provider = request.provider.name.lowercase(),
-                model = result.diagnostics.model.ifBlank { request.model },
+                model = responseModel,
+                toolCallsJson = toolCallsJson,
                 status = ChatMessageStatus.COMPLETED,
             )
 
@@ -151,7 +188,7 @@ IMPORTANT LIMITATIONS:
             Napier.e("Chat failed", e)
             ChatResult.ProviderError(
                 message = e.message ?: "Unknown error",
-                conversationId = 0L,
+                conversationId = conversationId,
             )
         }
     }
@@ -203,17 +240,52 @@ IMPORTANT LIMITATIONS:
     }
 }
 
+private class CapturingToolExecutor(
+    private val delegate: ToolExecutor,
+) {
+    val capturedCalls = mutableListOf<ToolCall>()
+    val capturedResults = mutableListOf<ToolResult>()
+
+    suspend fun execute(toolCall: ToolCall): ToolResult {
+        val result = delegate(toolCall)
+        capturedCalls.add(toolCall)
+        capturedResults.add(result)
+        return result
+    }
+}
+
 private fun HealthChatMessage.toLlmChatMessage(): LlmChatMessage {
+    val json = Json { ignoreUnknownKeys = true }
     val llmRole = when (role) {
         ChatRole.USER -> LlmChatRole.USER
         ChatRole.ASSISTANT -> LlmChatRole.ASSISTANT
         ChatRole.TOOL -> LlmChatRole.TOOL
     }
-    return LlmChatMessage(
-        role = llmRole,
-        content = content,
-        toolCallId = null,
-        toolName = null,
-        toolResultJson = toolResultJson,
-    )
+    return when (role) {
+        ChatRole.ASSISTANT -> LlmChatMessage(
+            role = llmRole,
+            content = content,
+            toolCalls = toolCallsJson?.let {
+                json.decodeFromString<List<ToolCall>>(it)
+            },
+        )
+        ChatRole.TOOL -> {
+            val toolResult = toolResultJson?.let {
+                json.decodeFromString<ToolResult>(it)
+            }
+            LlmChatMessage(
+                role = llmRole,
+                content = content,
+                toolCallId = toolResult?.toolCallId,
+                toolName = toolResult?.name,
+                toolResultJson = toolResult?.content?.let {
+                    json.encodeToString(JsonElement.serializer(), it)
+                },
+            )
+        }
+        else -> LlmChatMessage(
+            role = llmRole,
+            content = content,
+        )
+    }
 }

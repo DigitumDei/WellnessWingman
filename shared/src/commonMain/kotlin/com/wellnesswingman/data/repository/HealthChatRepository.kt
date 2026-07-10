@@ -44,6 +44,13 @@ interface HealthChatRepository {
 
     suspend fun updateMessageStatus(messageId: Long, status: ChatMessageStatus)
 
+    suspend fun updateAssistantMessage(
+        messageId: Long,
+        content: String,
+        toolCallsJson: String?,
+        status: ChatMessageStatus,
+    )
+
     suspend fun deleteMessage(messageId: Long)
 
     suspend fun getConversationCount(): Long

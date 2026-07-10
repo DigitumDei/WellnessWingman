@@ -115,6 +115,20 @@ class SqlDelightHealthChatRepository(
             )
         }
 
+    override suspend fun updateAssistantMessage(
+        messageId: Long,
+        content: String,
+        toolCallsJson: String?,
+        status: ChatMessageStatus,
+    ) = withContext(Dispatchers.IO) {
+        queries.updateMessageContent(
+            content = content,
+            toolCallsJson = toolCallsJson,
+            status = ChatMessageStatus.toString(status),
+            messageId = messageId,
+        )
+    }
+
     override suspend fun deleteMessage(messageId: Long) = withContext(Dispatchers.IO) {
         queries.deleteMessage(messageId)
     }

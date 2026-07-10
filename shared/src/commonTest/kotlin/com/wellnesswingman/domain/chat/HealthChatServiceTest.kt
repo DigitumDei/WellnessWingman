@@ -5,6 +5,11 @@ import com.wellnesswingman.data.model.ChatRole
 import com.wellnesswingman.data.model.HealthChatConversation
 import com.wellnesswingman.data.model.HealthChatMessage
 import com.wellnesswingman.data.model.NutritionalProfile
+import com.wellnesswingman.data.model.llm.LlmChatMessage
+import com.wellnesswingman.data.model.llm.LlmChatRole
+import com.wellnesswingman.data.model.llm.ToolCall
+import com.wellnesswingman.data.model.llm.ToolDefinition
+import com.wellnesswingman.data.model.llm.ToolResult
 import com.wellnesswingman.data.repository.AppSettingsRepository
 import com.wellnesswingman.data.repository.HealthChatRepository
 import com.wellnesswingman.data.repository.LlmProvider
@@ -12,6 +17,7 @@ import com.wellnesswingman.domain.llm.LlmAnalysisResult
 import com.wellnesswingman.domain.llm.LlmClient
 import com.wellnesswingman.domain.llm.LlmClientFactory
 import com.wellnesswingman.domain.llm.LlmDiagnostics
+import com.wellnesswingman.domain.llm.ToolExecutor
 import com.wellnesswingman.domain.llm.ToolRegistry
 import io.mockk.every
 import io.mockk.mockk
@@ -20,6 +26,9 @@ import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlin.test.*
 
 class HealthChatServiceTest {
@@ -124,6 +133,22 @@ class HealthChatServiceTest {
             val idx = messages.indexOfFirst { it.messageId == messageId }
             if (idx >= 0) {
                 messages[idx] = messages[idx].copy(status = status)
+            }
+        }
+
+        override suspend fun updateAssistantMessage(
+            messageId: Long,
+            content: String,
+            toolCallsJson: String?,
+            status: ChatMessageStatus,
+        ) {
+            val idx = messages.indexOfFirst { it.messageId == messageId }
+            if (idx >= 0) {
+                messages[idx] = messages[idx].copy(
+                    content = content,
+                    toolCallsJson = toolCallsJson,
+                    status = status,
+                )
             }
         }
 
@@ -492,11 +517,14 @@ class HealthChatServiceTest {
         val result = service.sendMessage(request)
 
         assertTrue(result is ChatResult.ApiKeyMissing)
-        assertEquals(1, chatRepo.messages.size)
+        assertEquals(2, chatRepo.messages.size)
         val userMsg = chatRepo.messages[0]
         assertEquals(ChatRole.USER, userMsg.role)
         assertEquals("Hello", userMsg.content)
         assertEquals(ChatMessageStatus.COMPLETED, userMsg.status)
+        val pendingAssistant = chatRepo.messages[1]
+        assertEquals(ChatRole.ASSISTANT, pendingAssistant.role)
+        assertEquals(ChatMessageStatus.ERROR, pendingAssistant.status)
     }
 
     @Test
@@ -559,6 +587,10 @@ class HealthChatServiceTest {
 
         assertTrue(result is ChatResult.ProviderError)
         assertTrue(result.message.contains("API error"))
+        assertTrue(result.conversationId > 0L)
+        val assistantMsg = chatRepo.messages.find { it.role == ChatRole.ASSISTANT }
+        assertNotNull(assistantMsg)
+        assertEquals(ChatMessageStatus.ERROR, assistantMsg.status)
     }
 
     @Test
@@ -595,6 +627,7 @@ class HealthChatServiceTest {
 
         assertTrue(result is ChatResult.ProviderError)
         assertTrue(result.message.contains("API key not configured"))
+        assertTrue(result.conversationId > 0L)
     }
 
     @Test
@@ -852,8 +885,11 @@ class HealthChatServiceTest {
         assertTrue(result is ChatResult.Success)
         assertEquals(1, capturedInstructions.size)
         assertNotNull(capturedInstructions[0])
-        assertTrue(capturedInstructions[0]!!.contains("health and wellness assistant"))
-        assertTrue(capturedInstructions[0]!!.contains("medical diagnoses"))
+        val sysInstr = capturedInstructions[0]!!
+        assertTrue(sysInstr.contains("health and wellness assistant"))
+        assertTrue(sysInstr.contains("medical diagnoses"))
+        assertTrue(sysInstr.contains("Never expose unnecessary personal or sensitive data"))
+        assertTrue(sysInstr.contains("call local emergency services immediately"))
     }
 
     @Test
@@ -902,13 +938,13 @@ class HealthChatServiceTest {
     @Test
     fun `sendMessage persists single user message before LLM call`() = runTest {
         val chatRepo = FakeHealthChatRepository()
-        val captured = mutableListOf<List<com.wellnesswingman.data.model.llm.LlmChatMessage>>()
+        val captured = mutableListOf<List<LlmChatMessage>>()
         val capturingClient = object : LlmClient {
             override val providerId: String get() = "openai"
-            override suspend fun analyzeImage(imageBytes: ByteArray, prompt: String, jsonSchema: String?, tools: List<com.wellnesswingman.data.model.llm.ToolDefinition>, toolExecutor: com.wellnesswingman.domain.llm.ToolExecutor?) = LlmAnalysisResult("ok", LlmDiagnostics())
+            override suspend fun analyzeImage(imageBytes: ByteArray, prompt: String, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?) = LlmAnalysisResult("ok", LlmDiagnostics())
             override suspend fun transcribeAudio(imageBytes: ByteArray, mimeType: String) = ""
-            override suspend fun generateCompletion(prompt: String, jsonSchema: String?, tools: List<com.wellnesswingman.data.model.llm.ToolDefinition>, toolExecutor: com.wellnesswingman.domain.llm.ToolExecutor?) = LlmAnalysisResult("ok", LlmDiagnostics())
-            override suspend fun generateChatResponse(messages: List<com.wellnesswingman.data.model.llm.LlmChatMessage>, systemInstruction: String?, jsonSchema: String?, tools: List<com.wellnesswingman.data.model.llm.ToolDefinition>, toolExecutor: com.wellnesswingman.domain.llm.ToolExecutor?): LlmAnalysisResult {
+            override suspend fun generateCompletion(prompt: String, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?) = LlmAnalysisResult("ok", LlmDiagnostics())
+            override suspend fun generateChatResponse(messages: List<LlmChatMessage>, systemInstruction: String?, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?): LlmAnalysisResult {
                 captured.add(messages)
                 return LlmAnalysisResult("Hello from LLM", LlmDiagnostics(model = "gpt-4o-mini"))
             }
@@ -935,5 +971,199 @@ class HealthChatServiceTest {
         assertEquals(ChatMessageStatus.COMPLETED, userMsg.status)
         val assistantMsg = chatRepo.messages.first { it.role == ChatRole.ASSISTANT }
         assertNotNull(assistantMsg)
+    }
+
+    @Test
+    fun `sendMessage persists tool calls and results when LLM uses tools`() = runTest {
+        val chatRepo = FakeHealthChatRepository()
+        val json = Json { ignoreUnknownKeys = true }
+
+        val toolCall1 = ToolCall(id = "call1", name = "get_user_profile", arguments = JsonObject(emptyMap()))
+        val toolCall2 = ToolCall(id = "call2", name = "get_weight_history", arguments = JsonObject(emptyMap()))
+
+        val toolUsingClient = object : LlmClient {
+            override val providerId: String get() = "openai"
+            override suspend fun analyzeImage(imageBytes: ByteArray, prompt: String, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?) = LlmAnalysisResult("ok", LlmDiagnostics())
+            override suspend fun transcribeAudio(imageBytes: ByteArray, mimeType: String) = ""
+            override suspend fun generateCompletion(prompt: String, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?) = LlmAnalysisResult("ok", LlmDiagnostics())
+            override suspend fun generateChatResponse(messages: List<LlmChatMessage>, systemInstruction: String?, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?): LlmAnalysisResult {
+                toolExecutor?.invoke(toolCall1)
+                toolExecutor?.invoke(toolCall2)
+                return LlmAnalysisResult("Here is your data", LlmDiagnostics(model = "gpt-4o-mini"))
+            }
+        }
+
+        val factory = mockk<LlmClientFactory>()
+        every { factory.create(LlmProvider.OPENAI) } returns toolUsingClient
+        every { factory.hasApiKey(LlmProvider.OPENAI) } returns true
+        every { factory.hasCurrentApiKey() } returns true
+
+        val toolRegistry = ToolRegistry(
+            trackedEntryRepository = FakeTrackedEntryRepository(),
+            entryAnalysisRepository = FakeEntryAnalysisRepository(),
+            weightHistoryRepository = FakeWeightHistoryRepository(),
+            appSettingsRepository = FakeAppSettingsRepository(),
+            nutritionalProfileRepository = FakeNutritionalProfileRepository(),
+        )
+
+        val service = HealthChatService(chatRepo, factory, toolRegistry)
+        val result = service.sendMessage(
+            ChatRequest("conv-tools", "What is my weight?", LlmProvider.OPENAI, "gpt-4o-mini")
+        )
+
+        assertTrue(result is ChatResult.Success)
+
+        val toolMessages = chatRepo.messages.filter { it.role == ChatRole.TOOL }
+        assertEquals(2, toolMessages.size)
+
+        val toolMsg1 = toolMessages[0]
+        assertEquals(ChatRole.TOOL, toolMsg1.role)
+        val persistedResult1 = json.decodeFromString<ToolResult>(toolMsg1.toolResultJson!!)
+        assertEquals("call1", persistedResult1.toolCallId)
+        assertEquals("get_user_profile", persistedResult1.name)
+
+        val toolMsg2 = toolMessages[1]
+        val persistedResult2 = json.decodeFromString<ToolResult>(toolMsg2.toolResultJson!!)
+        assertEquals("call2", persistedResult2.toolCallId)
+        assertEquals("get_weight_history", persistedResult2.name)
+
+        val assistantMsg = chatRepo.messages.find { it.role == ChatRole.ASSISTANT && it.status == ChatMessageStatus.COMPLETED }
+        assertNotNull(assistantMsg)
+        assertNotNull(assistantMsg.toolCallsJson)
+        val persistedToolCalls = json.decodeFromString<List<ToolCall>>(assistantMsg.toolCallsJson!!)
+        assertEquals(2, persistedToolCalls.size)
+        assertEquals("call1", persistedToolCalls[0].id)
+        assertEquals("get_weight_history", persistedToolCalls[1].name)
+    }
+
+    @Test
+    fun `toLlmChatMessage reconstructs tool calls from persisted assistant message`() = runTest {
+        val json = Json { ignoreUnknownKeys = true }
+        val toolCalls = listOf(
+            ToolCall(id = "call1", name = "get_user_profile", arguments = JsonObject(emptyMap())),
+        )
+        val toolCallsJson = json.encodeToString(toolCalls)
+
+        val chatRepo = FakeHealthChatRepository()
+        val convId = chatRepo.createConversation("conv-replay", "Replay", "openai", "gpt-4o-mini", now, now)
+        chatRepo.insertMessage(convId, ChatRole.USER, "My data?", now, "openai", "gpt-4o-mini", status = ChatMessageStatus.COMPLETED)
+
+        val capturedMessages = mutableListOf<List<LlmChatMessage>>()
+        val toolUsingClient = object : LlmClient {
+            override val providerId: String get() = "openai"
+            override suspend fun analyzeImage(imageBytes: ByteArray, prompt: String, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?) = LlmAnalysisResult("ok", LlmDiagnostics())
+            override suspend fun transcribeAudio(imageBytes: ByteArray, mimeType: String) = ""
+            override suspend fun generateCompletion(prompt: String, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?) = LlmAnalysisResult("ok", LlmDiagnostics())
+            override suspend fun generateChatResponse(messages: List<LlmChatMessage>, systemInstruction: String?, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?): LlmAnalysisResult {
+                capturedMessages.add(messages)
+                return LlmAnalysisResult("Response", LlmDiagnostics(model = "gpt-4o-mini"))
+            }
+        }
+
+        val factory = mockk<LlmClientFactory>()
+        every { factory.create(LlmProvider.OPENAI) } returns toolUsingClient
+        every { factory.hasApiKey(LlmProvider.OPENAI) } returns true
+        every { factory.hasCurrentApiKey() } returns true
+
+        val toolRegistry = ToolRegistry(
+            trackedEntryRepository = FakeTrackedEntryRepository(),
+            entryAnalysisRepository = FakeEntryAnalysisRepository(),
+            weightHistoryRepository = FakeWeightHistoryRepository(),
+            appSettingsRepository = FakeAppSettingsRepository(),
+            nutritionalProfileRepository = FakeNutritionalProfileRepository(),
+        )
+
+        val toolResult = ToolResult(toolCallId = "call1", name = "get_user_profile", content = JsonPrimitive("data"))
+        chatRepo.insertMessage(
+            convId, ChatRole.ASSISTANT, "",
+            now, "openai", "gpt-4o-mini",
+            toolCallsJson = toolCallsJson,
+            status = ChatMessageStatus.COMPLETED,
+        )
+        chatRepo.insertMessage(
+            convId, ChatRole.TOOL, "",
+            now, "openai", "gpt-4o-mini",
+            toolResultJson = json.encodeToString(toolResult),
+            status = ChatMessageStatus.COMPLETED,
+        )
+
+        val service = HealthChatService(chatRepo, factory, toolRegistry)
+        service.sendMessage(ChatRequest("conv-replay", "Tell me more", LlmProvider.OPENAI, "gpt-4o-mini"))
+
+        assertTrue(capturedMessages.isNotEmpty())
+        val sentMessages = capturedMessages.first()
+
+        val assistantInHistory = sentMessages.find { it.role == LlmChatRole.ASSISTANT && it.toolCalls != null }
+        assertNotNull(assistantInHistory)
+        assertEquals(1, assistantInHistory.toolCalls?.size)
+        assertEquals("get_user_profile", assistantInHistory.toolCalls?.first()?.name)
+
+        val toolInHistory = sentMessages.find { it.role == LlmChatRole.TOOL }
+        assertNotNull(toolInHistory)
+        assertEquals("call1", toolInHistory.toolCallId)
+        assertEquals("get_user_profile", toolInHistory.toolName)
+    }
+
+    @Test
+    fun `toLlmChatMessage reconstructs tool result from persisted tool message`() = runTest {
+        val json = Json { ignoreUnknownKeys = true }
+        val toolResult = ToolResult(
+            toolCallId = "call1",
+            name = "get_user_profile",
+            content = JsonPrimitive("{\"name\": \"Test\"}"),
+        )
+        val toolResultJson = json.encodeToString(toolResult)
+
+        val chatRepo = FakeHealthChatRepository()
+        val convId = chatRepo.createConversation("conv-tool-msg", "Tool Msg", "openai", "gpt-4o-mini", now, now)
+
+        val capturedMessages = mutableListOf<List<LlmChatMessage>>()
+        val capturingClient = object : LlmClient {
+            override val providerId: String get() = "openai"
+            override suspend fun analyzeImage(imageBytes: ByteArray, prompt: String, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?) = LlmAnalysisResult("ok", LlmDiagnostics())
+            override suspend fun transcribeAudio(imageBytes: ByteArray, mimeType: String) = ""
+            override suspend fun generateCompletion(prompt: String, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?) = LlmAnalysisResult("ok", LlmDiagnostics())
+            override suspend fun generateChatResponse(messages: List<LlmChatMessage>, systemInstruction: String?, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?): LlmAnalysisResult {
+                capturedMessages.add(messages)
+                return LlmAnalysisResult("Response", LlmDiagnostics(model = "gpt-4o-mini"))
+            }
+        }
+
+        val factory = mockk<LlmClientFactory>()
+        every { factory.create(LlmProvider.OPENAI) } returns capturingClient
+        every { factory.hasApiKey(LlmProvider.OPENAI) } returns true
+        every { factory.hasCurrentApiKey() } returns true
+
+        val toolRegistry = ToolRegistry(
+            trackedEntryRepository = FakeTrackedEntryRepository(),
+            entryAnalysisRepository = FakeEntryAnalysisRepository(),
+            weightHistoryRepository = FakeWeightHistoryRepository(),
+            appSettingsRepository = FakeAppSettingsRepository(),
+            nutritionalProfileRepository = FakeNutritionalProfileRepository(),
+        )
+
+        chatRepo.insertMessage(
+            convId, ChatRole.USER, "My data?",
+            now, "openai", "gpt-4o-mini",
+            status = ChatMessageStatus.COMPLETED,
+        )
+        chatRepo.insertMessage(
+            convId, ChatRole.TOOL, "",
+            now, "openai", "gpt-4o-mini",
+            toolResultJson = toolResultJson,
+            status = ChatMessageStatus.COMPLETED,
+        )
+
+        val service = HealthChatService(chatRepo, factory, toolRegistry)
+        service.sendMessage(ChatRequest("conv-tool-msg", "Tell me more", LlmProvider.OPENAI, "gpt-4o-mini"))
+
+        assertTrue(capturedMessages.isNotEmpty())
+        val sentMessages = capturedMessages.first()
+
+        val toolInHistory = sentMessages.find { it.role == LlmChatRole.TOOL }
+        assertNotNull(toolInHistory)
+        assertEquals("call1", toolInHistory.toolCallId)
+        assertEquals("get_user_profile", toolInHistory.toolName)
+        assertNotNull(toolInHistory.toolResultJson)
     }
 }

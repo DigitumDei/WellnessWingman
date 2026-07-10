@@ -91,6 +91,11 @@ UPDATE ChatMessage
 SET status = ?
 WHERE messageId = ?;
 
+updateMessageContent:
+UPDATE ChatMessage
+SET content = ?, toolCallsJson = ?, status = ?
+WHERE messageId = ?;
+
 deleteConversation:
 DELETE FROM ChatConversation
 WHERE conversationId = ?;
