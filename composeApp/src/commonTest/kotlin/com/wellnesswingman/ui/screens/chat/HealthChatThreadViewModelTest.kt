@@ -250,12 +250,11 @@ class HealthChatThreadViewModelTest {
     fun `send handles service exception gracefully`() = runTest(dispatcher.scheduler) {
         val chatRepo = FakeHealthChatRepository()
         val appSettings = FakeAppSettingsRepository(apiKey = "sk-test")
-        val factory = ThrowingLlmClientFactory()
-        val service = makeService(chatRepo, appSettings, factory)
+        val throwingService = ThrowingChatService()
 
         val viewModel = HealthChatThreadViewModel(
             conversationExternalId = "conv-ex-send",
-            healthChatService = service,
+            healthChatService = throwingService,
             healthChatRepository = chatRepo,
             settingsRepository = appSettings,
         )
@@ -267,6 +266,7 @@ class HealthChatThreadViewModelTest {
 
         val state = viewModel.uiState.value
         assertIs<HealthChatThreadUiState.Error>(state)
+        assertFalse(viewModel.isSending.value)
     }
 
     @Test
@@ -288,20 +288,19 @@ class HealthChatThreadViewModelTest {
         advanceUntilIdle()
         assertIs<HealthChatThreadUiState.ApiKeyMissing>(viewModel.uiState.value)
 
-        val brokenRepo = ThrowingHealthChatRepository()
-        val brokenService = makeService(brokenRepo, appSettings, factory)
-        val brokenViewModel = HealthChatThreadViewModel(
+        val throwingSettings = ThrowingAppSettingsRepository()
+        val throwingViewModel = HealthChatThreadViewModel(
             conversationExternalId = "conv-ex-recheck",
-            healthChatService = brokenService,
-            healthChatRepository = brokenRepo,
-            settingsRepository = appSettings,
+            healthChatService = service,
+            healthChatRepository = chatRepo,
+            settingsRepository = throwingSettings,
         )
-        appSettings.apiKey = "sk-now-valid"
-        brokenViewModel.recheckConfiguration()
+        throwingViewModel.recheckConfiguration()
         advanceUntilIdle()
 
-        val state = brokenViewModel.uiState.value
+        val state = throwingViewModel.uiState.value
         assertIs<HealthChatThreadUiState.Error>(state)
+        assertFalse(throwingViewModel.isSending.value)
     }
 
     @Test
@@ -713,16 +712,6 @@ private class ThrowingHealthChatRepository : HealthChatRepository {
     override suspend fun getConversationCount(): Long = 0
     override suspend fun getMessageCountForConversation(conversationId: Long): Long = 0
 }
-
-private class ThrowingLlmClientFactory : LlmClientFactory(
-    settingsRepository = FakeAppSettingsRepository(),
-) {
-    override fun create(provider: LlmProvider): LlmClient = throw RuntimeException("Client error")
-    override fun hasApiKey(provider: LlmProvider): Boolean = true
-    override fun hasCurrentApiKey(): Boolean = true
-}
-
-private class CancellingHealthChatRepository : HealthChatRepository {
     override suspend fun <T> transaction(block: (TransactionScope) -> T): T =
         throw CancellationException()
     override suspend fun createConversation(externalId: String, title: String, provider: String?, model: String?, createdAt: Instant, updatedAt: Instant): Long =
@@ -763,4 +752,69 @@ private class CancellingChatService(
     override suspend fun sendMessage(request: ChatRequest): ChatResult {
         throw CancellationException("Send cancelled")
     }
+}
+
+private class ThrowingChatService(
+    private val chatRepo: HealthChatRepository = FakeHealthChatRepository(),
+    private val appSettings: AppSettingsRepository = FakeAppSettingsRepository(),
+    private val factory: LlmClientFactory = FakeLlmClientFactory(hasApiKey = true),
+) : HealthChatService(
+    healthChatRepository = chatRepo,
+    llmClientFactory = factory,
+    toolRegistry = ToolRegistry(
+        trackedEntryRepository = FakeTrackedEntryRepository(),
+        entryAnalysisRepository = FakeEntryAnalysisRepository(),
+        weightHistoryRepository = FakeWeightHistoryRepository(),
+        appSettingsRepository = appSettings,
+        nutritionalProfileRepository = FakeNutritionalProfileRepository(),
+    ),
+) {
+    override suspend fun sendMessage(request: ChatRequest): ChatResult {
+        throw RuntimeException("Service failure")
+    }
+}
+
+private class ThrowingAppSettingsRepository : AppSettingsRepository {
+    override fun getApiKey(provider: LlmProvider): String? = throw RuntimeException("Settings error")
+    override fun setApiKey(provider: LlmProvider, apiKey: String) {}
+    override fun removeApiKey(provider: LlmProvider) {}
+    override fun getSelectedProvider(): LlmProvider = throw RuntimeException("Settings error")
+    override fun setSelectedProvider(provider: LlmProvider) {}
+    override fun getModel(provider: LlmProvider): String? = "gpt-4o-mini"
+    override fun setModel(provider: LlmProvider, model: String) {}
+    override fun clear() {}
+    override fun getHeight(): Double? = null
+    override fun setHeight(height: Double) {}
+    override fun getHeightUnit(): String = "cm"
+    override fun setHeightUnit(unit: String) {}
+    override fun getSex(): String? = null
+    override fun setSex(sex: String) {}
+    override fun getCurrentWeight(): Double? = null
+    override fun setCurrentWeight(weight: Double) {}
+    override fun getWeightUnit(): String = "kg"
+    override fun setWeightUnit(unit: String) {}
+    override fun getDateOfBirth(): String? = null
+    override fun setDateOfBirth(dob: String) {}
+    override fun getActivityLevel(): String? = null
+    override fun setActivityLevel(level: String) {}
+    override fun clearHeight() {}
+    override fun clearCurrentWeight() {}
+    override fun clearProfileData() {}
+    override fun getImageRetentionThresholdDays(): Int = 30
+    override fun setImageRetentionThresholdDays(days: Int) {}
+    override fun getPolarAccessToken(): String? = null
+    override fun setPolarAccessToken(token: String) {}
+    override fun getPolarRefreshToken(): String? = null
+    override fun setPolarRefreshToken(token: String) {}
+    override fun getPolarTokenExpiresAt(): Long = 0L
+    override fun setPolarTokenExpiresAt(expiresAt: Long) {}
+    override fun getPolarUserId(): String? = null
+    override fun setPolarUserId(userId: String) {}
+    override fun getPendingOAuthState(): String? = null
+    override fun setPendingOAuthState(state: String) {}
+    override fun getPendingOAuthSessionId(): String? = null
+    override fun setPendingOAuthSessionId(sessionId: String) {}
+    override fun clearPendingOAuthSession() {}
+    override fun clearPolarTokens() {}
+    override fun isPolarConnected(): Boolean = false
 }
