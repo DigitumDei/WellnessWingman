@@ -8,8 +8,6 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertNotNull
-import kotlin.test.assertNull
 
 class ChatDatabaseMigrationTest {
 
@@ -45,57 +43,6 @@ class ChatDatabaseMigrationTest {
 
             migrationDriver.execute(
                 identifier = null,
-                sql = "CREATE TABLE ChatConversation (" +
-                    "conversationId INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, " +
-                    "externalId TEXT NOT NULL UNIQUE, " +
-                    "title TEXT NOT NULL DEFAULT '', " +
-                    "provider TEXT, " +
-                    "model TEXT, " +
-                    "createdAt INTEGER NOT NULL, " +
-                    "updatedAt INTEGER NOT NULL" +
-                    ")",
-                parameters = 0
-            )
-            migrationDriver.execute(
-                identifier = null,
-                sql = "INSERT INTO ChatConversation " +
-                    "(externalId, title, createdAt, updatedAt) " +
-                    "VALUES ('conv-1', 'Test', 1000, 1000)",
-                parameters = 0
-            )
-
-            migrationDriver.execute(
-                identifier = null,
-                sql = "CREATE TABLE ChatMessage (" +
-                    "messageId INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, " +
-                    "conversationId INTEGER NOT NULL, " +
-                    "role TEXT NOT NULL, " +
-                    "content TEXT NOT NULL, " +
-                    "createdAt INTEGER NOT NULL, " +
-                    "provider TEXT, " +
-                    "model TEXT, " +
-                    "toolCallsJson TEXT, " +
-                    "toolResultJson TEXT" +
-                    ")",
-                parameters = 0
-            )
-            migrationDriver.execute(
-                identifier = null,
-                sql = "INSERT INTO ChatMessage " +
-                    "(conversationId, role, content, createdAt) " +
-                    "VALUES (1, 'user', 'Hello', 1001)",
-                parameters = 0
-            )
-
-            migrationDriver.execute(
-                identifier = null,
-                sql = "CREATE INDEX idx_chat_message_conversation " +
-                    "ON ChatMessage(conversationId, createdAt)",
-                parameters = 0
-            )
-
-            migrationDriver.execute(
-                identifier = null,
                 sql = "PRAGMA user_version = 9",
                 parameters = 0
             )
@@ -107,6 +54,25 @@ class ChatDatabaseMigrationTest {
             )
 
             val migratedDb = WellnessWingmanDatabase(migrationDriver)
+
+            migratedDb.chatConversationQueries.insertConversation(
+                externalId = "conv-1",
+                title = "Test",
+                provider = null,
+                model = null,
+                createdAt = 1000,
+                updatedAt = 1000
+            )
+            migratedDb.chatConversationQueries.insertMessage(
+                conversationId = 1,
+                role = "user",
+                content = "Hello",
+                createdAt = 1001,
+                provider = null,
+                model = null,
+                toolCallsJson = null,
+                toolResultJson = null
+            )
 
             val conversations = migratedDb.chatConversationQueries.getAllConversations()
                 .executeAsList()
@@ -120,6 +86,12 @@ class ChatDatabaseMigrationTest {
             assertEquals(1, messages.size)
             assertEquals("user", messages[0].role)
             assertEquals("Hello", messages[0].content)
+
+            migrationDriver.execute(
+                identifier = null,
+                sql = "PRAGMA foreign_keys = ON",
+                parameters = 0
+            )
 
             migratedDb.chatConversationQueries.deleteConversation(1)
 
