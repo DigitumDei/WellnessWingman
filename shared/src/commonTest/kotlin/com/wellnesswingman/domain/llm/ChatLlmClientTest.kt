@@ -353,6 +353,141 @@ class ChatLlmClientTest {
     }
 
     @Test
+    fun `gemini chat groups consecutive TOOL messages into single content`() = runTest {
+        val requests = mutableListOf<String>()
+        val requestUrls = mutableListOf<String>()
+        val responses = ArrayDeque(
+            listOf(
+                """{
+                    "candidates": [{
+                        "content": {
+                            "role": "model",
+                            "parts": [{"text": "Here are both results."}]
+                        }
+                    }],
+                    "usageMetadata": {
+                        "promptTokenCount": 10,
+                        "candidatesTokenCount": 5,
+                        "totalTokenCount": 15
+                    }
+                }""".trimIndent()
+            )
+        )
+
+        val httpClient = mockGeminiClient(requests, responses, requestUrls)
+
+        val client = GeminiLlmClient(
+            apiKey = "test-key",
+            model = "gemini-1.5-flash",
+            httpClient = httpClient
+        )
+
+        val messages = listOf(
+            LlmChatMessage(role = LlmChatRole.USER, content = "Get both values"),
+            LlmChatMessage(
+                role = LlmChatRole.TOOL,
+                toolCallId = "fc-1",
+                toolName = "get_weight",
+                toolResultJson = """{"ok":true,"content":75}"""
+            ),
+            LlmChatMessage(
+                role = LlmChatRole.TOOL,
+                toolCallId = "fc-2",
+                toolName = "get_height",
+                toolResultJson = """{"ok":true,"content":175}"""
+            ),
+        )
+
+        val result = client.generateChatResponse(messages = messages)
+
+        assertEquals("Here are both results.", result.content)
+        assertEquals(1, requests.size)
+
+        val body = parseJsonBody(requests[0])
+        val contents = body["contents"]?.jsonArray
+        assertNotNull(contents)
+
+        // First content = user message, second content = combined tool responses
+        assertEquals(2, contents.size, "Must produce 2 GeminiContent entries: user + combined tool responses")
+
+        val userContent = contents[0]?.jsonObject
+        assertEquals("user", userContent?.get("role")?.jsonPrimitive?.content ?: "user")
+
+        val toolContent = contents[1]?.jsonObject
+        assertEquals("user", toolContent?.get("role")?.jsonPrimitive?.content ?: "user", "Gemini requires tool responses with role=user")
+
+        val toolParts = toolContent?.get("parts")?.jsonArray
+        assertNotNull(toolParts)
+        assertEquals(2, toolParts.size, "Two TOOL messages must be grouped into a single content with 2 parts")
+
+        val firstResponse = toolParts[0]?.jsonObject?.get("functionResponse")?.jsonObject
+        assertNotNull(firstResponse)
+        assertEquals("fc-1", firstResponse["id"]?.jsonPrimitive?.content)
+        assertEquals("get_weight", firstResponse["name"]?.jsonPrimitive?.content)
+
+        val secondResponse = toolParts[1]?.jsonObject?.get("functionResponse")?.jsonObject
+        assertNotNull(secondResponse)
+        assertEquals("fc-2", secondResponse["id"]?.jsonPrimitive?.content)
+        assertEquals("get_height", secondResponse["name"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `gemini chat preserves error tool result wire format`() = runTest {
+        val requests = mutableListOf<String>()
+        val requestUrls = mutableListOf<String>()
+        val responses = ArrayDeque(
+            listOf(
+                """{
+                    "candidates": [{
+                        "content": {
+                            "role": "model",
+                            "parts": [{"text": "The lookup failed, sorry."}]
+                        }
+                    }],
+                    "usageMetadata": {
+                        "promptTokenCount": 5,
+                        "candidatesTokenCount": 3,
+                        "totalTokenCount": 8
+                    }
+                }""".trimIndent()
+            )
+        )
+
+        val httpClient = mockGeminiClient(requests, responses, requestUrls)
+
+        val client = GeminiLlmClient(
+            apiKey = "test-key",
+            model = "gemini-1.5-flash",
+            httpClient = httpClient
+        )
+
+        val messages = listOf(
+            LlmChatMessage(role = LlmChatRole.USER, content = "Look up value"),
+            LlmChatMessage(
+                role = LlmChatRole.TOOL,
+                toolCallId = "fc-err",
+                toolName = "lookup_value",
+                toolResultJson = """{"ok":false,"content":"API failure"}"""
+            ),
+        )
+
+        val result = client.generateChatResponse(messages = messages)
+
+        assertEquals("The lookup failed, sorry.", result.content)
+        assertEquals(1, requests.size)
+
+        val body = parseJsonBody(requests[0])
+        val parts = body.contentParts(1)
+        assertEquals(1, parts.size)
+        val functionResponse = parts[0].jsonObject["functionResponse"]?.jsonObject
+        assertNotNull(functionResponse)
+        val responseInner = functionResponse["response"]?.jsonObject
+        assertNotNull(responseInner)
+        assertFalse(responseInner["ok"]?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: true, "ok must be false for error result")
+        assertEquals("API failure", responseInner["content"]?.jsonPrimitive?.content)
+    }
+
+    @Test
     fun `openrouter chat preserves serialized history with user assistant and tool turns`() = runTest {
         val requests = mutableListOf<ChatCompletionRequest>()
         val api = mockk<OpenAI>()

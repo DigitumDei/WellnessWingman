@@ -1473,6 +1473,119 @@ class HealthChatServiceTest {
     }
 
     @Test
+    fun `sendMessage excludes PENDING messages from prior turns in LLM history`() = runTest {
+        val chatRepo = FakeHealthChatRepository()
+        val convId = chatRepo.createConversation(
+            "conv-pending-hist", "Prior pending", "openai", "gpt-4o-mini", now, now,
+        )
+        chatRepo.insertMessage(convId, ChatRole.USER, "Prior completed", now, "openai", "gpt-4o-mini", status = ChatMessageStatus.COMPLETED)
+        chatRepo.insertMessage(convId, ChatRole.ASSISTANT, "Prior completed response", now, "openai", "gpt-4o-mini", status = ChatMessageStatus.COMPLETED)
+        chatRepo.insertMessage(convId, ChatRole.USER, "Pending user", now, "openai", "gpt-4o-mini", status = ChatMessageStatus.PENDING)
+        chatRepo.insertMessage(convId, ChatRole.ASSISTANT, "Pending assistant", now, "openai", "gpt-4o-mini", status = ChatMessageStatus.PENDING)
+
+        val capturedMessages = mutableListOf<List<LlmChatMessage>>()
+        val capturingClient = object : LlmClient {
+            override val providerId: String get() = "openai"
+            override suspend fun analyzeImage(imageBytes: ByteArray, prompt: String, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?) = LlmAnalysisResult("ok", LlmDiagnostics())
+            override suspend fun transcribeAudio(imageBytes: ByteArray, mimeType: String) = ""
+            override suspend fun generateCompletion(prompt: String, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?) = LlmAnalysisResult("ok", LlmDiagnostics())
+            override suspend fun generateChatResponse(messages: List<LlmChatMessage>, systemInstruction: String?, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?,
+                onToolRoundCompleted: (() -> Unit)?,
+            ): LlmAnalysisResult {
+                capturedMessages.add(messages)
+                return LlmAnalysisResult("Response", LlmDiagnostics(model = "gpt-4o-mini"))
+            }
+        }
+
+        val factory = mockk<LlmClientFactory>()
+        every { factory.create(LlmProvider.OPENAI) } returns capturingClient
+        every { factory.hasApiKey(LlmProvider.OPENAI) } returns true
+        every { factory.hasCurrentApiKey() } returns true
+
+        val toolRegistry = ToolRegistry(
+            trackedEntryRepository = FakeTrackedEntryRepository(),
+            entryAnalysisRepository = FakeEntryAnalysisRepository(),
+            weightHistoryRepository = FakeWeightHistoryRepository(),
+            appSettingsRepository = FakeAppSettingsRepository(),
+            nutritionalProfileRepository = FakeNutritionalProfileRepository(),
+        )
+
+        val service = HealthChatService(chatRepo, factory, toolRegistry)
+        val result = service.sendMessage(ChatRequest("conv-pending-hist", "New message", LlmProvider.OPENAI, "gpt-4o-mini"))
+
+        assertTrue(result is ChatResult.Success)
+        assertTrue(capturedMessages.isNotEmpty())
+        val sentMessages = capturedMessages.first()
+
+        assertTrue(sentMessages.any { it.content == "Prior completed" }, "Completed prior content must appear in history")
+        assertFalse(sentMessages.any { it.content == "Pending user" }, "Pending user content must be excluded from history")
+        assertFalse(sentMessages.any { it.content == "Pending assistant" }, "Pending assistant content must be excluded from history")
+    }
+
+    @Test
+    fun `sendMessage persists multi-round tool calls with separate round groups`() = runTest {
+        val chatRepo = FakeHealthChatRepository()
+        val json = Json { ignoreUnknownKeys = true }
+
+        val multiRoundClient = object : LlmClient {
+            override val providerId: String get() = "openai"
+            override suspend fun analyzeImage(imageBytes: ByteArray, prompt: String, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?) = LlmAnalysisResult("ok", LlmDiagnostics())
+            override suspend fun transcribeAudio(imageBytes: ByteArray, mimeType: String) = ""
+            override suspend fun generateCompletion(prompt: String, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?) = LlmAnalysisResult("ok", LlmDiagnostics())
+            override suspend fun generateChatResponse(messages: List<LlmChatMessage>, systemInstruction: String?, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?,
+                onToolRoundCompleted: (() -> Unit)?,
+            ): LlmAnalysisResult {
+                toolExecutor?.invoke(ToolCall(id = "round1-call", name = "get_user_profile", arguments = JsonObject(emptyMap())))
+                onToolRoundCompleted?.invoke()
+                toolExecutor?.invoke(ToolCall(id = "round2-call-a", name = "get_weight_history", arguments = JsonObject(emptyMap())))
+                toolExecutor?.invoke(ToolCall(id = "round2-call-b", name = "get_recent_entries", arguments = JsonObject(emptyMap())))
+                onToolRoundCompleted?.invoke()
+                return LlmAnalysisResult("Final response", LlmDiagnostics(model = "gpt-4o-mini"))
+            }
+        }
+
+        val factory = mockk<LlmClientFactory>()
+        every { factory.create(LlmProvider.OPENAI) } returns multiRoundClient
+        every { factory.hasApiKey(LlmProvider.OPENAI) } returns true
+        every { factory.hasCurrentApiKey() } returns true
+
+        val toolRegistry = ToolRegistry(
+            trackedEntryRepository = FakeTrackedEntryRepository(),
+            entryAnalysisRepository = FakeEntryAnalysisRepository(),
+            weightHistoryRepository = FakeWeightHistoryRepository(),
+            appSettingsRepository = FakeAppSettingsRepository(),
+            nutritionalProfileRepository = FakeNutritionalProfileRepository(),
+        )
+
+        val service = HealthChatService(chatRepo, factory, toolRegistry)
+        val result = service.sendMessage(
+            ChatRequest("conv-multi-round", "Get my data", LlmProvider.OPENAI, "gpt-4o-mini")
+        )
+
+        assertTrue(result is ChatResult.Success)
+
+        val assistantWithToolCalls = chatRepo.messages.filter { it.role == ChatRole.ASSISTANT && it.toolCallsJson != null }
+        assertEquals(2, assistantWithToolCalls.size, "Must persist two assistant(toolCalls) messages for two rounds")
+
+        val round1ToolCalls = json.decodeFromString<List<ToolCall>>(assistantWithToolCalls[0].toolCallsJson!!)
+        assertEquals(1, round1ToolCalls.size)
+        assertEquals("round1-call", round1ToolCalls[0].id)
+
+        val round2ToolCalls = json.decodeFromString<List<ToolCall>>(assistantWithToolCalls[1].toolCallsJson!!)
+        assertEquals(2, round2ToolCalls.size)
+        assertEquals("round2-call-a", round2ToolCalls[0].id)
+        assertEquals("round2-call-b", round2ToolCalls[1].id)
+
+        val toolMessages = chatRepo.messages.filter { it.role == ChatRole.TOOL }
+        assertEquals(3, toolMessages.size, "Must persist three tool results for 2 rounds (1+2)")
+
+        val finalAssistant = chatRepo.messages.find { it.role == ChatRole.ASSISTANT && it.toolCallsJson == null }
+        assertNotNull(finalAssistant)
+        assertEquals("Final response", finalAssistant.content)
+        assertEquals(ChatMessageStatus.COMPLETED, finalAssistant.status)
+    }
+
+    @Test
     fun `sendMessage preserves tool turn groups when trimming history at boundary`() = runTest {
         val chatRepo = FakeHealthChatRepository()
         val json = Json { ignoreUnknownKeys = true }

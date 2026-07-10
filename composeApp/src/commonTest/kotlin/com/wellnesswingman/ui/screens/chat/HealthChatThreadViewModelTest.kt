@@ -14,6 +14,7 @@ import com.wellnesswingman.data.repository.TrackedEntryRepository
 import com.wellnesswingman.data.repository.TransactionScope
 import com.wellnesswingman.data.repository.WeightHistoryRepository
 import com.wellnesswingman.domain.chat.ChatRequest
+import com.wellnesswingman.domain.chat.ChatResult
 import com.wellnesswingman.domain.chat.HealthChatService
 import com.wellnesswingman.domain.llm.LlmAnalysisResult
 import com.wellnesswingman.domain.llm.LlmClient
@@ -21,6 +22,7 @@ import com.wellnesswingman.domain.llm.LlmClientFactory
 import com.wellnesswingman.domain.llm.LlmDiagnostics
 import com.wellnesswingman.domain.llm.ToolExecutor
 import com.wellnesswingman.domain.llm.ToolRegistry
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -38,6 +40,8 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class HealthChatThreadViewModelTest {
@@ -220,6 +224,124 @@ class HealthChatThreadViewModelTest {
         val state = viewModel.uiState.value
         assertIs<HealthChatThreadUiState.Success>(state)
         assertFalse(viewModel.isSending.value)
+    }
+
+    @Test
+    fun `load handles repository exception gracefully`() = runTest(dispatcher.scheduler) {
+        val chatRepo = ThrowingHealthChatRepository()
+        val appSettings = FakeAppSettingsRepository(apiKey = "sk-test")
+        val factory = FakeLlmClientFactory(hasApiKey = true)
+        val service = makeService(chatRepo, appSettings, factory)
+
+        val viewModel = HealthChatThreadViewModel(
+            conversationExternalId = "conv-ex-load",
+            healthChatService = service,
+            healthChatRepository = chatRepo,
+            settingsRepository = appSettings,
+        )
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertIs<HealthChatThreadUiState.Error>(state)
+        assertTrue(state.message.isNotBlank(), "Error message must be present")
+    }
+
+    @Test
+    fun `send handles service exception gracefully`() = runTest(dispatcher.scheduler) {
+        val chatRepo = FakeHealthChatRepository()
+        val appSettings = FakeAppSettingsRepository(apiKey = "sk-test")
+        val factory = ThrowingLlmClientFactory()
+        val service = makeService(chatRepo, appSettings, factory)
+
+        val viewModel = HealthChatThreadViewModel(
+            conversationExternalId = "conv-ex-send",
+            healthChatService = service,
+            healthChatRepository = chatRepo,
+            settingsRepository = appSettings,
+        )
+        advanceUntilIdle()
+
+        viewModel.updateDraft("Hello")
+        viewModel.send()
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertIs<HealthChatThreadUiState.Error>(state)
+    }
+
+    @Test
+    fun `recheckConfiguration handles exception gracefully`() = runTest(dispatcher.scheduler) {
+        val chatRepo = FakeHealthChatRepository()
+        val appSettings = FakeAppSettingsRepository(apiKey = null)
+        val factory = FakeLlmClientFactory(hasApiKey = false)
+        val service = makeService(chatRepo, appSettings, factory)
+
+        val viewModel = HealthChatThreadViewModel(
+            conversationExternalId = "conv-ex-recheck",
+            healthChatService = service,
+            healthChatRepository = chatRepo,
+            settingsRepository = appSettings,
+        )
+        advanceUntilIdle()
+        viewModel.updateDraft("Check")
+        viewModel.send()
+        advanceUntilIdle()
+        assertIs<HealthChatThreadUiState.ApiKeyMissing>(viewModel.uiState.value)
+
+        val brokenRepo = ThrowingHealthChatRepository()
+        val brokenService = makeService(brokenRepo, appSettings, factory)
+        val brokenViewModel = HealthChatThreadViewModel(
+            conversationExternalId = "conv-ex-recheck",
+            healthChatService = brokenService,
+            healthChatRepository = brokenRepo,
+            settingsRepository = appSettings,
+        )
+        appSettings.apiKey = "sk-now-valid"
+        brokenViewModel.recheckConfiguration()
+        advanceUntilIdle()
+
+        val state = brokenViewModel.uiState.value
+        assertIs<HealthChatThreadUiState.Error>(state)
+    }
+
+    @Test
+    fun `CancellationException from load does not change state to Error`() = runTest(dispatcher.scheduler) {
+        val chatRepo = CancellingHealthChatRepository()
+        val appSettings = FakeAppSettingsRepository(apiKey = "sk-test")
+        val factory = FakeLlmClientFactory(hasApiKey = true)
+        val service = makeService(chatRepo, appSettings, factory)
+
+        val viewModel = HealthChatThreadViewModel(
+            conversationExternalId = "conv-cancel-load",
+            healthChatService = service,
+            healthChatRepository = chatRepo,
+            settingsRepository = appSettings,
+        )
+        advanceUntilIdle()
+
+        assertIs<HealthChatThreadUiState.Loading>(viewModel.uiState.value)
+    }
+
+    @Test
+    fun `CancellationException from send does not change state to Error`() = runTest(dispatcher.scheduler) {
+        val chatRepo = FakeHealthChatRepository()
+        val appSettings = FakeAppSettingsRepository(apiKey = "sk-test")
+        val service = CancellingChatService()
+
+        val viewModel = HealthChatThreadViewModel(
+            conversationExternalId = "conv-cancel-send",
+            healthChatService = service,
+            healthChatRepository = chatRepo,
+            settingsRepository = appSettings,
+        )
+        advanceUntilIdle()
+        assertIs<HealthChatThreadUiState.Empty>(viewModel.uiState.value)
+
+        viewModel.updateDraft("Hello")
+        viewModel.send()
+        advanceUntilIdle()
+
+        assertIs<HealthChatThreadUiState.Empty>(viewModel.uiState.value)
     }
 
     private fun makeService(
@@ -567,4 +689,78 @@ private class FakeNutritionalProfileRepository : NutritionalProfileRepository {
     override suspend fun update(profile: NutritionalProfile) {}
     override suspend fun delete(id: Long) {}
     override suspend fun upsert(profile: NutritionalProfile) {}
+}
+
+private class ThrowingHealthChatRepository : HealthChatRepository {
+    override suspend fun <T> transaction(block: (TransactionScope) -> T): T =
+        throw RuntimeException("Repository error")
+    override suspend fun createConversation(externalId: String, title: String, provider: String?, model: String?, createdAt: Instant, updatedAt: Instant): Long =
+        throw RuntimeException("Repository error")
+    override suspend fun getAllConversations(): List<HealthChatConversation> = throw RuntimeException("Repository error")
+    override suspend fun getConversationById(id: Long): HealthChatConversation? = throw RuntimeException("Repository error")
+    override suspend fun getConversationByExternalId(externalId: String): HealthChatConversation? =
+        throw RuntimeException("Repository error")
+    override suspend fun renameConversation(id: Long, title: String, updatedAt: Instant) {}
+    override suspend fun deleteConversation(id: Long) {}
+    override suspend fun touchConversation(id: Long, updatedAt: Instant) {}
+    override suspend fun getMessagesForConversation(conversationId: Long): List<HealthChatMessage> =
+        throw RuntimeException("Repository error")
+    override suspend fun insertMessage(conversationId: Long, role: ChatRole, content: String, createdAt: Instant, provider: String?, model: String?, toolCallsJson: String?, toolResultJson: String?, status: ChatMessageStatus): Long =
+        throw RuntimeException("Repository error")
+    override suspend fun updateMessageStatus(messageId: Long, status: ChatMessageStatus) {}
+    override suspend fun updateAssistantMessage(messageId: Long, content: String, toolCallsJson: String?, model: String?, status: ChatMessageStatus) {}
+    override suspend fun deleteMessage(messageId: Long) {}
+    override suspend fun getConversationCount(): Long = 0
+    override suspend fun getMessageCountForConversation(conversationId: Long): Long = 0
+}
+
+private class ThrowingLlmClientFactory : LlmClientFactory(
+    settingsRepository = FakeAppSettingsRepository(),
+) {
+    override fun create(provider: LlmProvider): LlmClient = throw RuntimeException("Client error")
+    override fun hasApiKey(provider: LlmProvider): Boolean = true
+    override fun hasCurrentApiKey(): Boolean = true
+}
+
+private class CancellingHealthChatRepository : HealthChatRepository {
+    override suspend fun <T> transaction(block: (TransactionScope) -> T): T =
+        throw CancellationException()
+    override suspend fun createConversation(externalId: String, title: String, provider: String?, model: String?, createdAt: Instant, updatedAt: Instant): Long =
+        throw CancellationException()
+    override suspend fun getAllConversations(): List<HealthChatConversation> = throw CancellationException()
+    override suspend fun getConversationById(id: Long): HealthChatConversation? = throw CancellationException()
+    override suspend fun getConversationByExternalId(externalId: String): HealthChatConversation? =
+        throw CancellationException()
+    override suspend fun renameConversation(id: Long, title: String, updatedAt: Instant) {}
+    override suspend fun deleteConversation(id: Long) {}
+    override suspend fun touchConversation(id: Long, updatedAt: Instant) {}
+    override suspend fun getMessagesForConversation(conversationId: Long): List<HealthChatMessage> =
+        throw CancellationException()
+    override suspend fun insertMessage(conversationId: Long, role: ChatRole, content: String, createdAt: Instant, provider: String?, model: String?, toolCallsJson: String?, toolResultJson: String?, status: ChatMessageStatus): Long =
+        throw CancellationException()
+    override suspend fun updateMessageStatus(messageId: Long, status: ChatMessageStatus) {}
+    override suspend fun updateAssistantMessage(messageId: Long, content: String, toolCallsJson: String?, model: String?, status: ChatMessageStatus) {}
+    override suspend fun deleteMessage(messageId: Long) {}
+    override suspend fun getConversationCount(): Long = 0
+    override suspend fun getMessageCountForConversation(conversationId: Long): Long = 0
+}
+
+private class CancellingChatService(
+    private val chatRepo: HealthChatRepository = FakeHealthChatRepository(),
+    private val appSettings: AppSettingsRepository = FakeAppSettingsRepository(),
+    private val factory: LlmClientFactory = FakeLlmClientFactory(hasApiKey = true),
+) : HealthChatService(
+    healthChatRepository = chatRepo,
+    llmClientFactory = factory,
+    toolRegistry = ToolRegistry(
+        trackedEntryRepository = FakeTrackedEntryRepository(),
+        entryAnalysisRepository = FakeEntryAnalysisRepository(),
+        weightHistoryRepository = FakeWeightHistoryRepository(),
+        appSettingsRepository = appSettings,
+        nutritionalProfileRepository = FakeNutritionalProfileRepository(),
+    ),
+) {
+    override suspend fun sendMessage(request: ChatRequest): ChatResult {
+        throw CancellationException("Send cancelled")
+    }
 }

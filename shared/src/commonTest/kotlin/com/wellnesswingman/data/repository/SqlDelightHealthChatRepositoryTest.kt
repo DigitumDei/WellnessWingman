@@ -359,6 +359,90 @@ class SqlDelightHealthChatRepositoryTest {
     }
 
     @Test
+    fun `getMessagesForConversation uses messageId tiebreak when createdAt ties`() = runTest {
+        val now = Clock.System.now()
+        val convId = repository.createConversation(
+            externalId = "tiebreak-test",
+            title = "Tiebreak",
+            createdAt = now,
+            updatedAt = now
+        )
+        repository.insertMessage(
+            conversationId = convId,
+            role = ChatRole.USER,
+            content = "A",
+            createdAt = now,
+            status = ChatMessageStatus.COMPLETED,
+        )
+        repository.insertMessage(
+            conversationId = convId,
+            role = ChatRole.USER,
+            content = "B",
+            createdAt = now,
+            status = ChatMessageStatus.COMPLETED,
+        )
+        repository.insertMessage(
+            conversationId = convId,
+            role = ChatRole.USER,
+            content = "C",
+            createdAt = now,
+            status = ChatMessageStatus.COMPLETED,
+        )
+
+        val messages = repository.getMessagesForConversation(convId)
+        assertEquals(3, messages.size)
+        assertEquals("A", messages[0].content, "Tiebreak: oldest messageId first")
+        assertEquals("B", messages[1].content)
+        assertEquals("C", messages[2].content)
+    }
+
+    @Test
+    fun `getLatestMessageForConversation filters out tool and non-completed messages`() = runTest {
+        val now = Clock.System.now()
+        val convId = repository.createConversation(
+            externalId = "preview-filter",
+            title = "Preview",
+            createdAt = now,
+            updatedAt = now
+        )
+        repository.insertMessage(
+            conversationId = convId,
+            role = ChatRole.USER,
+            content = "Hello",
+            createdAt = now.plus(1.hours),
+            status = ChatMessageStatus.COMPLETED,
+        )
+        repository.insertMessage(
+            conversationId = convId,
+            role = ChatRole.ASSISTANT,
+            content = "Hi!",
+            createdAt = now.plus(2.hours),
+            status = ChatMessageStatus.COMPLETED,
+        )
+        repository.insertMessage(
+            conversationId = convId,
+            role = ChatRole.TOOL,
+            content = "",
+            createdAt = now.plus(3.hours),
+            status = ChatMessageStatus.COMPLETED,
+        )
+        repository.insertMessage(
+            conversationId = convId,
+            role = ChatRole.ASSISTANT,
+            content = "PENDING",
+            createdAt = now.plus(4.hours),
+            status = ChatMessageStatus.PENDING,
+        )
+        repository.touchConversation(convId, now.plus(4.hours))
+
+        val conversations = repository.getAllConversations()
+        assertEquals(1, conversations.size)
+        val conv = conversations[0]
+        assertEquals("Hi!", conv.lastMessageContent)
+        assertEquals(ChatRole.ASSISTANT, conv.lastMessageRole)
+    }
+
+    @Test
     fun `deleteMessage removes specific message`() = runTest {
         val now = Clock.System.now()
         val convId = repository.createConversation(
@@ -467,5 +551,28 @@ class SqlDelightHealthChatRepositoryTest {
         assertEquals("""[{"name":"get_health_data"}]""", msg.toolCallsJson)
         assertEquals("""{"result":"ok"}""", msg.toolResultJson)
         assertEquals(ChatMessageStatus.PENDING, msg.status)
+    }
+
+    @Test
+    fun `unknown persisted status maps to ERROR`() = runTest {
+        val now = Clock.System.now()
+        val convId = repository.createConversation(
+            externalId = "unknown-status",
+            title = "Unknown",
+            createdAt = now,
+            updatedAt = now
+        )
+        driver.execute(
+            identifier = null,
+            sql = """
+                INSERT INTO ChatMessage(conversationId, role, content, createdAt, provider, model, toolCallsJson, toolResultJson, status)
+                VALUES ($convId, 'user', 'Unknown status', ${now.toEpochMilliseconds()}, NULL, NULL, NULL, NULL, 'bogus')
+            """.trimIndent(),
+            parameters = 0
+        )
+
+        val messages = repository.getMessagesForConversation(convId)
+        assertEquals(1, messages.size)
+        assertEquals(ChatMessageStatus.ERROR, messages[0].status, "Unknown persisted status must map to ERROR")
     }
 }
