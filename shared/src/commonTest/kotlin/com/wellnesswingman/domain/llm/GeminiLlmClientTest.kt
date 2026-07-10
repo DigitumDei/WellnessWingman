@@ -112,7 +112,7 @@ class GeminiLlmClientTest {
     }
 
     @Test
-    fun `generateCompletion converts malformed tool arguments into tool error response`() = runTest {
+    fun `generateCompletion routes malformed tool arguments through executor capture`() = runTest {
         val requests = mutableListOf<String>()
         val responses = ArrayDeque(
             listOf(
@@ -159,14 +159,19 @@ class GeminiLlmClientTest {
             ),
             toolExecutor = {
                 executorCalled = true
-                error("should not be called")
+                com.wellnesswingman.data.model.llm.ToolResult(
+                    toolCallId = it.id,
+                    name = it.name,
+                    content = JsonPrimitive("Parse error"),
+                    isError = true,
+                )
             }
         )
 
-        assertFalse(executorCalled)
+        assertTrue(executorCalled)
         assertEquals("Recovered", result.content)
         assertEquals(2, requests.size)
-        assertTrue(requests[1].contains("Tool arguments must be a JSON object"))
+        assertTrue(requests[1].contains("\"ok\":false"))
         assertTrue(requests[1].contains("\"thoughtSignature\":\"signature-1\""))
     }
 

@@ -95,7 +95,7 @@ class OpenAiLlmClientTest {
     }
 
     @Test
-    fun `generateCompletion converts malformed tool arguments into tool error response`() = runTest {
+    fun `generateCompletion routes malformed tool arguments through executor capture`() = runTest {
         val requests = mutableListOf<ChatCompletionRequest>()
         val api = mockk<OpenAI>()
         coEvery { api.chatCompletion(any()) } answers {
@@ -135,11 +135,16 @@ class OpenAiLlmClientTest {
             ),
             toolExecutor = {
                 executorInvoked = true
-                error("should not be called")
+                com.wellnesswingman.data.model.llm.ToolResult(
+                    toolCallId = it.id,
+                    name = it.name,
+                    content = JsonPrimitive("Parse error"),
+                    isError = true,
+                )
             }
         )
 
-        assertFalse(executorInvoked)
+        assertTrue(executorInvoked)
         assertEquals("done", result.content)
         assertEquals(2, requests.size)
         assertTrue(requests[1].messages[2].content.orEmpty().contains("\"ok\":false"))

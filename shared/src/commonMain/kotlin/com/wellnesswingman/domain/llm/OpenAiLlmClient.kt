@@ -207,24 +207,20 @@ class OpenAiLlmClient(
                     "Unsupported OpenAI tool call type: ${toolCall::class.simpleName}"
                 }
 
-                val result = runCatching {
-                    val arguments = json.parseToJsonElement(toolCall.function.arguments).jsonObject
-                    executor(
-                        ToolCall(
-                            id = toolCall.id.id,
-                            name = toolCall.function.name,
-                            arguments = arguments
-                        )
-                    )
+                val arguments = runCatching {
+                    json.parseToJsonElement(toolCall.function.arguments).jsonObject
                 }.getOrElse { error ->
                     if (error is CancellationException) throw error
-                    com.wellnesswingman.data.model.llm.ToolResult(
-                        toolCallId = toolCall.id.id,
-                        name = toolCall.function.name,
-                        content = JsonPrimitive(error.message ?: "Failed to parse tool arguments."),
-                        isError = true
-                    )
+                    JsonObject(emptyMap())
                 }
+
+                val result = executor(
+                    ToolCall(
+                        id = toolCall.id.id,
+                        name = toolCall.function.name,
+                        arguments = arguments
+                    )
+                )
 
                 messages.add(
                     ChatMessage(

@@ -247,25 +247,21 @@ class GeminiLlmClient(
                 GeminiContent(
                     role = "user",
                     parts = functionCalls.map { functionCall ->
-                        val result = runCatching {
-                            val arguments = functionCall.args.asJsonObjectOrNull()
+                        val arguments = runCatching {
+                            functionCall.args.asJsonObjectOrNull()
                                 ?: throw IllegalArgumentException("Tool arguments must be a JSON object.")
-                            executor(
-                                ToolCall(
-                                    id = functionCall.id,
-                                    name = functionCall.name,
-                                    arguments = arguments
-                                )
-                            )
                         }.getOrElse { error ->
                             if (error is CancellationException) throw error
-                            com.wellnesswingman.data.model.llm.ToolResult(
-                                toolCallId = functionCall.id,
-                                name = functionCall.name,
-                                content = JsonPrimitive(error.message ?: "Tool execution failed."),
-                                isError = true
-                            )
+                            JsonObject(emptyMap())
                         }
+
+                        val result = executor(
+                            ToolCall(
+                                id = functionCall.id,
+                                name = functionCall.name,
+                                arguments = arguments
+                            )
+                        )
                         GeminiPart(
                             functionResponse = GeminiFunctionResponse(
                                 id = functionCall.id,

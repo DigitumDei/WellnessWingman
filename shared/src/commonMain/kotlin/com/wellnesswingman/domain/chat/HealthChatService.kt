@@ -114,7 +114,7 @@ IMPORTANT LIMITATIONS:
 
             val history = healthChatRepository.getMessagesForConversation(conversationId)
                 .filter { it.status == ChatMessageStatus.COMPLETED || it.messageId == userMessageId }
-            val boundedHistory = history.takeLast(MAX_HISTORY_MESSAGES)
+            val boundedHistory = trimHistoryPreservingToolGroups(history, MAX_HISTORY_MESSAGES)
             val llmMessages = boundedHistory.map { it.toLlmChatMessage() }
 
             val llmClient = llmClientFactory.create(request.provider)
@@ -285,6 +285,30 @@ IMPORTANT LIMITATIONS:
             createdAt = now,
             updatedAt = now,
         )
+    }
+}
+
+private fun trimHistoryPreservingToolGroups(
+    history: List<HealthChatMessage>,
+    maxMessages: Int,
+): List<HealthChatMessage> {
+    if (history.size <= maxMessages) return history
+
+    val trimmed = history.takeLast(maxMessages)
+
+    if (trimmed.firstOrNull()?.role != ChatRole.TOOL) return trimmed
+
+    val startIndex = history.size - trimmed.size
+    var scanIdx = startIndex - 1
+    while (scanIdx >= 0 && history[scanIdx].role == ChatRole.ASSISTANT && history[scanIdx].toolCallsJson != null) {
+        scanIdx--
+    }
+    val groupStart = scanIdx + 1
+
+    return if (groupStart < startIndex) {
+        history.subList(groupStart, history.size)
+    } else {
+        trimmed
     }
 }
 
