@@ -536,7 +536,7 @@ class ChatLlmClientTest {
         val api = mockk<OpenAI>()
         coEvery { api.chatCompletion(any()) } answers {
             requests += firstArg<ChatCompletionRequest>()
-            finalCompletion("ok")
+            chatCompletion("ok", label = "gpt-4o-0613")
         }
 
         val result = OpenAiLlmClient(
@@ -549,7 +549,7 @@ class ChatLlmClientTest {
             )
         )
 
-        assertEquals("gpt-4o", result.diagnostics.model)
+        assertEquals("gpt-4o-0613", result.diagnostics.model)
     }
 
     private fun mockGeminiClient(
@@ -595,6 +595,23 @@ class ChatLlmClientTest {
         id = "chatcmpl-final",
         created = 2L,
         model = ModelId("gpt-4o-mini"),
+        choices = listOf(
+            ChatChoice(
+                index = 0,
+                message = ChatMessage(
+                    role = OpenAiChatRole.Assistant,
+                    content = content
+                ),
+                finishReason = FinishReason("stop")
+            )
+        ),
+        usage = Usage(promptTokens = 6, completionTokens = 5, totalTokens = 11)
+    )
+
+    private fun chatCompletion(content: String, label: String = "gpt-4o-mini") = ChatCompletion(
+        id = "chatcmpl-chat",
+        created = 2L,
+        model = ModelId(label),
         choices = listOf(
             ChatChoice(
                 index = 0,
