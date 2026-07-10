@@ -56,24 +56,22 @@ class ChatDatabaseMigrationTest {
 
             val migratedDb = WellnessWingmanDatabase(migrationDriver)
 
-            migratedDb.chatConversationQueries.insertConversation(
-                externalId = "conv-1",
-                title = "Test",
-                provider = null,
-                model = null,
-                createdAt = 1000,
-                updatedAt = 1000
+            migrationDriver.execute(
+                identifier = null,
+                sql = """
+                    INSERT INTO ChatConversation(externalId, title, provider, model, createdAt, updatedAt)
+                    VALUES ('conv-1', 'Test', NULL, NULL, 1000, 1000)
+                """.trimIndent(),
+                parameters = 0
             )
-            migratedDb.chatConversationQueries.insertMessage(
-                conversationId = 1,
-                role = "user",
-                content = "Hello",
-                createdAt = 1001,
-                provider = null,
-                model = null,
-                toolCallsJson = null,
-                toolResultJson = null,
-                status = "completed",
+
+            migrationDriver.execute(
+                identifier = null,
+                sql = """
+                    INSERT INTO ChatMessage(conversationId, role, content, createdAt, provider, model, toolCallsJson, toolResultJson)
+                    VALUES (1, 'user', 'Hello', 1001, NULL, NULL, NULL, NULL)
+                """.trimIndent(),
+                parameters = 0
             )
 
             val conversations = migratedDb.chatConversationQueries.getConversationById(1)
@@ -88,6 +86,13 @@ class ChatDatabaseMigrationTest {
             assertEquals(1, messages.size)
             assertEquals("user", messages[0].role)
             assertEquals("Hello", messages[0].content)
+
+            // Migrate to v11 so the status column exists for generated queries
+            WellnessWingmanDatabase.Schema.migrate(
+                driver = migrationDriver,
+                oldVersion = 10,
+                newVersion = 11
+            )
 
             migrationDriver.execute(
                 identifier = null,
