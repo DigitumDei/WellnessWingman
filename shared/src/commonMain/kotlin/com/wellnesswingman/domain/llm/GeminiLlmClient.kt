@@ -22,7 +22,6 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.jsonObject
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 
@@ -403,7 +402,8 @@ class GeminiLlmClient(
                     while (i < messages.size && messages[i].role == LlmChatRole.TOOL) {
                         val toolMsg = messages[i]
                         val responseJson = if (toolMsg.toolResultJson != null) {
-                            json.parseToJsonElement(toolMsg.toolResultJson).jsonObject
+                            val parsed = json.parseToJsonElement(toolMsg.toolResultJson)
+                            if (parsed is JsonObject) parsed else buildJsonObject { put("content", parsed) }
                         } else {
                             buildJsonObject {
                                 put("ok", JsonPrimitive(true))
