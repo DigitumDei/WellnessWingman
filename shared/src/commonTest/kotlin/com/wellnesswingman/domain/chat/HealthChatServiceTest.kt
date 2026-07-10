@@ -187,6 +187,7 @@ class HealthChatServiceTest {
         override suspend fun getAll(): List<NutritionalProfile> = emptyList()
         override suspend fun getById(id: Long): NutritionalProfile? = null
         override suspend fun getByExternalId(externalId: String): NutritionalProfile? = null
+        override suspend fun searchByName(query: String, limit: Int): List<NutritionalProfile> = emptyList()
         override suspend fun insert(profile: NutritionalProfile) = 1L
         override suspend fun update(profile: NutritionalProfile) {}
         override suspend fun delete(id: Long) {}
@@ -221,19 +222,19 @@ class HealthChatServiceTest {
     }
 
     private class FakeTrackedEntryRepository : com.wellnesswingman.data.repository.TrackedEntryRepository {
-        override suspend fun getEntriesForDay(startMillis: Long, endMillis: Long) = emptyList()
-        override suspend fun getEntriesForDay(date: kotlinx.datetime.LocalDate) = emptyList()
-        override suspend fun getAllEntries() = emptyList()
-        override suspend fun getRecentEntries(limit: Int, entryType: com.wellnesswingman.data.model.EntryType?) = emptyList()
+        override suspend fun getEntriesForDay(startMillis: Long, endMillis: Long): List<com.wellnesswingman.data.model.TrackedEntry> = emptyList()
+        override suspend fun getEntriesForDay(date: kotlinx.datetime.LocalDate): List<com.wellnesswingman.data.model.TrackedEntry> = emptyList()
+        override suspend fun getAllEntries(): List<com.wellnesswingman.data.model.TrackedEntry> = emptyList()
+        override suspend fun getRecentEntries(limit: Int, entryType: com.wellnesswingman.data.model.EntryType?): List<com.wellnesswingman.data.model.TrackedEntry> = emptyList()
         override fun observeAllEntries(): Flow<List<com.wellnesswingman.data.model.TrackedEntry>> = emptyFlow()
         override suspend fun getEntryById(id: Long) = null
         override suspend fun getEntryByExternalId(externalId: String) = null
         override suspend fun getEntryByBlobPath(blobPath: String) = null
         override fun observeEntriesForDay(date: kotlinx.datetime.LocalDate): Flow<List<com.wellnesswingman.data.model.TrackedEntry>> = emptyFlow()
-        override suspend fun getEntriesForWeek(startMillis: Long, endMillis: Long) = emptyList()
-        override suspend fun getEntriesForMonth(startMillis: Long, endMillis: Long) = emptyList()
-        override suspend fun getEntriesByStatus(status: com.wellnesswingman.data.model.ProcessingStatus) = emptyList()
-        override suspend fun getPendingEntries() = emptyList()
+        override suspend fun getEntriesForWeek(startMillis: Long, endMillis: Long): List<com.wellnesswingman.data.model.TrackedEntry> = emptyList()
+        override suspend fun getEntriesForMonth(startMillis: Long, endMillis: Long): List<com.wellnesswingman.data.model.TrackedEntry> = emptyList()
+        override suspend fun getEntriesByStatus(status: com.wellnesswingman.data.model.ProcessingStatus): List<com.wellnesswingman.data.model.TrackedEntry> = emptyList()
+        override suspend fun getPendingEntries(): List<com.wellnesswingman.data.model.TrackedEntry> = emptyList()
         override suspend fun insertEntry(entry: com.wellnesswingman.data.model.TrackedEntry) = 1L
         override suspend fun updateEntryStatus(id: Long, status: com.wellnesswingman.data.model.ProcessingStatus) {}
         override suspend fun updateEntryType(id: Long, entryType: com.wellnesswingman.data.model.EntryType) {}
@@ -257,10 +258,10 @@ class HealthChatServiceTest {
     }
 
     private class FakeWeightHistoryRepository : com.wellnesswingman.data.repository.WeightHistoryRepository {
-        override suspend fun getWeightHistory(startDate: Instant, endDate: Instant) = emptyList<com.wellnesswingman.data.model.WeightRecord>()
+        override suspend fun getWeightHistory(startDate: Instant, endDate: Instant): List<com.wellnesswingman.data.model.WeightRecord> = emptyList()
         override suspend fun addWeightRecord(record: com.wellnesswingman.data.model.WeightRecord) = 1L
         override suspend fun getLatestWeightRecord() = null
-        override suspend fun getAllWeightRecords() = emptyList<com.wellnesswingman.data.model.WeightRecord>()
+        override suspend fun getAllWeightRecords(): List<com.wellnesswingman.data.model.WeightRecord> = emptyList()
         override suspend fun deleteWeightRecord(recordId: Long) {}
         override suspend fun nullifyRelatedEntryId(entryId: Long) {}
         override suspend fun upsertWeightRecord(record: com.wellnesswingman.data.model.WeightRecord) {}
