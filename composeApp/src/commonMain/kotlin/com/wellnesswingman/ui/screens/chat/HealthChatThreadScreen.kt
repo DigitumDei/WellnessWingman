@@ -56,7 +56,7 @@ data class HealthChatThreadScreen(val conversationExternalId: String) : Screen {
 
         var previousNavigatorSize by remember { mutableStateOf(navigator.size) }
         LaunchedEffect(navigator.size) {
-            if (navigator.size == 1 && previousNavigatorSize > 1 && state is HealthChatThreadUiState.ApiKeyMissing) {
+            if (previousNavigatorSize > navigator.size && state is HealthChatThreadUiState.ApiKeyMissing) {
                 viewModel.recheckConfiguration()
             }
             previousNavigatorSize = navigator.size

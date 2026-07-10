@@ -73,7 +73,11 @@ kotlin {
         val commonTest by getting {
             dependencies {
                 implementation(libs.kotlin.test)
+                implementation(libs.kotlin.test.junit)
+                implementation(libs.junit)
                 implementation(libs.coroutines.test)
+                @OptIn(org.jetbrains.compose.ExperimentalComposeLibrary::class)
+                implementation(compose.uiTest)
             }
         }
 

@@ -160,6 +160,38 @@ class HealthChatThreadViewModelTest {
     }
 
     @Test
+    fun `draft preserved after successful reconfiguration recovery at any navigation depth`() = runTest(dispatcher.scheduler) {
+        val chatRepo = FakeHealthChatRepository()
+        val appSettings = FakeAppSettingsRepository(apiKey = null)
+        val factory = FakeLlmClientFactory(hasApiKey = false)
+        val service = makeService(chatRepo, appSettings, factory)
+
+        val viewModel = HealthChatThreadViewModel(
+            conversationExternalId = "conv-depth",
+            healthChatService = service,
+            healthChatRepository = chatRepo,
+            settingsRepository = appSettings,
+        )
+        advanceUntilIdle()
+
+        viewModel.updateDraft("Hello after settings")
+        viewModel.send()
+        advanceUntilIdle()
+        assertIs<HealthChatThreadUiState.ApiKeyMissing>(viewModel.uiState.value)
+        assertEquals("Hello after settings", viewModel.draft.value)
+
+        appSettings.apiKey = "sk-recovered-key"
+        factory.hasApiKeyReturn = true
+        viewModel.recheckConfiguration()
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertIs<HealthChatThreadUiState.Success>(state)
+        assertEquals("Hello after settings", viewModel.draft.value)
+        assertFalse(viewModel.isSending.value)
+    }
+
+    @Test
     fun `composer available after successful reconfiguration`() = runTest(dispatcher.scheduler) {
         val chatRepo = FakeHealthChatRepository()
         val appSettings = FakeAppSettingsRepository(apiKey = null)
