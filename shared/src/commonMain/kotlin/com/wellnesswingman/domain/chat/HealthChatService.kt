@@ -86,28 +86,17 @@ IMPORTANT LIMITATIONS:
     suspend fun sendMessage(request: ChatRequest): ChatResult {
         var conversationId = 0L
         var userMessageId = 0L
-        var assistantMessageId = 0L
         return try {
             val now = Clock.System.now()
 
             val conversation = getOrCreateConversation(request, now)
             conversationId = conversation.conversationId
 
-            healthChatRepository.transaction { scope ->
-                userMessageId = scope.insertMessage(
+            userMessageId = healthChatRepository.transaction { scope ->
+                scope.insertMessage(
                     conversationId = conversationId,
                     role = ChatRole.USER,
                     content = request.messageContent,
-                    createdAt = now,
-                    provider = request.provider.name.lowercase(),
-                    model = request.model,
-                    status = ChatMessageStatus.PENDING,
-                )
-
-                assistantMessageId = scope.insertMessage(
-                    conversationId = conversationId,
-                    role = ChatRole.ASSISTANT,
-                    content = "",
                     createdAt = now,
                     provider = request.provider.name.lowercase(),
                     model = request.model,
@@ -118,7 +107,6 @@ IMPORTANT LIMITATIONS:
             if (!llmClientFactory.hasApiKey(request.provider)) {
                 healthChatRepository.transaction { scope ->
                     scope.updateMessageStatus(userMessageId, ChatMessageStatus.ERROR)
-                    scope.updateMessageStatus(assistantMessageId, ChatMessageStatus.ERROR)
                     scope.touchConversation(conversationId, Clock.System.now())
                 }
                 return ChatResult.ApiKeyMissing
@@ -136,56 +124,73 @@ IMPORTANT LIMITATIONS:
                 systemInstruction = SYSTEM_INSTRUCTION,
                 tools = toolRegistry.definitions(),
                 toolExecutor = capturingExecutor::execute,
+                onToolRoundCompleted = capturingExecutor::finishRound,
             )
 
+            capturingExecutor.finish()
+
             val responseNow = Clock.System.now()
-
-            val toolCallsJson: String? = if (capturingExecutor.capturedCalls.isNotEmpty()) {
-                val callsArray = buildJsonArray {
-                    capturingExecutor.capturedCalls.forEach { call ->
-                        add(buildJsonObject {
-                            put("id", call.id ?: "")
-                            put("name", call.name)
-                            put("arguments", call.arguments)
-                        })
-                    }
-                }
-                json.encodeToString(JsonElement.serializer(), callsArray)
-            } else null
-
             val responseModel = result.diagnostics.model.ifBlank { request.model }
+
+            var finalAssistantMessageId = 0L
             healthChatRepository.transaction { scope ->
-                for (toolResult in capturingExecutor.capturedResults) {
+                scope.updateMessageStatus(userMessageId, ChatMessageStatus.COMPLETED)
+
+                for (round in capturingExecutor.completedRounds) {
+                    val roundToolCallsJson = buildJsonArray {
+                        round.calls.forEach { call ->
+                            add(buildJsonObject {
+                                put("id", call.id ?: "")
+                                put("name", call.name)
+                                put("arguments", call.arguments)
+                            })
+                        }
+                    }.let { json.encodeToString(JsonElement.serializer(), it) }
+
                     scope.insertMessage(
                         conversationId = conversationId,
-                        role = ChatRole.TOOL,
+                        role = ChatRole.ASSISTANT,
                         content = "",
                         createdAt = responseNow,
                         provider = request.provider.name.lowercase(),
                         model = responseModel,
-                        toolResultJson = json.encodeToString(ToolResult.serializer(), toolResult),
+                        toolCallsJson = roundToolCallsJson,
                         status = ChatMessageStatus.COMPLETED,
                     )
+
+                    for (toolResult in round.results) {
+                        scope.insertMessage(
+                            conversationId = conversationId,
+                            role = ChatRole.TOOL,
+                            content = "",
+                            createdAt = responseNow,
+                            provider = request.provider.name.lowercase(),
+                            model = responseModel,
+                            toolResultJson = json.encodeToString(ToolResult.serializer(), toolResult),
+                            status = ChatMessageStatus.COMPLETED,
+                        )
+                    }
                 }
-                scope.updateMessageStatus(userMessageId, ChatMessageStatus.COMPLETED)
-                scope.updateAssistantMessage(
-                    messageId = assistantMessageId,
+
+                finalAssistantMessageId = scope.insertMessage(
+                    conversationId = conversationId,
+                    role = ChatRole.ASSISTANT,
                     content = result.content,
-                    toolCallsJson = toolCallsJson,
+                    createdAt = responseNow,
+                    provider = request.provider.name.lowercase(),
                     model = responseModel,
                     status = ChatMessageStatus.COMPLETED,
                 )
             }
 
             val assistantMessage = HealthChatMessage(
-                messageId = assistantMessageId,
+                messageId = finalAssistantMessageId,
                 conversationId = conversationId,
                 role = ChatRole.ASSISTANT,
                 content = result.content,
                 createdAt = now,
                 provider = request.provider.name.lowercase(),
                 model = responseModel,
-                toolCallsJson = toolCallsJson,
                 status = ChatMessageStatus.COMPLETED,
             )
 
@@ -211,9 +216,6 @@ IMPORTANT LIMITATIONS:
                     if (userMessageId > 0L) {
                         scope.updateMessageStatus(userMessageId, ChatMessageStatus.ERROR)
                     }
-                    if (assistantMessageId > 0L) {
-                        scope.updateMessageStatus(assistantMessageId, ChatMessageStatus.ERROR)
-                    }
                 }
             }
             throw e
@@ -222,9 +224,6 @@ IMPORTANT LIMITATIONS:
             healthChatRepository.transaction { scope ->
                 if (userMessageId > 0L) {
                     scope.updateMessageStatus(userMessageId, ChatMessageStatus.ERROR)
-                }
-                if (assistantMessageId > 0L) {
-                    scope.updateMessageStatus(assistantMessageId, ChatMessageStatus.ERROR)
                 }
             }
             ChatResult.ProviderError(
@@ -292,13 +291,31 @@ IMPORTANT LIMITATIONS:
 private class CapturingToolExecutor(
     private val delegate: ToolExecutor,
 ) {
-    val capturedCalls = mutableListOf<ToolCall>()
-    val capturedResults = mutableListOf<ToolResult>()
+    data class ToolRound(
+        val calls: List<ToolCall>,
+        val results: List<ToolResult>,
+    )
+
+    val completedRounds = mutableListOf<ToolRound>()
+    private val pendingCalls = mutableListOf<ToolCall>()
+    private val pendingResults = mutableListOf<ToolResult>()
+
+    fun finish() {
+        finishRound()
+    }
+
+    fun finishRound() {
+        if (pendingCalls.isNotEmpty()) {
+            completedRounds.add(ToolRound(pendingCalls.toList(), pendingResults.toList()))
+            pendingCalls.clear()
+            pendingResults.clear()
+        }
+    }
 
     suspend fun execute(toolCall: ToolCall): ToolResult {
         val result = delegate(toolCall)
-        capturedCalls.add(toolCall)
-        capturedResults.add(result)
+        pendingCalls.add(toolCall)
+        pendingResults.add(result)
         return result
     }
 }

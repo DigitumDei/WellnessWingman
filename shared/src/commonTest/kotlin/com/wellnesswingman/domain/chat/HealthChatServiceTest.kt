@@ -592,14 +592,11 @@ class HealthChatServiceTest {
         val result = service.sendMessage(request)
 
         assertTrue(result is ChatResult.ApiKeyMissing)
-        assertEquals(2, chatRepo.messages.size)
+        assertEquals(1, chatRepo.messages.size)
         val userMsg = chatRepo.messages[0]
         assertEquals(ChatRole.USER, userMsg.role)
         assertEquals("Hello", userMsg.content)
         assertEquals(ChatMessageStatus.ERROR, userMsg.status)
-        val pendingAssistant = chatRepo.messages[1]
-        assertEquals(ChatRole.ASSISTANT, pendingAssistant.role)
-        assertEquals(ChatMessageStatus.ERROR, pendingAssistant.status)
     }
 
     @Test
@@ -1309,15 +1306,11 @@ class HealthChatServiceTest {
             // expected
         }
 
-        assertEquals(2, chatRepo.messages.size)
+        assertEquals(1, chatRepo.messages.size)
 
         val userMsg = chatRepo.messages.find { it.role == ChatRole.USER }
         assertNotNull(userMsg)
         assertEquals(ChatMessageStatus.ERROR, userMsg.status)
-
-        val assistantMsg = chatRepo.messages.find { it.role == ChatRole.ASSISTANT }
-        assertNotNull(assistantMsg)
-        assertEquals(ChatMessageStatus.ERROR, assistantMsg.status)
     }
 
     @Test

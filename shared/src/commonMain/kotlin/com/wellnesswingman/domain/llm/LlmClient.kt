@@ -73,6 +73,7 @@ interface LlmClient {
         systemInstruction: String? = null,
         jsonSchema: String? = null,
         tools: List<ToolDefinition> = emptyList(),
-        toolExecutor: ToolExecutor? = null
+        toolExecutor: ToolExecutor? = null,
+        onToolRoundCompleted: (() -> Unit)? = null
     ): LlmAnalysisResult
 }

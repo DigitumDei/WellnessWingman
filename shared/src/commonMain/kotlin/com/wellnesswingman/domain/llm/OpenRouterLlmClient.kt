@@ -186,7 +186,8 @@ class OpenRouterLlmClient(
         systemInstruction: String?,
         jsonSchema: String?,
         tools: List<ToolDefinition>,
-        toolExecutor: ToolExecutor?
+        toolExecutor: ToolExecutor?,
+        onToolRoundCompleted: (() -> Unit)?,
     ): LlmAnalysisResult {
         val openAiMessages = toOpenAiMessages(messages, systemInstruction)
         return runConversation(
@@ -194,7 +195,8 @@ class OpenRouterLlmClient(
             jsonSchema = jsonSchema,
             tools = tools,
             toolExecutor = toolExecutor,
-            startTime = Clock.System.now()
+            startTime = Clock.System.now(),
+            onToolRoundCompleted = onToolRoundCompleted,
         )
     }
 
@@ -207,7 +209,8 @@ class OpenRouterLlmClient(
         jsonSchema: String?,
         tools: List<ToolDefinition>,
         toolExecutor: ToolExecutor?,
-        startTime: kotlinx.datetime.Instant
+        startTime: kotlinx.datetime.Instant,
+        onToolRoundCompleted: (() -> Unit)? = null
     ): LlmAnalysisResult {
         var promptTokens = 0
         var completionTokens = 0
@@ -283,6 +286,8 @@ class OpenRouterLlmClient(
                     )
                 )
             }
+
+            onToolRoundCompleted?.invoke()
         }
 
         val completion = client.chatCompletion(

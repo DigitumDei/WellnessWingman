@@ -169,7 +169,8 @@ class GeminiLlmClient(
         systemInstruction: String?,
         jsonSchema: String?,
         tools: List<ToolDefinition>,
-        toolExecutor: ToolExecutor?
+        toolExecutor: ToolExecutor?,
+        onToolRoundCompleted: (() -> Unit)?,
     ): LlmAnalysisResult {
         val contents = toGeminiContents(messages)
         return runConversation(
@@ -178,7 +179,8 @@ class GeminiLlmClient(
             tools = tools,
             toolExecutor = toolExecutor,
             startTime = Clock.System.now(),
-            chatSystemInstruction = systemInstruction
+            chatSystemInstruction = systemInstruction,
+            onToolRoundCompleted = onToolRoundCompleted,
         )
     }
 
@@ -188,7 +190,8 @@ class GeminiLlmClient(
         tools: List<ToolDefinition>,
         toolExecutor: ToolExecutor?,
         startTime: kotlinx.datetime.Instant,
-        chatSystemInstruction: String? = null
+        chatSystemInstruction: String? = null,
+        onToolRoundCompleted: (() -> Unit)? = null
     ): LlmAnalysisResult {
         var promptTokens = 0
         var completionTokens = 0
@@ -276,6 +279,7 @@ class GeminiLlmClient(
                     }
                 )
             )
+            onToolRoundCompleted?.invoke()
         }
 
         val response = executeRequest(
