@@ -25,3 +25,4 @@ CREATE TABLE ChatMessage (
 );
 
 CREATE INDEX idx_chat_message_conversation ON ChatMessage(conversationId, createdAt);
+CREATE INDEX idx_chat_conversation_updated ON ChatConversation(updatedAt DESC);
