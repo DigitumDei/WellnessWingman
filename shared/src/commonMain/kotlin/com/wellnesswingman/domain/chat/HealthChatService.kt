@@ -118,7 +118,7 @@ IMPORTANT LIMITATIONS:
             }
 
             val history = healthChatRepository.getMessagesForConversation(conversationId)
-                .filter { it.status != ChatMessageStatus.PENDING }
+                .filter { it.status == ChatMessageStatus.COMPLETED }
             val boundedHistory = history.takeLast(MAX_HISTORY_MESSAGES)
             val llmMessages = boundedHistory.map { it.toLlmChatMessage() }
 
@@ -225,6 +225,14 @@ IMPORTANT LIMITATIONS:
 
     suspend fun deleteConversation(conversationId: Long) {
         healthChatRepository.deleteConversation(conversationId)
+    }
+
+    suspend fun renameConversation(conversationId: Long, title: String) {
+        healthChatRepository.renameConversation(
+            id = conversationId,
+            title = title.trim().take(80),
+            updatedAt = Clock.System.now(),
+        )
     }
 
     private suspend fun getOrCreateConversation(

@@ -54,6 +54,14 @@ class ChatDatabaseMigrationTest {
                 newVersion = 10
             )
 
+            // Generated queries target the current (v11) schema, so complete the
+            // next migration before querying the v10 tables.
+            WellnessWingmanDatabase.Schema.migrate(
+                driver = migrationDriver,
+                oldVersion = 10,
+                newVersion = 11
+            )
+
             val migratedDb = WellnessWingmanDatabase(migrationDriver)
 
             migrationDriver.execute(
@@ -86,13 +94,6 @@ class ChatDatabaseMigrationTest {
             assertEquals(1, messages.size)
             assertEquals("user", messages[0].role)
             assertEquals("Hello", messages[0].content)
-
-            // Migrate to v11 so the status column exists for generated queries
-            WellnessWingmanDatabase.Schema.migrate(
-                driver = migrationDriver,
-                oldVersion = 10,
-                newVersion = 11
-            )
 
             migrationDriver.execute(
                 identifier = null,

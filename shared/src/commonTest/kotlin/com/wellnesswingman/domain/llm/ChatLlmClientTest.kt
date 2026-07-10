@@ -29,6 +29,8 @@ import io.ktor.utils.io.*
 import io.ktor.utils.io.core.*
 import io.mockk.coEvery
 import io.mockk.mockk
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -678,7 +680,16 @@ class ChatLlmClientTest {
         requests += when (val body = request.body) {
             is OutgoingContent.ByteArrayContent -> body.bytes().decodeToString()
             is OutgoingContent.ReadChannelContent -> body.readFrom().readRemaining().readText()
-            is OutgoingContent.WriteChannelContent -> "<write-channel-content>"
+            // Kotlinx serialization is encoded by Ktor as a write-channel body.
+            // The tests inspect the actual provider payload, not a placeholder.
+            is OutgoingContent.WriteChannelContent -> coroutineScope {
+                val channel = ByteChannel(autoFlush = true)
+                val writer = async {
+                    body.writeTo(channel)
+                    channel.close()
+                }
+                channel.readRemaining().readText().also { writer.await() }
+            }
             is OutgoingContent.NoContent -> ""
             else -> body.toString()
         }

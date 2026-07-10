@@ -82,6 +82,12 @@ class DataManagementSettingsScreen : Screen {
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
+                Text(
+                    text = "Health chat history is intentionally kept on this device and is not included in exports.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
                 OutlinedButton(
                     onClick = { viewModel.exportData() },
                     modifier = Modifier.fillMaxWidth(),
