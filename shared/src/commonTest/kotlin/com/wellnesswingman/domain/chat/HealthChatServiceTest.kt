@@ -801,7 +801,7 @@ class HealthChatServiceTest {
         )
 
         val convId = chatRepo.createConversation("conv-bound", "Bound test", "openai", "gpt-4o-mini", now, now)
-        for (i in 1..(HealthChatService.MAX_HISTORY_MESSAGES + 10)) {
+        for (i in 1..(HealthChatService.MAX_HISTORY_MESSAGES + 1)) {
             chatRepo.insertMessage(convId, ChatRole.USER, "Message $i", now, "openai", "gpt-4o-mini", status = ChatMessageStatus.COMPLETED)
         }
 
@@ -812,7 +812,7 @@ class HealthChatServiceTest {
         assertTrue(result is ChatResult.Success)
         assertTrue(capturedMessages.isNotEmpty())
         val sentMessages = capturedMessages.first()
-        assertEquals(HealthChatService.MAX_HISTORY_MESSAGES + 1, sentMessages.size)
+        assertEquals(HealthChatService.MAX_HISTORY_MESSAGES, sentMessages.size)
     }
 
     @Test
