@@ -20,6 +20,9 @@ import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 
 data class ChatRequest(
     val conversationExternalId: String,
@@ -130,8 +133,16 @@ IMPORTANT LIMITATIONS:
             val responseNow = Clock.System.now()
 
             val toolCallsJson: String? = if (capturingExecutor.capturedCalls.isNotEmpty()) {
-                val capturedCallsList: List<ToolCall> = capturingExecutor.capturedCalls.toList()
-                json.encodeToString(capturedCallsList)
+                val callsArray = buildJsonArray {
+                    capturingExecutor.capturedCalls.forEach { call ->
+                        add(buildJsonObject {
+                            put("id", call.id ?: "")
+                            put("name", call.name)
+                            put("arguments", call.arguments)
+                        })
+                    }
+                }
+                json.encodeToString(JsonElement.serializer(), callsArray)
             } else null
 
             for (toolResult in capturingExecutor.capturedResults) {
