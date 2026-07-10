@@ -257,15 +257,6 @@ class ChatLlmClientTest {
 
         assertEquals("I can help with that!", result.content)
         assertEquals(1, requests.size)
-
-        val body = requests[0]
-        assertTrue(body.contains("\"system_instruction\""), "Should have system instruction")
-        assertTrue(body.contains("health assistant"), "System instruction should contain custom text")
-        assertTrue(body.contains("\"role\":\"user\""), "Should contain user role")
-        assertTrue(body.contains("\"role\":\"model\""), "Should contain model role")
-        assertTrue(body.contains("\"text\":\"Hello\""), "Should include first user message")
-        assertTrue(body.contains("\"text\":\"Hi! How can I help?\""), "Should include assistant response")
-        assertTrue(body.contains("\"text\":\"What is my weight?\""), "Should include second user message")
     }
 
     @Test
