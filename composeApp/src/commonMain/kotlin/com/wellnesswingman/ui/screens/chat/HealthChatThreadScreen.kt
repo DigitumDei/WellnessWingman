@@ -23,6 +23,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -52,6 +53,14 @@ data class HealthChatThreadScreen(val conversationExternalId: String) : Screen {
         val state by viewModel.uiState.collectAsState()
         val isSending by viewModel.isSending.collectAsState()
         val draft by viewModel.draft.collectAsState()
+
+        var previousNavigatorSize by remember { mutableStateOf(navigator.size) }
+        LaunchedEffect(navigator.size) {
+            if (navigator.size == 1 && previousNavigatorSize > 1 && state is HealthChatThreadUiState.ApiKeyMissing) {
+                viewModel.recheckConfiguration()
+            }
+            previousNavigatorSize = navigator.size
+        }
 
         Scaffold(
             topBar = {

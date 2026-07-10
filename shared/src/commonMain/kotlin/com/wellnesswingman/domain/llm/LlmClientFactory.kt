@@ -6,14 +6,14 @@ import com.wellnesswingman.data.repository.LlmProvider
 /**
  * Factory for creating LLM client instances.
  */
-class LlmClientFactory(
+open class LlmClientFactory(
     private val settingsRepository: AppSettingsRepository
 ) {
 
     /**
      * Creates an LLM client for the specified provider.
      */
-    fun create(provider: LlmProvider): LlmClient {
+    open fun create(provider: LlmProvider): LlmClient {
         val apiKey = settingsRepository.getApiKey(provider)
             ?: throw IllegalStateException("API key not configured for $provider")
 
@@ -47,14 +47,14 @@ class LlmClientFactory(
     /**
      * Checks if an API key is configured for the given provider.
      */
-    fun hasApiKey(provider: LlmProvider): Boolean {
+    open fun hasApiKey(provider: LlmProvider): Boolean {
         return settingsRepository.getApiKey(provider) != null
     }
 
     /**
      * Checks if the current provider has an API key configured.
      */
-    fun hasCurrentApiKey(): Boolean {
+    open fun hasCurrentApiKey(): Boolean {
         val provider = settingsRepository.getSelectedProvider()
         return hasApiKey(provider)
     }
