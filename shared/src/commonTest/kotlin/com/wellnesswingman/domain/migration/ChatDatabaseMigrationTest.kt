@@ -8,6 +8,7 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 
 class ChatDatabaseMigrationTest {
 
@@ -72,6 +73,7 @@ class ChatDatabaseMigrationTest {
                 model = null,
                 toolCallsJson = null,
                 toolResultJson = null,
+                status = "completed",
             )
 
             val conversations = migratedDb.chatConversationQueries.getConversationById(1)
