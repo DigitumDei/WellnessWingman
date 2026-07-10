@@ -313,10 +313,22 @@ private class CapturingToolExecutor(
     }
 
     suspend fun execute(toolCall: ToolCall): ToolResult {
-        val result = delegate(toolCall)
+        val result = runCatching { delegate(toolCall) }
         pendingCalls.add(toolCall)
-        pendingResults.add(result)
-        return result
+        return result.fold(
+            onSuccess = { it.also { pendingResults.add(it) } },
+            onFailure = { error ->
+                if (error is CancellationException) throw error
+                val errorResult = ToolResult(
+                    toolCallId = toolCall.id,
+                    name = toolCall.name,
+                    content = JsonPrimitive(error.message ?: "Tool execution failed."),
+                    isError = true,
+                )
+                pendingResults.add(errorResult)
+                errorResult
+            }
+        )
     }
 }
 
@@ -339,14 +351,20 @@ private fun HealthChatMessage.toLlmChatMessage(): LlmChatMessage {
             val toolResult = toolResultJson?.let {
                 json.decodeFromString<ToolResult>(it)
             }
+            val wireFormat = if (toolResult != null) {
+                buildJsonObject {
+                    put("ok", JsonPrimitive(!toolResult.isError))
+                    put("content", toolResult.content)
+                }.let { json.encodeToString(JsonElement.serializer(), it) }
+            } else {
+                content
+            }
             LlmChatMessage(
                 role = llmRole,
                 content = content,
                 toolCallId = toolResult?.toolCallId,
                 toolName = toolResult?.name,
-                toolResultJson = toolResult?.content?.let {
-                    json.encodeToString(JsonElement.serializer(), it)
-                },
+                toolResultJson = wireFormat,
             )
         }
         else -> LlmChatMessage(

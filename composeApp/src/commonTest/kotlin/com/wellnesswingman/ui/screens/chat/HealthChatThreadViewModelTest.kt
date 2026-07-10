@@ -507,6 +507,7 @@ private class FakeLlmClient : LlmClient {
         jsonSchema: String?,
         tools: List<com.wellnesswingman.data.model.llm.ToolDefinition>,
         toolExecutor: ToolExecutor?,
+        onToolRoundCompleted: (() -> Unit)?,
     ) = LlmAnalysisResult("Response from LLM", LlmDiagnostics(model = "gpt-4o-mini"))
 }
 

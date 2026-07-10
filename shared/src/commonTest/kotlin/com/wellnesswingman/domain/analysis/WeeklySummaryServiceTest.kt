@@ -234,7 +234,7 @@ class WeeklySummaryServiceTest {
                 prompt: String,
                 jsonSchema: String?,
                 tools: List<com.wellnesswingman.data.model.llm.ToolDefinition>,
-                toolExecutor: ToolExecutor?
+                toolExecutor: ToolExecutor?,
             ) =
                 LlmAnalysisResult(response, LlmDiagnostics())
             override suspend fun transcribeAudio(audioBytes: ByteArray, mimeType: String) = ""
@@ -242,7 +242,7 @@ class WeeklySummaryServiceTest {
                 prompt: String,
                 jsonSchema: String?,
                 tools: List<com.wellnesswingman.data.model.llm.ToolDefinition>,
-                toolExecutor: ToolExecutor?
+                toolExecutor: ToolExecutor?,
             ) =
                 LlmAnalysisResult(response, LlmDiagnostics())
 
@@ -251,7 +251,8 @@ class WeeklySummaryServiceTest {
                 systemInstruction: String?,
                 jsonSchema: String?,
                 tools: List<com.wellnesswingman.data.model.llm.ToolDefinition>,
-                toolExecutor: ToolExecutor?
+                toolExecutor: ToolExecutor?,
+                onToolRoundCompleted: (() -> Unit)?,
             ) = LlmAnalysisResult(response, LlmDiagnostics())
         }
         val factory = mockk<LlmClientFactory>()
@@ -274,7 +275,7 @@ class WeeklySummaryServiceTest {
                 prompt: String,
                 jsonSchema: String?,
                 tools: List<com.wellnesswingman.data.model.llm.ToolDefinition>,
-                toolExecutor: ToolExecutor?
+                toolExecutor: ToolExecutor?,
             ) =
                 LlmAnalysisResult(response, LlmDiagnostics())
             override suspend fun transcribeAudio(audioBytes: ByteArray, mimeType: String) = ""
@@ -282,7 +283,7 @@ class WeeklySummaryServiceTest {
                 prompt: String,
                 jsonSchema: String?,
                 tools: List<com.wellnesswingman.data.model.llm.ToolDefinition>,
-                toolExecutor: ToolExecutor?
+                toolExecutor: ToolExecutor?,
             ): LlmAnalysisResult {
                 capturedPrompts.add(prompt)
                 return LlmAnalysisResult(response, LlmDiagnostics())
@@ -293,7 +294,8 @@ class WeeklySummaryServiceTest {
                 systemInstruction: String?,
                 jsonSchema: String?,
                 tools: List<com.wellnesswingman.data.model.llm.ToolDefinition>,
-                toolExecutor: ToolExecutor?
+                toolExecutor: ToolExecutor?,
+                onToolRoundCompleted: (() -> Unit)?,
             ): LlmAnalysisResult {
                 return LlmAnalysisResult(response, LlmDiagnostics())
             }
@@ -416,7 +418,8 @@ class WeeklySummaryServiceTest {
                 systemInstruction: String?,
                 jsonSchema: String?,
                 tools: List<com.wellnesswingman.data.model.llm.ToolDefinition>,
-                toolExecutor: ToolExecutor?
+                toolExecutor: ToolExecutor?,
+                onToolRoundCompleted: (() -> Unit)?,
             ): LlmAnalysisResult {
                 return LlmAnalysisResult(VALID_WEEKLY_JSON, LlmDiagnostics())
             }

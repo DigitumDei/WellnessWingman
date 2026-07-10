@@ -243,7 +243,8 @@ class AnalysisOrchestratorTest {
             systemInstruction: String?,
             jsonSchema: String?,
             tools: List<com.wellnesswingman.data.model.llm.ToolDefinition>,
-            toolExecutor: ToolExecutor?
+            toolExecutor: ToolExecutor?,
+            onToolRoundCompleted: (() -> Unit)?,
         ): LlmAnalysisResult = throw NotImplementedError()
     }
 

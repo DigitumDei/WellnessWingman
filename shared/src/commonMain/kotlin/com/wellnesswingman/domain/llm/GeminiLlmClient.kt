@@ -369,7 +369,9 @@ class GeminiLlmClient(
 
     private fun toGeminiContents(messages: List<LlmChatMessage>): MutableList<GeminiContent> {
         val contents = mutableListOf<GeminiContent>()
-        for (msg in messages) {
+        var i = 0
+        while (i < messages.size) {
+            val msg = messages[i]
             when (msg.role) {
                 LlmChatRole.USER -> contents.add(
                     GeminiContent(
@@ -401,30 +403,38 @@ class GeminiLlmClient(
                     )
                 }
                 LlmChatRole.TOOL -> {
-                    val responseJson = if (msg.toolResultJson != null) {
-                        json.parseToJsonElement(msg.toolResultJson).jsonObject
-                    } else {
-                        buildJsonObject {
-                            put("ok", JsonPrimitive(true))
-                            put("content", JsonPrimitive(msg.content ?: ""))
+                    val toolParts = mutableListOf<GeminiPart>()
+                    while (i < messages.size && messages[i].role == LlmChatRole.TOOL) {
+                        val toolMsg = messages[i]
+                        val responseJson = if (toolMsg.toolResultJson != null) {
+                            json.parseToJsonElement(toolMsg.toolResultJson).jsonObject
+                        } else {
+                            buildJsonObject {
+                                put("ok", JsonPrimitive(true))
+                                put("content", JsonPrimitive(toolMsg.content ?: ""))
+                            }
                         }
+                        toolParts.add(
+                            GeminiPart(
+                                functionResponse = GeminiFunctionResponse(
+                                    id = toolMsg.toolCallId,
+                                    name = toolMsg.toolName ?: "",
+                                    response = responseJson
+                                )
+                            )
+                        )
+                        i++
                     }
                     contents.add(
                         GeminiContent(
                             role = "user",
-                            parts = listOf(
-                                GeminiPart(
-                                    functionResponse = GeminiFunctionResponse(
-                                        id = msg.toolCallId,
-                                        name = msg.toolName ?: "",
-                                        response = responseJson
-                                    )
-                                )
-                            )
+                            parts = toolParts
                         )
                     )
+                    continue
                 }
             }
+            i++
         }
         return contents
     }

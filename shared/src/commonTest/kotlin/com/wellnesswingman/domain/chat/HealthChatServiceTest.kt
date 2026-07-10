@@ -303,6 +303,7 @@ class HealthChatServiceTest {
                 jsonSchema: String?,
                 tools: List<com.wellnesswingman.data.model.llm.ToolDefinition>,
                 toolExecutor: com.wellnesswingman.domain.llm.ToolExecutor?,
+                onToolRoundCompleted: (() -> Unit)?,
             ) = LlmAnalysisResult(responseContent, LlmDiagnostics(model = model))
             override suspend fun transcribeAudio(imageBytes: ByteArray, mimeType: String) = ""
             override suspend fun generateCompletion(
@@ -310,6 +311,7 @@ class HealthChatServiceTest {
                 jsonSchema: String?,
                 tools: List<com.wellnesswingman.data.model.llm.ToolDefinition>,
                 toolExecutor: com.wellnesswingman.domain.llm.ToolExecutor?,
+                onToolRoundCompleted: (() -> Unit)?,
             ) = LlmAnalysisResult(responseContent, LlmDiagnostics(model = model))
             override suspend fun generateChatResponse(
                 messages: List<com.wellnesswingman.data.model.llm.LlmChatMessage>,
@@ -317,6 +319,7 @@ class HealthChatServiceTest {
                 jsonSchema: String?,
                 tools: List<com.wellnesswingman.data.model.llm.ToolDefinition>,
                 toolExecutor: com.wellnesswingman.domain.llm.ToolExecutor?,
+                onToolRoundCompleted: (() -> Unit)?,
             ) = LlmAnalysisResult(responseContent, LlmDiagnostics(model = model))
         }
     }
@@ -612,6 +615,7 @@ class HealthChatServiceTest {
                 jsonSchema: String?,
                 tools: List<com.wellnesswingman.data.model.llm.ToolDefinition>,
                 toolExecutor: com.wellnesswingman.domain.llm.ToolExecutor?,
+                onToolRoundCompleted: (() -> Unit)?,
             ) = throw RuntimeException("API error")
             override suspend fun transcribeAudio(imageBytes: ByteArray, mimeType: String) = ""
             override suspend fun generateCompletion(
@@ -619,6 +623,7 @@ class HealthChatServiceTest {
                 jsonSchema: String?,
                 tools: List<com.wellnesswingman.data.model.llm.ToolDefinition>,
                 toolExecutor: com.wellnesswingman.domain.llm.ToolExecutor?,
+                onToolRoundCompleted: (() -> Unit)?,
             ) = throw RuntimeException("API error")
             override suspend fun generateChatResponse(
                 messages: List<com.wellnesswingman.data.model.llm.LlmChatMessage>,
@@ -626,6 +631,7 @@ class HealthChatServiceTest {
                 jsonSchema: String?,
                 tools: List<com.wellnesswingman.data.model.llm.ToolDefinition>,
                 toolExecutor: com.wellnesswingman.domain.llm.ToolExecutor?,
+                onToolRoundCompleted: (() -> Unit)?,
             ) = throw RuntimeException("API error")
         }
 
@@ -893,7 +899,9 @@ class HealthChatServiceTest {
             override suspend fun analyzeImage(imageBytes: ByteArray, prompt: String, jsonSchema: String?, tools: List<com.wellnesswingman.data.model.llm.ToolDefinition>, toolExecutor: com.wellnesswingman.domain.llm.ToolExecutor?) = LlmAnalysisResult("ok", LlmDiagnostics())
             override suspend fun transcribeAudio(imageBytes: ByteArray, mimeType: String) = ""
             override suspend fun generateCompletion(prompt: String, jsonSchema: String?, tools: List<com.wellnesswingman.data.model.llm.ToolDefinition>, toolExecutor: com.wellnesswingman.domain.llm.ToolExecutor?) = LlmAnalysisResult("ok", LlmDiagnostics())
-            override suspend fun generateChatResponse(messages: List<com.wellnesswingman.data.model.llm.LlmChatMessage>, systemInstruction: String?, jsonSchema: String?, tools: List<com.wellnesswingman.data.model.llm.ToolDefinition>, toolExecutor: com.wellnesswingman.domain.llm.ToolExecutor?): LlmAnalysisResult {
+            override suspend fun generateChatResponse(messages: List<com.wellnesswingman.data.model.llm.LlmChatMessage>, systemInstruction: String?, jsonSchema: String?, tools: List<com.wellnesswingman.data.model.llm.ToolDefinition>, toolExecutor: com.wellnesswingman.domain.llm.ToolExecutor?,
+                onToolRoundCompleted: (() -> Unit)?,
+            ): LlmAnalysisResult {
                 capturedMessages.add(messages)
                 return LlmAnalysisResult("Response", LlmDiagnostics(model = "gpt-4o-mini"))
             }
@@ -933,7 +941,9 @@ class HealthChatServiceTest {
             override suspend fun analyzeImage(imageBytes: ByteArray, prompt: String, jsonSchema: String?, tools: List<com.wellnesswingman.data.model.llm.ToolDefinition>, toolExecutor: com.wellnesswingman.domain.llm.ToolExecutor?) = LlmAnalysisResult("ok", LlmDiagnostics())
             override suspend fun transcribeAudio(imageBytes: ByteArray, mimeType: String) = ""
             override suspend fun generateCompletion(prompt: String, jsonSchema: String?, tools: List<com.wellnesswingman.data.model.llm.ToolDefinition>, toolExecutor: com.wellnesswingman.domain.llm.ToolExecutor?) = LlmAnalysisResult("ok", LlmDiagnostics())
-            override suspend fun generateChatResponse(messages: List<com.wellnesswingman.data.model.llm.LlmChatMessage>, systemInstruction: String?, jsonSchema: String?, tools: List<com.wellnesswingman.data.model.llm.ToolDefinition>, toolExecutor: com.wellnesswingman.domain.llm.ToolExecutor?): LlmAnalysisResult {
+            override suspend fun generateChatResponse(messages: List<com.wellnesswingman.data.model.llm.LlmChatMessage>, systemInstruction: String?, jsonSchema: String?, tools: List<com.wellnesswingman.data.model.llm.ToolDefinition>, toolExecutor: com.wellnesswingman.domain.llm.ToolExecutor?,
+                onToolRoundCompleted: (() -> Unit)?,
+            ): LlmAnalysisResult {
                 capturedInstructions.add(systemInstruction)
                 return LlmAnalysisResult("Response", LlmDiagnostics(model = "gpt-4o-mini"))
             }
@@ -1019,7 +1029,9 @@ class HealthChatServiceTest {
             override suspend fun analyzeImage(imageBytes: ByteArray, prompt: String, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?) = LlmAnalysisResult("ok", LlmDiagnostics())
             override suspend fun transcribeAudio(imageBytes: ByteArray, mimeType: String) = ""
             override suspend fun generateCompletion(prompt: String, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?) = LlmAnalysisResult("ok", LlmDiagnostics())
-            override suspend fun generateChatResponse(messages: List<LlmChatMessage>, systemInstruction: String?, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?): LlmAnalysisResult {
+            override suspend fun generateChatResponse(messages: List<LlmChatMessage>, systemInstruction: String?, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?,
+                onToolRoundCompleted: (() -> Unit)?,
+            ): LlmAnalysisResult {
                 captured.add(messages)
                 return LlmAnalysisResult("Hello from LLM", LlmDiagnostics(model = "gpt-4o-mini"))
             }
@@ -1061,7 +1073,9 @@ class HealthChatServiceTest {
             override suspend fun analyzeImage(imageBytes: ByteArray, prompt: String, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?) = LlmAnalysisResult("ok", LlmDiagnostics())
             override suspend fun transcribeAudio(imageBytes: ByteArray, mimeType: String) = ""
             override suspend fun generateCompletion(prompt: String, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?) = LlmAnalysisResult("ok", LlmDiagnostics())
-            override suspend fun generateChatResponse(messages: List<LlmChatMessage>, systemInstruction: String?, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?): LlmAnalysisResult {
+            override suspend fun generateChatResponse(messages: List<LlmChatMessage>, systemInstruction: String?, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?,
+                onToolRoundCompleted: (() -> Unit)?,
+            ): LlmAnalysisResult {
                 toolExecutor?.invoke(toolCall1)
                 toolExecutor?.invoke(toolCall2)
                 return LlmAnalysisResult("Here is your data", LlmDiagnostics(model = "gpt-4o-mini"))
@@ -1135,7 +1149,9 @@ class HealthChatServiceTest {
             override suspend fun analyzeImage(imageBytes: ByteArray, prompt: String, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?) = LlmAnalysisResult("ok", LlmDiagnostics())
             override suspend fun transcribeAudio(imageBytes: ByteArray, mimeType: String) = ""
             override suspend fun generateCompletion(prompt: String, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?) = LlmAnalysisResult("ok", LlmDiagnostics())
-            override suspend fun generateChatResponse(messages: List<LlmChatMessage>, systemInstruction: String?, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?): LlmAnalysisResult {
+            override suspend fun generateChatResponse(messages: List<LlmChatMessage>, systemInstruction: String?, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?,
+                onToolRoundCompleted: (() -> Unit)?,
+            ): LlmAnalysisResult {
                 capturedMessages.add(messages)
                 return LlmAnalysisResult("Response", LlmDiagnostics(model = "gpt-4o-mini"))
             }
@@ -1204,7 +1220,9 @@ class HealthChatServiceTest {
             override suspend fun analyzeImage(imageBytes: ByteArray, prompt: String, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?) = LlmAnalysisResult("ok", LlmDiagnostics())
             override suspend fun transcribeAudio(imageBytes: ByteArray, mimeType: String) = ""
             override suspend fun generateCompletion(prompt: String, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?) = LlmAnalysisResult("ok", LlmDiagnostics())
-            override suspend fun generateChatResponse(messages: List<LlmChatMessage>, systemInstruction: String?, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?): LlmAnalysisResult {
+            override suspend fun generateChatResponse(messages: List<LlmChatMessage>, systemInstruction: String?, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?,
+                onToolRoundCompleted: (() -> Unit)?,
+            ): LlmAnalysisResult {
                 capturedMessages.add(messages)
                 return LlmAnalysisResult("Response", LlmDiagnostics(model = "gpt-4o-mini"))
             }
@@ -1274,6 +1292,7 @@ class HealthChatServiceTest {
                 jsonSchema: String?,
                 tools: List<ToolDefinition>,
                 toolExecutor: ToolExecutor?,
+                onToolRoundCompleted: (() -> Unit)?,
             ) = throw CancellationException()
         }
 
@@ -1325,10 +1344,20 @@ class HealthChatServiceTest {
 
         val failingClient = object : LlmClient {
             override val providerId: String get() = "openai"
-            override suspend fun analyzeImage(imageBytes: ByteArray, prompt: String, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?) = throw RuntimeException("API error")
+            override suspend fun analyzeImage(
+                imageBytes: ByteArray, prompt: String, jsonSchema: String?,
+                tools: List<ToolDefinition>, toolExecutor: ToolExecutor?,
+            ) = throw RuntimeException("API error")
             override suspend fun transcribeAudio(imageBytes: ByteArray, mimeType: String) = ""
-            override suspend fun generateCompletion(prompt: String, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?) = throw RuntimeException("API error")
-            override suspend fun generateChatResponse(messages: List<LlmChatMessage>, systemInstruction: String?, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?) = throw RuntimeException("API error")
+            override suspend fun generateCompletion(
+                prompt: String, jsonSchema: String?,
+                tools: List<ToolDefinition>, toolExecutor: ToolExecutor?,
+            ) = throw RuntimeException("API error")
+            override suspend fun generateChatResponse(
+                messages: List<LlmChatMessage>, systemInstruction: String?, jsonSchema: String?,
+                tools: List<ToolDefinition>, toolExecutor: ToolExecutor?,
+                onToolRoundCompleted: (() -> Unit)?,
+            ) = throw RuntimeException("API error")
         }
 
         val factory = mockk<LlmClientFactory>()
@@ -1359,7 +1388,9 @@ class HealthChatServiceTest {
             override suspend fun analyzeImage(imageBytes: ByteArray, prompt: String, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?) = LlmAnalysisResult("ok", LlmDiagnostics())
             override suspend fun transcribeAudio(imageBytes: ByteArray, mimeType: String) = ""
             override suspend fun generateCompletion(prompt: String, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?) = LlmAnalysisResult("ok", LlmDiagnostics())
-            override suspend fun generateChatResponse(messages: List<LlmChatMessage>, systemInstruction: String?, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?): LlmAnalysisResult {
+            override suspend fun generateChatResponse(messages: List<LlmChatMessage>, systemInstruction: String?, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?,
+                onToolRoundCompleted: (() -> Unit)?,
+            ): LlmAnalysisResult {
                 capturedMessages.add(messages)
                 return LlmAnalysisResult("Sure!", LlmDiagnostics(model = "gpt-4o-mini"))
             }
@@ -1416,7 +1447,9 @@ class HealthChatServiceTest {
             override suspend fun analyzeImage(imageBytes: ByteArray, prompt: String, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?) = LlmAnalysisResult("ok", LlmDiagnostics())
             override suspend fun transcribeAudio(imageBytes: ByteArray, mimeType: String) = ""
             override suspend fun generateCompletion(prompt: String, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?) = LlmAnalysisResult("ok", LlmDiagnostics())
-            override suspend fun generateChatResponse(messages: List<LlmChatMessage>, systemInstruction: String?, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?): LlmAnalysisResult {
+            override suspend fun generateChatResponse(messages: List<LlmChatMessage>, systemInstruction: String?, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?,
+                onToolRoundCompleted: (() -> Unit)?,
+            ): LlmAnalysisResult {
                 capturedMessages.add(messages)
                 return LlmAnalysisResult("Sure!", LlmDiagnostics(model = "gpt-4o-mini"))
             }
@@ -1450,10 +1483,20 @@ class HealthChatServiceTest {
 
         val cancellingClient = object : LlmClient {
             override val providerId: String get() = "openai"
-            override suspend fun analyzeImage(imageBytes: ByteArray, prompt: String, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?) = throw CancellationException()
+            override suspend fun analyzeImage(
+                imageBytes: ByteArray, prompt: String, jsonSchema: String?,
+                tools: List<ToolDefinition>, toolExecutor: ToolExecutor?,
+            ) = throw CancellationException()
             override suspend fun transcribeAudio(imageBytes: ByteArray, mimeType: String) = ""
-            override suspend fun generateCompletion(prompt: String, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?) = throw CancellationException()
-            override suspend fun generateChatResponse(messages: List<LlmChatMessage>, systemInstruction: String?, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?) = throw CancellationException()
+            override suspend fun generateCompletion(
+                prompt: String, jsonSchema: String?,
+                tools: List<ToolDefinition>, toolExecutor: ToolExecutor?,
+            ) = throw CancellationException()
+            override suspend fun generateChatResponse(
+                messages: List<LlmChatMessage>, systemInstruction: String?, jsonSchema: String?,
+                tools: List<ToolDefinition>, toolExecutor: ToolExecutor?,
+                onToolRoundCompleted: (() -> Unit)?,
+            ) = throw CancellationException()
         }
 
         val factory = mockk<LlmClientFactory>()
@@ -1489,7 +1532,9 @@ class HealthChatServiceTest {
             override suspend fun analyzeImage(imageBytes: ByteArray, prompt: String, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?) = LlmAnalysisResult("ok", LlmDiagnostics())
             override suspend fun transcribeAudio(imageBytes: ByteArray, mimeType: String) = ""
             override suspend fun generateCompletion(prompt: String, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?) = LlmAnalysisResult("ok", LlmDiagnostics())
-            override suspend fun generateChatResponse(messages: List<LlmChatMessage>, systemInstruction: String?, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?): LlmAnalysisResult {
+            override suspend fun generateChatResponse(messages: List<LlmChatMessage>, systemInstruction: String?, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?,
+                onToolRoundCompleted: (() -> Unit)?,
+            ): LlmAnalysisResult {
                 capturedMessages.add(messages)
                 return LlmAnalysisResult("Sure!", LlmDiagnostics(model = "gpt-4o-mini"))
             }
