@@ -82,7 +82,6 @@ class HealthChatThreadViewModel(
                 val provider = settingsRepository.getSelectedProvider()
                 val key = settingsRepository.getApiKey(provider)
                 if (key.isNullOrBlank()) {
-                    _uiState.value = HealthChatThreadUiState.Error("API key not configured")
                     return@launch
                 }
                 _uiState.value = HealthChatThreadUiState.Loading
