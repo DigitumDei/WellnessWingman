@@ -54,7 +54,7 @@ sealed interface ChatConversationResult {
     data object NotFound : ChatConversationResult
 }
 
-class HealthChatService(
+open class HealthChatService(
     private val healthChatRepository: HealthChatRepository,
     private val llmClientFactory: LlmClientFactory,
     private val toolRegistry: ToolRegistry,
@@ -84,7 +84,7 @@ IMPORTANT LIMITATIONS:
         """.trimIndent()
     }
 
-    suspend fun sendMessage(request: ChatRequest): ChatResult {
+    open suspend fun sendMessage(request: ChatRequest): ChatResult {
         var conversationId = 0L
         var userMessageId = 0L
         return try {
@@ -245,7 +245,7 @@ IMPORTANT LIMITATIONS:
         }
     }
 
-    suspend fun getConversation(conversationExternalId: String): ChatConversationResult {
+    open suspend fun getConversation(conversationExternalId: String): ChatConversationResult {
         val conversation = healthChatRepository.getConversationByExternalId(conversationExternalId)
         return if (conversation != null) {
             ChatConversationResult.Found(conversation)
