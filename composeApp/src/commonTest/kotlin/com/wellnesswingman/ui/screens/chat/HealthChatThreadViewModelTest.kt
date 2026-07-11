@@ -260,12 +260,14 @@ class HealthChatThreadViewModelTest {
         )
         advanceUntilIdle()
 
+        assertIs<HealthChatThreadUiState.Empty>(viewModel.uiState.value)
+
         viewModel.updateDraft("Hello")
         viewModel.send()
         advanceUntilIdle()
 
-        val state = viewModel.uiState.value
-        assertIs<HealthChatThreadUiState.Error>(state)
+        assertIs<HealthChatThreadUiState.Empty>(viewModel.uiState.value)
+        assertEquals("Service failure", viewModel.sendError.value)
         assertFalse(viewModel.isSending.value)
     }
 
