@@ -259,24 +259,30 @@ class OpenRouterLlmClient(
                     "Unsupported OpenRouter tool call type: ${toolCall::class.simpleName}"
                 }
 
-                val result = runCatching {
-                    val arguments = json.parseToJsonElement(toolCall.function.arguments).jsonObject
-                    executor(
-                        ToolCall(
-                            id = toolCall.id.id,
-                            name = toolCall.function.name,
-                            arguments = arguments
-                        )
-                    )
-                }.getOrElse { error ->
-                    if (error is CancellationException) throw error
-                    ToolResult(
-                        toolCallId = toolCall.id.id,
-                        name = toolCall.function.name,
-                        content = JsonPrimitive("Failed to parse tool arguments: ${error.message ?: "Unknown error"}"),
-                        isError = true
-                    )
+                val parsedArguments = runCatching {
+                    json.parseToJsonElement(toolCall.function.arguments).jsonObject
                 }
+
+                val result = parsedArguments.fold(
+                    onSuccess = { arguments ->
+                        executor(
+                            ToolCall(
+                                id = toolCall.id.id,
+                                name = toolCall.function.name,
+                                arguments = arguments
+                            )
+                        )
+                    },
+                    onFailure = { error ->
+                        if (error is CancellationException) throw error
+                        ToolResult(
+                            toolCallId = toolCall.id.id,
+                            name = toolCall.function.name,
+                            content = JsonPrimitive("Failed to parse tool arguments: ${error.message ?: "Unknown error"}"),
+                            isError = true
+                        )
+                    }
+                )
 
                 messages.add(
                     ChatMessage(

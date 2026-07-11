@@ -247,25 +247,31 @@ class GeminiLlmClient(
                 GeminiContent(
                     role = "user",
                     parts = functionCalls.map { functionCall ->
-                        val result = runCatching {
-                            val arguments = functionCall.args.asJsonObjectOrNull()
+                        val parsedArguments = runCatching {
+                            functionCall.args.asJsonObjectOrNull()
                                 ?: throw IllegalArgumentException("Tool arguments must be a JSON object.")
-                            executor(
-                                ToolCall(
-                                    id = functionCall.id,
-                                    name = functionCall.name,
-                                    arguments = arguments
-                                )
-                            )
-                        }.getOrElse { error ->
-                            if (error is CancellationException) throw error
-                            ToolResult(
-                                toolCallId = functionCall.id,
-                                name = functionCall.name,
-                                content = JsonPrimitive("Failed to parse tool arguments: ${error.message ?: "Unknown error"}"),
-                                isError = true
-                            )
                         }
+
+                        val result = parsedArguments.fold(
+                            onSuccess = { arguments ->
+                                executor(
+                                    ToolCall(
+                                        id = functionCall.id,
+                                        name = functionCall.name,
+                                        arguments = arguments
+                                    )
+                                )
+                            },
+                            onFailure = { error ->
+                                if (error is CancellationException) throw error
+                                ToolResult(
+                                    toolCallId = functionCall.id,
+                                    name = functionCall.name,
+                                    content = JsonPrimitive("Failed to parse tool arguments: ${error.message ?: "Unknown error"}"),
+                                    isError = true
+                                )
+                            }
+                        )
                         GeminiPart(
                             functionResponse = GeminiFunctionResponse(
                                 id = functionCall.id,

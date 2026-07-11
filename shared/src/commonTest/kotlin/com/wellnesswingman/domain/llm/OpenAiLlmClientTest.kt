@@ -192,6 +192,47 @@ class OpenAiLlmClientTest {
     }
 
     @Test
+    fun `generateCompletion propagates non-cancellation executor exception`() = runTest {
+        val api = mockk<OpenAI>()
+        coEvery { api.chatCompletion(any()) } returns toolCallCompletion(
+            ChatMessage(
+                role = ChatRole.Assistant,
+                content = null as String?,
+                toolCalls = listOf(
+                    OpenAiToolCall.Function(
+                        id = ToolId("call-1"),
+                        function = FunctionCall(
+                            nameOrNull = "lookup_calories",
+                            argumentsOrNull = """{"food":"apple"}"""
+                        )
+                    )
+                )
+            )
+        )
+
+        val client = OpenAiLlmClient(
+            apiKey = "test-key",
+            client = api
+        )
+
+        assertFailsWith<RuntimeException> {
+            client.generateCompletion(
+                prompt = "hello",
+                tools = listOf(
+                    ToolDefinition(
+                        name = "lookup_calories",
+                        description = "Looks up calories.",
+                        parametersSchema = buildJsonObject { put("type", JsonPrimitive("object")) }
+                    )
+                ),
+                toolExecutor = {
+                    throw RuntimeException("executor failed")
+                }
+            )
+        }
+    }
+
+    @Test
     fun `generateCompletion fails after exceeding max tool rounds`() = runTest {
         var requestCount = 0
         val api = mockk<OpenAI>()

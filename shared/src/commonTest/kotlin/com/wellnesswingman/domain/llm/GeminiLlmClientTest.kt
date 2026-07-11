@@ -176,6 +176,52 @@ class GeminiLlmClientTest {
     }
 
     @Test
+    fun `generateCompletion propagates non-cancellation executor exception`() = runTest {
+        val requests = mutableListOf<String>()
+        val responses = ArrayDeque(
+            listOf(
+                """{
+                    "candidates": [{
+                        "content": {
+                            "role": "model",
+                            "parts": [{
+                                "functionCall": {
+                                    "id": "call-1",
+                                    "name": "lookup_calories",
+                                    "args": {"food": "apple"}
+                                }
+                            }]
+                        }
+                    }]
+                }""".trimIndent()
+            )
+        )
+
+        val httpClient = mockGeminiClient(requests, responses)
+
+        val client = GeminiLlmClient(
+            apiKey = "test-key",
+            httpClient = httpClient
+        )
+
+        assertFailsWith<RuntimeException> {
+            client.generateCompletion(
+                prompt = "hello",
+                tools = listOf(
+                    ToolDefinition(
+                        name = "lookup_calories",
+                        description = "Looks up calories.",
+                        parametersSchema = buildJsonObject { put("type", JsonPrimitive("object")) }
+                    )
+                ),
+                toolExecutor = {
+                    throw RuntimeException("executor failed")
+                }
+            )
+        }
+    }
+
+    @Test
     fun `generateCompletion without tools returns plain response`() = runTest {
         val httpClient = HttpClient(MockEngine {
             respond(
