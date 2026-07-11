@@ -118,7 +118,7 @@ private fun ChatComposer(draft: String, onChange: (String) -> Unit, onSend: () -
 }
 
 @Composable
-private fun ApiKeyMissingState(onOpenSettings: () -> Unit, onRetry: () -> Unit, modifier: Modifier = Modifier) {
+internal fun ApiKeyMissingState(onOpenSettings: () -> Unit, onRetry: () -> Unit, modifier: Modifier = Modifier) {
     Column(modifier = modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Text("Set an API key for the selected provider before starting a health chat.", style = MaterialTheme.typography.bodyLarge)
         Button(onClick = onOpenSettings) { Text("Open LLM settings") }
