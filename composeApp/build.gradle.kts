@@ -114,6 +114,7 @@ kotlin {
         val desktopTest by getting {
             dependencies {
                 implementation(compose.desktop.currentOs)
+                implementation("org.jetbrains.compose.ui:ui-test-junit4-desktop:1.7.0")
             }
         }
     }
