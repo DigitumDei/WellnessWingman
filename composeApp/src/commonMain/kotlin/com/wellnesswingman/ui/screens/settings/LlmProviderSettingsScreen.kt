@@ -27,10 +27,13 @@ class LlmProviderSettingsScreen(
         val snackbarHostState = remember { SnackbarHostState() }
         LaunchedEffect(uiState.saveSuccess) {
             if (uiState.saveSuccess) {
-                snackbarHostState.showSnackbar("LLM settings saved successfully")
                 viewModel.clearSaveSuccess()
-                onSaved?.invoke()
-                navigator.pop()
+                if (onSaved != null) {
+                    onSaved.invoke()
+                    navigator.pop()
+                } else {
+                    snackbarHostState.showSnackbar("LLM settings saved successfully")
+                }
             }
         }
 
