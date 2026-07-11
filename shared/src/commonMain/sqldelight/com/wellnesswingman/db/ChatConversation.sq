@@ -35,6 +35,18 @@ WHERE conversationId = ? AND status = 'completed' AND role != 'tool'
 ORDER BY createdAt DESC, messageId DESC
 LIMIT 1;
 
+getLatestMessagesForAllConversations:
+SELECT * FROM ChatMessage AS message
+WHERE message.status = 'completed'
+  AND message.role != 'tool'
+  AND NOT EXISTS (
+      SELECT 1 FROM ChatMessage AS newer
+      WHERE newer.conversationId = message.conversationId
+        AND newer.status = 'completed'
+        AND newer.role != 'tool'
+        AND (newer.createdAt > message.createdAt OR (newer.createdAt = message.createdAt AND newer.messageId > message.messageId))
+  );
+
 getConversationById:
 SELECT * FROM ChatConversation
 WHERE conversationId = ?;

@@ -53,6 +53,7 @@ data class HealthChatThreadScreen(val conversationExternalId: String) : Screen {
         val state by viewModel.uiState.collectAsState()
         val isSending by viewModel.isSending.collectAsState()
         val draft by viewModel.draft.collectAsState()
+        val sendError by viewModel.sendError.collectAsState()
 
         var previousNavigatorSize by remember { mutableStateOf(navigator.size) }
         LaunchedEffect(navigator.size) {
@@ -72,6 +73,11 @@ data class HealthChatThreadScreen(val conversationExternalId: String) : Screen {
                         }
                     },
                 )
+            },
+            snackbarHost = {
+                if (sendError != null) {
+                    androidx.compose.material3.Snackbar { Text(sendError.orEmpty()) }
+                }
             },
             bottomBar = {
                 if (state is HealthChatThreadUiState.Success || state is HealthChatThreadUiState.Empty) {

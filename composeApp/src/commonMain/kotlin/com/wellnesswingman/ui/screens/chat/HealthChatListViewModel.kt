@@ -4,6 +4,7 @@ import cafe.adriel.voyager.core.model.ScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import com.wellnesswingman.data.model.HealthChatConversation
 import com.wellnesswingman.domain.chat.HealthChatService
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -24,9 +25,13 @@ class HealthChatListViewModel(
     fun refresh() {
         screenModelScope.launch {
             _uiState.value = HealthChatListUiState.Loading
-            runCatching { healthChatService.listConversations() }
-                .onSuccess { _uiState.value = HealthChatListUiState.Success(it) }
-                .onFailure { _uiState.value = HealthChatListUiState.Error(it.message ?: "Unable to load conversations") }
+            try {
+                _uiState.value = HealthChatListUiState.Success(healthChatService.listConversations())
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.value = HealthChatListUiState.Error(e.message ?: "Unable to load conversations")
+            }
         }
     }
 
@@ -34,9 +39,14 @@ class HealthChatListViewModel(
 
     fun deleteConversation(conversationId: Long) {
         screenModelScope.launch {
-            runCatching { healthChatService.deleteConversation(conversationId) }
-                .onSuccess { refresh() }
-                .onFailure { _uiState.value = HealthChatListUiState.Error(it.message ?: "Unable to delete conversation") }
+            try {
+                healthChatService.deleteConversation(conversationId)
+                refresh()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.value = HealthChatListUiState.Error(e.message ?: "Unable to delete conversation")
+            }
         }
     }
 }

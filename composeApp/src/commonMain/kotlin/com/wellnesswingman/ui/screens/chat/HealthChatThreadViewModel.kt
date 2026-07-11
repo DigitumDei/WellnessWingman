@@ -31,6 +31,9 @@ class HealthChatThreadViewModel(
     private val _draft = MutableStateFlow("")
     val draft: StateFlow<String> = _draft.asStateFlow()
 
+    private val _sendError = MutableStateFlow<String?>(null)
+    val sendError: StateFlow<String?> = _sendError.asStateFlow()
+
     init { load() }
 
     fun load() {
@@ -56,6 +59,7 @@ class HealthChatThreadViewModel(
         if (content.isBlank() || _isSending.value) return
         screenModelScope.launch {
             _isSending.value = true
+            _sendError.value = null
             try {
                 val provider = settingsRepository.getSelectedProvider()
                 val model = settingsRepository.getModel(provider).orEmpty()
@@ -65,11 +69,11 @@ class HealthChatThreadViewModel(
                         showConversation(result.conversation)
                     }
                     ChatResult.ApiKeyMissing -> _uiState.value = HealthChatThreadUiState.ApiKeyMissing
-                    is ChatResult.ProviderError -> _uiState.value = HealthChatThreadUiState.Error(result.message)
+                    is ChatResult.ProviderError -> _sendError.value = result.message
                 }
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
-                _uiState.value = HealthChatThreadUiState.Error(e.message ?: "Failed to send message")
+                _sendError.value = e.message ?: "Failed to send message"
             } finally {
                 _isSending.value = false
             }

@@ -100,10 +100,11 @@ class SqlDelightHealthChatRepository(
 
     override suspend fun getAllConversations(): List<HealthChatConversation> =
         withContext(Dispatchers.IO) {
+            val lastMessagesByConversation = queries.getLatestMessagesForAllConversations()
+                .executeAsList()
+                .associateBy { it.conversationId }
             queries.getAllConversations().executeAsList().map { conversation ->
-                val lastMessage = queries.getLatestMessageForConversation(conversation.conversationId)
-                    .executeAsOneOrNull()
-                conversation.toHealthChatConversation(lastMessage)
+                conversation.toHealthChatConversation(lastMessagesByConversation[conversation.conversationId])
             }
         }
 
