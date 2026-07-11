@@ -226,7 +226,7 @@ IMPORTANT LIMITATIONS:
                 if (userMessageId > 0L) {
                     scope.updateMessageStatus(userMessageId, ChatMessageStatus.ERROR)
                 }
-                if (conversationId > 0L) {
+                if (userMessageId > 0L) {
                     scope.insertMessage(
                         conversationId = conversationId,
                         role = ChatRole.ASSISTANT,
