@@ -1,9 +1,9 @@
 package com.wellnesswingman.ui.screens.chat
 
-import org.jetbrains.compose.ui.test.junit4.createDesktopComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.junit4.createComposeRule
 import cafe.adriel.voyager.navigator.Navigator
 import cafe.adriel.voyager.transitions.SlideTransition
 import com.wellnesswingman.data.model.ChatMessageStatus
@@ -49,7 +49,7 @@ import kotlin.test.assertTrue
 class HealthChatThreadScreenTest {
 
     @get:Rule
-    val composeTestRule = createDesktopComposeRule()
+    val composeTestRule = createComposeRule()
 
     @Test
     fun `ApiKeyMissing state displays instruction text and both buttons`() {
