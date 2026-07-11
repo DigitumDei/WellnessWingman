@@ -23,7 +23,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -52,12 +51,6 @@ data class HealthChatThreadScreen(val conversationExternalId: String) : Screen {
         val draft by viewModel.draft.collectAsState()
         val sendError by viewModel.sendError.collectAsState()
 
-        LaunchedEffect(navigator.size) {
-            if (state is HealthChatThreadUiState.ApiKeyMissing) {
-                viewModel.recheckConfiguration()
-            }
-        }
-
         Scaffold(
             topBar = {
                 TopAppBar(
@@ -85,7 +78,7 @@ data class HealthChatThreadScreen(val conversationExternalId: String) : Screen {
                 HealthChatThreadUiState.Empty -> EmptyState("Ask about your entries, nutrition, or wellness goals.", Modifier.padding(padding))
                 is HealthChatThreadUiState.Success -> MessageList(ui.messages, Modifier.padding(padding))
                 HealthChatThreadUiState.ApiKeyMissing -> ApiKeyMissingState(
-                    onOpenSettings = { navigator.push(LlmProviderSettingsScreen()) },
+                    onOpenSettings = { navigator.push(LlmProviderSettingsScreen(onSaved = viewModel::recheckConfiguration)) },
                     onRetry = { viewModel.recheckConfiguration() },
                     modifier = Modifier.padding(padding),
                 )
