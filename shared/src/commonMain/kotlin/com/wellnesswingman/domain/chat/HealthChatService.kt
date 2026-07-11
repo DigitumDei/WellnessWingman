@@ -189,7 +189,7 @@ IMPORTANT LIMITATIONS:
                 conversationId = conversationId,
                 role = ChatRole.ASSISTANT,
                 content = result.content,
-                createdAt = now,
+                createdAt = responseNow,
                 provider = request.provider.name.lowercase(),
                 model = responseModel,
                 status = ChatMessageStatus.COMPLETED,
@@ -225,6 +225,17 @@ IMPORTANT LIMITATIONS:
             healthChatRepository.transaction { scope ->
                 if (userMessageId > 0L) {
                     scope.updateMessageStatus(userMessageId, ChatMessageStatus.ERROR)
+                }
+                if (conversationId > 0L) {
+                    scope.insertMessage(
+                        conversationId = conversationId,
+                        role = ChatRole.ASSISTANT,
+                        content = e.message ?: "Unknown error",
+                        createdAt = Clock.System.now(),
+                        provider = request.provider.name.lowercase(),
+                        model = request.model,
+                        status = ChatMessageStatus.ERROR,
+                    )
                 }
             }
             ChatResult.ProviderError(

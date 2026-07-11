@@ -1858,7 +1858,7 @@ class HealthChatServiceTest {
             override suspend fun generateChatResponse(messages: List<LlmChatMessage>, systemInstruction: String?, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?,
                 onToolRoundCompleted: (() -> Unit)?,
             ): LlmAnalysisResult {
-                toolExecutor?.invoke(ToolCall(id = "call1", name = "get_user_profile", arguments = JsonObject(emptyMap())))
+                toolExecutor?.invoke(ToolCall(id = "call1", name = "unknown_tool", arguments = JsonObject(emptyMap())))
                 onToolRoundCompleted?.invoke()
                 return LlmAnalysisResult("Response", LlmDiagnostics(model = "gpt-4o-mini"))
             }
