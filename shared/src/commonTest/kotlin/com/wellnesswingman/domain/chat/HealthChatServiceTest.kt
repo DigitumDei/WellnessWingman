@@ -303,7 +303,6 @@ class HealthChatServiceTest {
                 jsonSchema: String?,
                 tools: List<com.wellnesswingman.data.model.llm.ToolDefinition>,
                 toolExecutor: com.wellnesswingman.domain.llm.ToolExecutor?,
-                onToolRoundCompleted: (() -> Unit)?,
             ) = LlmAnalysisResult(responseContent, LlmDiagnostics(model = model))
             override suspend fun transcribeAudio(imageBytes: ByteArray, mimeType: String) = ""
             override suspend fun generateCompletion(
@@ -311,7 +310,6 @@ class HealthChatServiceTest {
                 jsonSchema: String?,
                 tools: List<com.wellnesswingman.data.model.llm.ToolDefinition>,
                 toolExecutor: com.wellnesswingman.domain.llm.ToolExecutor?,
-                onToolRoundCompleted: (() -> Unit)?,
             ) = LlmAnalysisResult(responseContent, LlmDiagnostics(model = model))
             override suspend fun generateChatResponse(
                 messages: List<com.wellnesswingman.data.model.llm.LlmChatMessage>,
@@ -615,7 +613,6 @@ class HealthChatServiceTest {
                 jsonSchema: String?,
                 tools: List<com.wellnesswingman.data.model.llm.ToolDefinition>,
                 toolExecutor: com.wellnesswingman.domain.llm.ToolExecutor?,
-                onToolRoundCompleted: (() -> Unit)?,
             ) = throw RuntimeException("API error")
             override suspend fun transcribeAudio(imageBytes: ByteArray, mimeType: String) = ""
             override suspend fun generateCompletion(
@@ -623,7 +620,6 @@ class HealthChatServiceTest {
                 jsonSchema: String?,
                 tools: List<com.wellnesswingman.data.model.llm.ToolDefinition>,
                 toolExecutor: com.wellnesswingman.domain.llm.ToolExecutor?,
-                onToolRoundCompleted: (() -> Unit)?,
             ) = throw RuntimeException("API error")
             override suspend fun generateChatResponse(
                 messages: List<com.wellnesswingman.data.model.llm.LlmChatMessage>,
