@@ -1,6 +1,6 @@
 package com.wellnesswingman.ui.screens.chat
 
-import androidx.compose.ui.test.junit4.runComposeUiTest
+import androidx.compose.ui.test.junit4.createDesktopComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
@@ -41,53 +41,57 @@ import kotlinx.datetime.Instant
 import org.koin.compose.KoinContext
 import org.koin.core.module.dsl.factoryOf
 import org.koin.dsl.module
+import org.junit.Rule
 import kotlin.test.Test
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class HealthChatThreadScreenTest {
 
+    @get:Rule
+    val composeTestRule = createDesktopComposeRule()
+
     @Test
-    fun `ApiKeyMissing state displays instruction text and both buttons`() = runComposeUiTest {
-        setContent {
+    fun `ApiKeyMissing state displays instruction text and both buttons`() {
+        composeTestRule.setContent {
             ApiKeyMissingState(
                 onOpenSettings = {},
                 onRetry = {},
             )
         }
-        onNodeWithText("Set an API key for the selected provider before starting a health chat.").assertExists()
-        onNodeWithText("Open LLM settings").assertExists()
-        onNodeWithText("I've set my API key").assertExists()
+        composeTestRule.onNodeWithText("Set an API key for the selected provider before starting a health chat.").assertExists()
+        composeTestRule.onNodeWithText("Open LLM settings").assertExists()
+        composeTestRule.onNodeWithText("I've set my API key").assertExists()
     }
 
     @Test
-    fun `clicking Open LLM settings triggers callback`() = runComposeUiTest {
+    fun `clicking Open LLM settings triggers callback`() {
         var settingsClicked = false
-        setContent {
+        composeTestRule.setContent {
             ApiKeyMissingState(
                 onOpenSettings = { settingsClicked = true },
                 onRetry = {},
             )
         }
-        onNodeWithText("Open LLM settings").performClick()
+        composeTestRule.onNodeWithText("Open LLM settings").performClick()
         assertTrue(settingsClicked)
     }
 
     @Test
-    fun `clicking I've set my API key triggers retry callback`() = runComposeUiTest {
+    fun `clicking I've set my API key triggers retry callback`() {
         var retryClicked = false
-        setContent {
+        composeTestRule.setContent {
             ApiKeyMissingState(
                 onOpenSettings = {},
                 onRetry = { retryClicked = true },
             )
         }
-        onNodeWithText("I've set my API key").performClick()
+        composeTestRule.onNodeWithText("I've set my API key").performClick()
         assertTrue(retryClicked)
     }
 
     @Test
-    fun `settings return recovery restores thread state and retains draft`() = runComposeUiTest {
+    fun `settings return recovery restores thread state and retains draft`() {
         val appSettings = RecoveryAppSettings(apiKey = null)
         val chatRepo = RecoveryHealthChatRepo()
         val service = RecoveryChatService(appSettings, hasKey = false)
@@ -118,7 +122,7 @@ class HealthChatThreadScreenTest {
             factoryOf(::SettingsViewModel)
         }
 
-        setContent {
+        composeTestRule.setContent {
             KoinContext(module = testModule) {
                 Navigator(HealthChatThreadScreen(conversationExternalId = "conv-recovery")) { navigator ->
                     SlideTransition(navigator)
@@ -126,27 +130,27 @@ class HealthChatThreadScreenTest {
             }
         }
 
-        waitForIdle()
+        composeTestRule.waitForIdle()
 
         val viewModel = viewModelRef[0] ?: error("ViewModel not created")
 
         viewModel.updateDraft("What do you recommend for breakfast?")
         viewModel.send()
-        waitForIdle()
+        composeTestRule.waitForIdle()
 
         assertIs<HealthChatThreadUiState.ApiKeyMissing>(viewModel.uiState.value)
-        onNodeWithText("Open LLM settings").assertExists()
+        composeTestRule.onNodeWithText("Open LLM settings").assertExists()
 
-        onNodeWithText("Open LLM settings").performClick()
-        waitForIdle()
+        composeTestRule.onNodeWithText("Open LLM settings").performClick()
+        composeTestRule.waitForIdle()
 
-        onNodeWithText("sk-...").performTextInput("sk-recovered")
-        onNodeWithText("Save LLM Settings").performClick()
-        waitForIdle()
+        composeTestRule.onNodeWithText("sk-...").performTextInput("sk-recovered")
+        composeTestRule.onNodeWithText("Save LLM Settings").performClick()
+        composeTestRule.waitForIdle()
 
         assertIs<HealthChatThreadUiState.Success>(viewModel.uiState.value)
-        onNodeWithText("Send").assertExists()
-        onNodeWithText("What do you recommend for breakfast?").assertExists()
+        composeTestRule.onNodeWithText("Send").assertExists()
+        composeTestRule.onNodeWithText("What do you recommend for breakfast?").assertExists()
     }
 }
 
