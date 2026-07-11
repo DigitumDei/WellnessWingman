@@ -1,6 +1,6 @@
 package com.wellnesswingman.ui.screens.chat
 
-import androidx.compose.ui.test.junit4.createDesktopComposeRule
+import org.jetbrains.compose.ui.test.junit4.createDesktopComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
