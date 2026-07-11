@@ -312,7 +312,9 @@ private fun trimHistoryPreservingToolGroups(
 
     val startIndex = history.size - trimmed.size
     var scanIdx = startIndex - 1
-    while (scanIdx >= 0 && history[scanIdx].role == ChatRole.ASSISTANT && history[scanIdx].toolCallsJson != null) {
+    while (scanIdx >= 0 && (history[scanIdx].role == ChatRole.TOOL ||
+            (history[scanIdx].role == ChatRole.ASSISTANT && history[scanIdx].toolCallsJson != null))
+    ) {
         scanIdx--
     }
     val groupStart = scanIdx + 1
