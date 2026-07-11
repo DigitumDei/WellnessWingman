@@ -26,9 +26,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -55,12 +52,10 @@ data class HealthChatThreadScreen(val conversationExternalId: String) : Screen {
         val draft by viewModel.draft.collectAsState()
         val sendError by viewModel.sendError.collectAsState()
 
-        var previousNavigatorSize by remember { mutableStateOf(navigator.size) }
         LaunchedEffect(navigator.size) {
-            if (previousNavigatorSize > navigator.size && state is HealthChatThreadUiState.ApiKeyMissing) {
+            if (state is HealthChatThreadUiState.ApiKeyMissing) {
                 viewModel.recheckConfiguration()
             }
-            previousNavigatorSize = navigator.size
         }
 
         Scaffold(
@@ -131,16 +126,9 @@ private fun ChatComposer(draft: String, onChange: (String) -> Unit, onSend: () -
 
 @Composable
 private fun ApiKeyMissingState(onOpenSettings: () -> Unit, onRetry: () -> Unit, modifier: Modifier = Modifier) {
-    var visitedSettings by remember { mutableStateOf(false) }
-
     Column(modifier = modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Text("Set an API key for the selected provider before starting a health chat.", style = MaterialTheme.typography.bodyLarge)
-        Button(onClick = {
-            visitedSettings = true
-            onOpenSettings()
-        }) { Text("Open LLM settings") }
-        if (visitedSettings) {
-            Button(onClick = onRetry) { Text("I've set my API key") }
-        }
+        Button(onClick = onOpenSettings) { Text("Open LLM settings") }
+        Button(onClick = onRetry) { Text("I've set my API key") }
     }
 }
