@@ -1,14 +1,11 @@
 package com.wellnesswingman.ui.screens.chat
 
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.runComposeUiTest
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextInput
+import cafe.adriel.voyager.navigator.Navigator
+import cafe.adriel.voyager.transitions.SlideTransition
 import com.wellnesswingman.data.model.ChatMessageStatus
 import com.wellnesswingman.data.model.ChatRole
 import com.wellnesswingman.data.model.HealthChatConversation
@@ -32,13 +29,20 @@ import com.wellnesswingman.domain.llm.LlmClientFactory
 import com.wellnesswingman.domain.llm.LlmDiagnostics
 import com.wellnesswingman.domain.llm.ToolExecutor
 import com.wellnesswingman.domain.llm.ToolRegistry
+import com.wellnesswingman.domain.migration.DataMigrationService
+import com.wellnesswingman.domain.migration.ImportResult
+import com.wellnesswingman.platform.DiagnosticShare
+import com.wellnesswingman.platform.ShareUtil
+import com.wellnesswingman.ui.screens.settings.SettingsViewModel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
+import org.koin.compose.KoinContext
+import org.koin.core.module.dsl.factoryOf
+import org.koin.dsl.module
 import kotlin.test.Test
 import kotlin.test.assertIs
-import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class HealthChatThreadScreenTest {
@@ -87,23 +91,44 @@ class HealthChatThreadScreenTest {
         val appSettings = RecoveryAppSettings(apiKey = null)
         val chatRepo = RecoveryHealthChatRepo()
         val service = RecoveryChatService(appSettings, hasKey = false)
-        val viewModel = HealthChatThreadViewModel(
-            conversationExternalId = "conv-recovery",
-            healthChatService = service,
-            healthChatRepository = chatRepo,
-            settingsRepository = appSettings,
-        )
+        val settingsRepo = appSettings
+        val viewModelRef = arrayOf<HealthChatThreadViewModel?>(null)
 
-        var capturedOnSaved: (() -> Unit)? = null
+        val testModule = module {
+            single<AppSettingsRepository> { settingsRepo }
+            single<HealthChatRepository> { chatRepo }
+            single<HealthChatService> { service }
+            factory<DataMigrationService> { StubDataMigrationService() }
+            single<WeightHistoryRepository> { StubWeightHistoryRepository() }
+            single<TrackedEntryRepository> { StubTrackedEntryRepository() }
+            single<EntryAnalysisRepository> { StubEntryAnalysisRepository() }
+            single<NutritionalProfileRepository> { StubNutritionalProfileRepository() }
+            factory { DiagnosticShare() }
+            factory { ShareUtil() }
+            factory<HealthChatThreadViewModel> { params ->
+                val vm = HealthChatThreadViewModel(
+                    conversationExternalId = params.get(),
+                    healthChatService = get(),
+                    healthChatRepository = get(),
+                    settingsRepository = get(),
+                )
+                viewModelRef[0] = vm
+                vm
+            }
+            factoryOf(::SettingsViewModel)
+        }
 
         setContent {
-            HealthChatThreadScreenHarness(
-                viewModel = viewModel,
-                onSettingsRequested = { capturedOnSaved = it },
-            )
+            KoinContext(module = testModule) {
+                Navigator(HealthChatThreadScreen(conversationExternalId = "conv-recovery")) { navigator ->
+                    SlideTransition(navigator)
+                }
+            }
         }
 
         waitForIdle()
+
+        val viewModel = viewModelRef[0] ?: error("ViewModel not created")
 
         viewModel.updateDraft("What do you recommend for breakfast?")
         viewModel.send()
@@ -113,50 +138,15 @@ class HealthChatThreadScreenTest {
         onNodeWithText("Open LLM settings").assertExists()
 
         onNodeWithText("Open LLM settings").performClick()
-        assertNotNull(capturedOnSaved)
+        waitForIdle()
 
-        appSettings.apiKey = "sk-recovered"
-        service.hasKey = true
-        capturedOnSaved!!()
-
+        onNodeWithText("sk-...").performTextInput("sk-recovered")
+        onNodeWithText("Save LLM Settings").performClick()
         waitForIdle()
 
         assertIs<HealthChatThreadUiState.Success>(viewModel.uiState.value)
-        onNodeWithText("ComposerAvailable").assertExists()
+        onNodeWithText("Send").assertExists()
         onNodeWithText("What do you recommend for breakfast?").assertExists()
-    }
-}
-
-@Composable
-private fun HealthChatThreadScreenHarness(
-    viewModel: HealthChatThreadViewModel,
-    onSettingsRequested: ((() -> Unit) -> Unit)? = null,
-) {
-    val state by viewModel.uiState.collectAsState()
-
-    when (state) {
-        HealthChatThreadUiState.ApiKeyMissing -> {
-            ApiKeyMissingState(
-                onOpenSettings = {
-                    val onSaved: () -> Unit = { viewModel.recheckConfiguration() }
-                    onSettingsRequested?.invoke(onSaved)
-                },
-                onRetry = { viewModel.recheckConfiguration() },
-                modifier = Modifier.fillMaxSize(),
-            )
-        }
-        is HealthChatThreadUiState.Success -> {
-            Text("ComposerAvailable")
-            Text(viewModel.draft.collectAsState().value)
-        }
-        HealthChatThreadUiState.Empty -> {
-            Text("ComposerAvailable")
-            Text(viewModel.draft.collectAsState().value)
-        }
-        is HealthChatThreadUiState.Error -> {
-            Text("Error: ${state.message}")
-        }
-        HealthChatThreadUiState.Loading -> {}
     }
 }
 
@@ -387,4 +377,9 @@ private class StubNutritionalProfileRepository : NutritionalProfileRepository {
     override suspend fun update(profile: NutritionalProfile) {}
     override suspend fun delete(id: Long) {}
     override suspend fun upsert(profile: NutritionalProfile) {}
+}
+
+private class StubDataMigrationService : DataMigrationService {
+    override suspend fun exportData(): String = ""
+    override suspend fun importData(zipFilePath: String): ImportResult = ImportResult()
 }
