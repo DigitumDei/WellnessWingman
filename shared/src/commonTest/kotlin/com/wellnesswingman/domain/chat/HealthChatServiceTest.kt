@@ -2252,4 +2252,114 @@ class HealthChatServiceTest {
         assertTrue(assistantIdx >= 0 && toolIdx >= 0, "Both assistant and tool must be present")
         assertTrue(assistantIdx < toolIdx, "ASSISTANT(toolCalls) must precede TOOL result in history")
     }
+
+    @Test
+    fun `multi-result tool round preserved when trim cuts at second tool result`() = runTest {
+        val chatRepo = FakeHealthChatRepository()
+        val json = Json { ignoreUnknownKeys = true }
+
+        val convId = chatRepo.createConversation(
+            "conv-multi-result-trim", "Multi result trim", "openai", "gpt-4o-mini", now, now,
+        )
+
+        val toolCallsJson = json.encodeToString(JsonElement.serializer(), buildJsonArray {
+            add(buildJsonObject {
+                put("id", "multi-call")
+                put("name", "get_user_profile")
+                put("arguments", JsonObject(emptyMap()))
+            })
+        })
+        val toolResult1 = ToolResult(toolCallId = "multi-call", name = "get_user_profile", content = JsonPrimitive("profile data"))
+        val toolResult2 = ToolResult(toolCallId = "multi-call", name = "get_user_profile", content = JsonPrimitive("additional data"))
+
+        chatRepo.insertMessage(
+            convId, ChatRole.USER, "Filler",
+            now, "openai", "gpt-4o-mini",
+            status = ChatMessageStatus.COMPLETED,
+        )
+        chatRepo.insertMessage(
+            convId, ChatRole.ASSISTANT, "",
+            now, "openai", "gpt-4o-mini",
+            toolCallsJson = toolCallsJson,
+            status = ChatMessageStatus.COMPLETED,
+        )
+        chatRepo.insertMessage(
+            convId, ChatRole.TOOL, "",
+            now, "openai", "gpt-4o-mini",
+            toolResultJson = json.encodeToString(ToolResult.serializer(), toolResult1),
+            status = ChatMessageStatus.COMPLETED,
+        )
+        chatRepo.insertMessage(
+            convId, ChatRole.TOOL, "",
+            now, "openai", "gpt-4o-mini",
+            toolResultJson = json.encodeToString(ToolResult.serializer(), toolResult2),
+            status = ChatMessageStatus.COMPLETED,
+        )
+
+        for (i in 1..48) {
+            chatRepo.insertMessage(
+                convId, ChatRole.USER, "Pad $i",
+                now, "openai", "gpt-4o-mini",
+                status = ChatMessageStatus.COMPLETED,
+            )
+        }
+
+        val capturedMessages = mutableListOf<List<LlmChatMessage>>()
+        val capturingClient = object : LlmClient {
+            override val providerId: String get() = "openai"
+            override suspend fun analyzeImage(imageBytes: ByteArray, prompt: String, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?) = LlmAnalysisResult("ok", LlmDiagnostics())
+            override suspend fun transcribeAudio(imageBytes: ByteArray, mimeType: String) = ""
+            override suspend fun generateCompletion(prompt: String, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?) = LlmAnalysisResult("ok", LlmDiagnostics())
+            override suspend fun generateChatResponse(messages: List<LlmChatMessage>, systemInstruction: String?, jsonSchema: String?, tools: List<ToolDefinition>, toolExecutor: ToolExecutor?,
+                onToolRoundCompleted: (() -> Unit)?,
+            ): LlmAnalysisResult {
+                capturedMessages.add(messages)
+                return LlmAnalysisResult("Response", LlmDiagnostics(model = "gpt-4o-mini"))
+            }
+        }
+
+        val factory = mockk<LlmClientFactory>()
+        every { factory.create(LlmProvider.OPENAI) } returns capturingClient
+        every { factory.hasApiKey(LlmProvider.OPENAI) } returns true
+        every { factory.hasCurrentApiKey() } returns true
+
+        val toolRegistry = ToolRegistry(
+            trackedEntryRepository = FakeTrackedEntryRepository(),
+            entryAnalysisRepository = FakeEntryAnalysisRepository(),
+            weightHistoryRepository = FakeWeightHistoryRepository(),
+            appSettingsRepository = FakeAppSettingsRepository(),
+            nutritionalProfileRepository = FakeNutritionalProfileRepository(),
+        )
+
+        val service = HealthChatService(chatRepo, factory, toolRegistry)
+        val result = service.sendMessage(
+            ChatRequest("conv-multi-result-trim", "Final message", LlmProvider.OPENAI, "gpt-4o-mini")
+        )
+
+        assertTrue(result is ChatResult.Success)
+        assertTrue(capturedMessages.isNotEmpty())
+        val sentMessages = capturedMessages.first()
+
+        val assistantTool = sentMessages.find {
+            it.role == LlmChatRole.ASSISTANT && it.toolCalls?.first()?.id == "multi-call"
+        }
+        assertNotNull(assistantTool, "ASSISTANT(toolCalls) must be preserved when trim cuts at second TOOL result")
+
+        val toolResults = sentMessages.filter { it.role == LlmChatRole.TOOL }
+        assertEquals(2, toolResults.size, "Both TOOL results from the multi-result round must be preserved")
+        assertEquals("multi-call", toolResults[0].toolCallId, "First TOOL result must reference multi-call")
+        assertEquals("multi-call", toolResults[1].toolCallId, "Second TOOL result must reference multi-call")
+
+        val assistantIdx = sentMessages.indexOfFirst { it.role == LlmChatRole.ASSISTANT && it.toolCalls != null }
+        val tool1Idx = sentMessages.indexOfFirst { it.role == LlmChatRole.TOOL }
+        val tool2Idx = sentMessages.indexOfLast { it.role == LlmChatRole.TOOL }
+
+        assertTrue(assistantIdx >= 0, "ASSISTANT(toolCalls) must be present")
+        assertTrue(tool1Idx >= 0, "First TOOL result must be present")
+        assertTrue(tool2Idx >= 0, "Second TOOL result must be present")
+        assertTrue(assistantIdx < tool1Idx, "ASSISTANT(toolCalls) must precede first TOOL result")
+        assertTrue(tool1Idx < tool2Idx, "First TOOL result must precede second TOOL result")
+
+        assertFalse(sentMessages.any { it.content == "Filler" }, "Earliest filler message should be trimmed")
+    }
 }
