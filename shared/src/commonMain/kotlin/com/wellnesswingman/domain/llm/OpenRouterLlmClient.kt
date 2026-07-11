@@ -21,6 +21,7 @@ import com.wellnesswingman.data.model.llm.LlmChatMessage
 import com.wellnesswingman.data.model.llm.LlmChatRole
 import com.wellnesswingman.data.model.llm.ToolCall
 import com.wellnesswingman.data.model.llm.ToolDefinition
+import com.wellnesswingman.data.model.llm.ToolResult
 import io.ktor.client.*
 import io.ktor.client.plugins.*
 import io.ktor.client.request.*
@@ -258,20 +259,24 @@ class OpenRouterLlmClient(
                     "Unsupported OpenRouter tool call type: ${toolCall::class.simpleName}"
                 }
 
-                val arguments = runCatching {
-                    json.parseToJsonElement(toolCall.function.arguments).jsonObject
+                val result = runCatching {
+                    val arguments = json.parseToJsonElement(toolCall.function.arguments).jsonObject
+                    executor(
+                        ToolCall(
+                            id = toolCall.id.id,
+                            name = toolCall.function.name,
+                            arguments = arguments
+                        )
+                    )
                 }.getOrElse { error ->
                     if (error is CancellationException) throw error
-                    JsonObject(emptyMap())
-                }
-
-                val result = executor(
-                    ToolCall(
-                        id = toolCall.id.id,
+                    ToolResult(
+                        toolCallId = toolCall.id.id,
                         name = toolCall.function.name,
-                        arguments = arguments
+                        content = JsonPrimitive("Failed to parse tool arguments: ${error.message ?: "Unknown error"}"),
+                        isError = true
                     )
-                )
+                }
 
                 messages.add(
                     ChatMessage(

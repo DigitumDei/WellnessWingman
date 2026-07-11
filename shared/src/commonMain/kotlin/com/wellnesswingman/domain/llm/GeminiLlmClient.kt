@@ -4,6 +4,7 @@ import com.wellnesswingman.data.model.llm.LlmChatMessage
 import com.wellnesswingman.data.model.llm.LlmChatRole
 import com.wellnesswingman.data.model.llm.ToolCall
 import com.wellnesswingman.data.model.llm.ToolDefinition
+import com.wellnesswingman.data.model.llm.ToolResult
 import io.github.aakira.napier.Napier
 import io.ktor.client.*
 import io.ktor.client.call.*
@@ -246,21 +247,25 @@ class GeminiLlmClient(
                 GeminiContent(
                     role = "user",
                     parts = functionCalls.map { functionCall ->
-                        val arguments = runCatching {
-                            functionCall.args.asJsonObjectOrNull()
+                        val result = runCatching {
+                            val arguments = functionCall.args.asJsonObjectOrNull()
                                 ?: throw IllegalArgumentException("Tool arguments must be a JSON object.")
+                            executor(
+                                ToolCall(
+                                    id = functionCall.id,
+                                    name = functionCall.name,
+                                    arguments = arguments
+                                )
+                            )
                         }.getOrElse { error ->
                             if (error is CancellationException) throw error
-                            JsonObject(emptyMap())
-                        }
-
-                        val result = executor(
-                            ToolCall(
-                                id = functionCall.id,
+                            ToolResult(
+                                toolCallId = functionCall.id,
                                 name = functionCall.name,
-                                arguments = arguments
+                                content = JsonPrimitive("Failed to parse tool arguments: ${error.message ?: "Unknown error"}"),
+                                isError = true
                             )
-                        )
+                        }
                         GeminiPart(
                             functionResponse = GeminiFunctionResponse(
                                 id = functionCall.id,

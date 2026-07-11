@@ -144,7 +144,7 @@ class OpenAiLlmClientTest {
             }
         )
 
-        assertTrue(executorInvoked)
+        assertFalse(executorInvoked)
         assertEquals("done", result.content)
         assertEquals(2, requests.size)
         assertTrue(requests[1].messages[2].content.orEmpty().contains("\"ok\":false"))

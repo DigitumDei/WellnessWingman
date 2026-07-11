@@ -168,7 +168,7 @@ class GeminiLlmClientTest {
             }
         )
 
-        assertTrue(executorCalled)
+        assertFalse(executorCalled)
         assertEquals("Recovered", result.content)
         assertEquals(2, requests.size)
         assertTrue(requests[1].contains("\"ok\":false"))
