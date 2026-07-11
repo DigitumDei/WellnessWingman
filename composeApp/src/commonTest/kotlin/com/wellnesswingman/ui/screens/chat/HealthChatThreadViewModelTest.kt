@@ -712,6 +712,8 @@ private class ThrowingHealthChatRepository : HealthChatRepository {
     override suspend fun getConversationCount(): Long = 0
     override suspend fun getMessageCountForConversation(conversationId: Long): Long = 0
 }
+
+private class CancellingHealthChatRepository : HealthChatRepository {
     override suspend fun <T> transaction(block: (TransactionScope) -> T): T =
         throw CancellationException()
     override suspend fun createConversation(externalId: String, title: String, provider: String?, model: String?, createdAt: Instant, updatedAt: Instant): Long =
