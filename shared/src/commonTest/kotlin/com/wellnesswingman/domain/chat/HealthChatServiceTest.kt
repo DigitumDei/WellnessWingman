@@ -2528,7 +2528,7 @@ class HealthChatServiceTest {
         chatRepo.insertMessage(convId, ChatRole.TOOL, "", now, "openai", "gpt-4o-mini", toolResultJson = json.encodeToString(ToolResult.serializer(), toolResult2), status = ChatMessageStatus.COMPLETED)
         chatRepo.insertMessage(convId, ChatRole.TOOL, "", now, "openai", "gpt-4o-mini", toolResultJson = json.encodeToString(ToolResult.serializer(), toolResult3), status = ChatMessageStatus.COMPLETED)
 
-        for (i in 1..47) {
+        for (i in 1..46) {
             chatRepo.insertMessage(convId, ChatRole.USER, "Pad $i", now, "openai", "gpt-4o-mini", status = ChatMessageStatus.COMPLETED)
         }
 
@@ -2567,6 +2567,10 @@ class HealthChatServiceTest {
         assertTrue(result is ChatResult.Success)
         assertTrue(capturedMessages.isNotEmpty())
         val sentMessages = capturedMessages.first()
+
+        assertTrue(sentMessages.isNotEmpty())
+        assertEquals(LlmChatRole.ASSISTANT, sentMessages.first().role, "Trimmed history must start with ASSISTANT(toolCalls)")
+        assertEquals("mr-first-call", sentMessages.first().toolCalls?.first()?.id, "Trim boundary landed at first TOOL result; ASSISTANT must be first retained message")
 
         val assistantTool = sentMessages.find { it.role == LlmChatRole.ASSISTANT && it.toolCalls?.first()?.id == "mr-first-call" }
         assertNotNull(assistantTool, "ASSISTANT(toolCalls) must be preserved when boundary lands on first TOOL result")
@@ -2608,7 +2612,7 @@ class HealthChatServiceTest {
         chatRepo.insertMessage(convId, ChatRole.TOOL, "", now, "openai", "gpt-4o-mini", toolResultJson = json.encodeToString(ToolResult.serializer(), toolResult2), status = ChatMessageStatus.COMPLETED)
         chatRepo.insertMessage(convId, ChatRole.TOOL, "", now, "openai", "gpt-4o-mini", toolResultJson = json.encodeToString(ToolResult.serializer(), toolResult3), status = ChatMessageStatus.COMPLETED)
 
-        for (i in 1..48) {
+        for (i in 1..47) {
             chatRepo.insertMessage(convId, ChatRole.USER, "Pad $i", now, "openai", "gpt-4o-mini", status = ChatMessageStatus.COMPLETED)
         }
 
@@ -2647,6 +2651,10 @@ class HealthChatServiceTest {
         assertTrue(result is ChatResult.Success)
         assertTrue(capturedMessages.isNotEmpty())
         val sentMessages = capturedMessages.first()
+
+        assertTrue(sentMessages.isNotEmpty())
+        assertEquals(LlmChatRole.ASSISTANT, sentMessages.first().role, "Trimmed history must start with ASSISTANT(toolCalls)")
+        assertEquals("mr-middle-call", sentMessages.first().toolCalls?.first()?.id, "Trim boundary landed at middle TOOL result; ASSISTANT must be first retained message")
 
         val assistantTool = sentMessages.find { it.role == LlmChatRole.ASSISTANT && it.toolCalls?.first()?.id == "mr-middle-call" }
         assertNotNull(assistantTool, "ASSISTANT(toolCalls) must be preserved when boundary lands on middle TOOL result")
@@ -2699,7 +2707,7 @@ class HealthChatServiceTest {
         chatRepo.insertMessage(convId, ChatRole.TOOL, "", now, "openai", "gpt-4o-mini", toolResultJson = json.encodeToString(ToolResult.serializer(), round2Result2), status = ChatMessageStatus.COMPLETED)
         chatRepo.insertMessage(convId, ChatRole.TOOL, "", now, "openai", "gpt-4o-mini", toolResultJson = json.encodeToString(ToolResult.serializer(), round2Result3), status = ChatMessageStatus.COMPLETED)
 
-        for (i in 1..47) {
+        for (i in 1..46) {
             chatRepo.insertMessage(convId, ChatRole.USER, "Pad $i", now, "openai", "gpt-4o-mini", status = ChatMessageStatus.COMPLETED)
         }
 
@@ -2738,6 +2746,10 @@ class HealthChatServiceTest {
         assertTrue(result is ChatResult.Success)
         assertTrue(capturedMessages.isNotEmpty())
         val sentMessages = capturedMessages.first()
+
+        assertTrue(sentMessages.isNotEmpty())
+        assertEquals(LlmChatRole.ASSISTANT, sentMessages.first().role, "Trimmed history must start with Round 2 ASSISTANT(toolCalls)")
+        assertEquals("round2-call", sentMessages.first().toolCalls?.first()?.id, "Trim boundary landed at first TOOL of second round; Round 2 ASSISTANT must be first retained message")
 
         val round2Assistant = sentMessages.find { it.role == LlmChatRole.ASSISTANT && it.toolCalls?.first()?.id == "round2-call" }
         assertNotNull(round2Assistant, "Round 2 ASSISTANT(toolCalls) must be preserved when boundary lands on first TOOL of second round")
@@ -2793,7 +2805,7 @@ class HealthChatServiceTest {
         chatRepo.insertMessage(convId, ChatRole.TOOL, "", now, "openai", "gpt-4o-mini", toolResultJson = json.encodeToString(ToolResult.serializer(), round2Result2), status = ChatMessageStatus.COMPLETED)
         chatRepo.insertMessage(convId, ChatRole.TOOL, "", now, "openai", "gpt-4o-mini", toolResultJson = json.encodeToString(ToolResult.serializer(), round2Result3), status = ChatMessageStatus.COMPLETED)
 
-        for (i in 1..48) {
+        for (i in 1..47) {
             chatRepo.insertMessage(convId, ChatRole.USER, "Pad $i", now, "openai", "gpt-4o-mini", status = ChatMessageStatus.COMPLETED)
         }
 
@@ -2832,6 +2844,10 @@ class HealthChatServiceTest {
         assertTrue(result is ChatResult.Success)
         assertTrue(capturedMessages.isNotEmpty())
         val sentMessages = capturedMessages.first()
+
+        assertTrue(sentMessages.isNotEmpty())
+        assertEquals(LlmChatRole.ASSISTANT, sentMessages.first().role, "Trimmed history must start with Round 2 ASSISTANT(toolCalls)")
+        assertEquals("round2-call", sentMessages.first().toolCalls?.first()?.id, "Trim boundary landed at middle TOOL of second round; Round 2 ASSISTANT must be first retained message")
 
         val round2Assistant = sentMessages.find { it.role == LlmChatRole.ASSISTANT && it.toolCalls?.first()?.id == "round2-call" }
         assertNotNull(round2Assistant, "Round 2 ASSISTANT(toolCalls) must be preserved when boundary lands on middle TOOL of second round")
