@@ -216,7 +216,7 @@ private class RecoveryHealthChatRepo : HealthChatRepository {
             model = null,
             toolCallsJson = null,
             toolResultJson = null,
-            status = ChatMessageStatus.SENT,
+            status = ChatMessageStatus.COMPLETED,
         ),
     )
 
@@ -285,7 +285,7 @@ private class RecoveryChatService(
                 model = null,
                 toolCallsJson = null,
                 toolResultJson = null,
-                status = ChatMessageStatus.SENT,
+                status = ChatMessageStatus.COMPLETED,
             ),
             diagnostics = LlmDiagnostics(model = "gpt-4o-mini"),
         )
