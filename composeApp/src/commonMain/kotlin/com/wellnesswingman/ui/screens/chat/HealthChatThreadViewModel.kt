@@ -88,6 +88,7 @@ class HealthChatThreadViewModel(
                 if (key.isNullOrBlank()) {
                     return@launch
                 }
+                _sendError.value = null
                 _uiState.value = HealthChatThreadUiState.Loading
                 load()
             } catch (e: Exception) {
@@ -95,6 +96,10 @@ class HealthChatThreadViewModel(
                 _uiState.value = HealthChatThreadUiState.Error(e.message ?: "Failed to check configuration")
             }
         }
+    }
+
+    fun clearSendError() {
+        _sendError.value = null
     }
 
     private suspend fun showConversation(conversation: HealthChatConversation) {

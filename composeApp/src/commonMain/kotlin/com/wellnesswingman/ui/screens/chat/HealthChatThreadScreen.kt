@@ -20,11 +20,15 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -50,6 +54,14 @@ data class HealthChatThreadScreen(val conversationExternalId: String) : Screen {
         val isSending by viewModel.isSending.collectAsState()
         val draft by viewModel.draft.collectAsState()
         val sendError by viewModel.sendError.collectAsState()
+        val snackbarHostState = remember { SnackbarHostState() }
+
+        LaunchedEffect(sendError) {
+            sendError?.let { error ->
+                snackbarHostState.showSnackbar(error)
+                viewModel.clearSendError()
+            }
+        }
 
         Scaffold(
             topBar = {
@@ -62,11 +74,7 @@ data class HealthChatThreadScreen(val conversationExternalId: String) : Screen {
                     },
                 )
             },
-            snackbarHost = {
-                if (sendError != null) {
-                    androidx.compose.material3.Snackbar { Text(sendError.orEmpty()) }
-                }
-            },
+            snackbarHost = { SnackbarHost(snackbarHostState) },
             bottomBar = {
                 if (state is HealthChatThreadUiState.Success || state is HealthChatThreadUiState.Empty) {
                     ChatComposer(draft, viewModel::updateDraft, viewModel::send, isSending)
@@ -90,8 +98,9 @@ data class HealthChatThreadScreen(val conversationExternalId: String) : Screen {
 
 @Composable
 private fun MessageList(messages: List<HealthChatMessage>, modifier: Modifier = Modifier) {
+    val displayMessages = remember(messages) { messages.filter { it.role != ChatRole.TOOL } }
     LazyColumn(modifier = modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        items(messages.filter { it.role != ChatRole.TOOL }, key = { it.messageId }) { message ->
+        items(displayMessages, key = { it.messageId }) { message ->
             val label = if (message.role == ChatRole.USER) "You" else "Assistant"
             Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
                 Column(modifier = Modifier.padding(12.dp)) {
