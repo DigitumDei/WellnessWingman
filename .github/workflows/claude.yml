@@ -40,6 +40,9 @@ jobs:
           additional_permissions: |
             actions: read
 
+          # Allow our automation bot to trigger @claude (matches claude-code-review.yml)
+          allowed_bots: 'actuarius-bot[bot]'
+
           # Optional: Give a custom prompt to Claude. If this is not specified, Claude will perform the instructions specified in the comment that tagged it.
           # prompt: 'Update the pull request description to include a summary of changes.'
 
