@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # Fetch full history so `git rev-list --count HEAD` yields the true
           # commit count for the Android versionCode (default shallow clone -> 1).
