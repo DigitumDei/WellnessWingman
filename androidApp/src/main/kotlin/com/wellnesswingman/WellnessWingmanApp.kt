@@ -7,9 +7,12 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import com.wellnesswingman.data.model.PolarOAuthConfig
 import com.wellnesswingman.data.repository.AppSettingsRepository
+import com.wellnesswingman.checkin.CheckInNotifier
+import com.wellnesswingman.checkin.CheckInScheduler
 import com.wellnesswingman.data.repository.PolarOAuthRepository
 import com.wellnesswingman.di.getSharedModules
 import com.wellnesswingman.di.platformModule
+import com.wellnesswingman.domain.checkin.CheckInScheduling
 import com.wellnesswingman.domain.analysis.StaleEntryRecoveryService
 import com.wellnesswingman.domain.oauth.PendingOAuthResultStore
 import com.wellnesswingman.platform.LogBuffer
@@ -24,6 +27,7 @@ import org.koin.android.ext.koin.androidContext
 import org.koin.android.ext.koin.androidLogger
 import org.koin.core.context.startKoin
 import org.koin.core.logger.Level
+import org.koin.dsl.bind
 import org.koin.dsl.module
 import java.util.concurrent.TimeUnit
 
@@ -52,6 +56,9 @@ class WellnessWingmanApp : Application() {
                             brokerBaseUrl = BuildConfig.POLAR_BROKER_BASE_URL
                         )
                     }
+                    single { CheckInNotifier(androidContext()) }
+                    single { CheckInScheduler(androidContext(), get(), get()) } bind
+                        CheckInScheduling::class
                 }
             )
         }
@@ -88,6 +95,10 @@ class WellnessWingmanApp : Application() {
         }
 
         setupBackgroundJobs()
+
+        // Converge check-in alarms with current settings on every launch, so a fresh install,
+        // an update, or a missed boot broadcast all end up correctly armed.
+        koinApp.koin.get<CheckInScheduler>().rescheduleAll()
 
         Napier.i("WellnessWingman app initialized")
     }

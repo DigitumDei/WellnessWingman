@@ -1,6 +1,8 @@
 package com.wellnesswingman.ui.di
 
 import com.wellnesswingman.ui.screens.calendar.CalendarViewModel
+import com.wellnesswingman.ui.screens.checkin.CheckInViewModel
+import com.wellnesswingman.ui.screens.settings.CheckInSettingsViewModel
 import com.wellnesswingman.ui.screens.calendar.WeekViewModel
 import com.wellnesswingman.ui.screens.calendar.YearViewModel
 import com.wellnesswingman.ui.screens.calendar.day.DayDetailViewModel
@@ -34,6 +36,16 @@ val viewModelModule = module {
             polarSyncOrchestrator = get()
         )
     }
+    factory { params ->
+        CheckInViewModel(
+            slot = params.get(),
+            dailyCheckInRepository = get(),
+            audioRecordingService = get(),
+            llmClientFactory = get(),
+            fileSystem = get()
+        )
+    }
+    factoryOf(::CheckInSettingsViewModel)
     factoryOf(::SettingsViewModel)
     factoryOf(::PolarSettingsViewModel)
     factoryOf(::WeightHistoryViewModel)

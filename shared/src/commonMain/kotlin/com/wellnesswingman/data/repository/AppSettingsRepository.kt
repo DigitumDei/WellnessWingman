@@ -45,6 +45,16 @@ interface AppSettingsRepository {
     fun getImageRetentionThresholdDays(): Int
     fun setImageRetentionThresholdDays(days: Int)
 
+    // Daily Check-Ins
+    fun isMorningCheckInEnabled(): Boolean
+    fun setMorningCheckInEnabled(enabled: Boolean)
+    fun getMorningCheckInTime(): String   // "HH:mm", 24-hour
+    fun setMorningCheckInTime(time: String)
+    fun isEveningCheckInEnabled(): Boolean
+    fun setEveningCheckInEnabled(enabled: Boolean)
+    fun getEveningCheckInTime(): String   // "HH:mm", 24-hour
+    fun setEveningCheckInTime(time: String)
+
     // Polar Integration
     fun getPolarAccessToken(): String?
     fun setPolarAccessToken(token: String)

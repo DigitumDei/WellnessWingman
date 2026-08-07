@@ -35,6 +35,14 @@ class SettingsAppSettingsRepository(
 
         private const val KEY_IMAGE_RETENTION_DAYS = "image_retention_days"
 
+        // Daily Check-In keys
+        private const val KEY_MORNING_CHECKIN_ENABLED = "morning_checkin_enabled"
+        private const val KEY_MORNING_CHECKIN_TIME = "morning_checkin_time"
+        private const val KEY_EVENING_CHECKIN_ENABLED = "evening_checkin_enabled"
+        private const val KEY_EVENING_CHECKIN_TIME = "evening_checkin_time"
+        private const val DEFAULT_MORNING_CHECKIN_TIME = "07:00"
+        private const val DEFAULT_EVENING_CHECKIN_TIME = "21:00"
+
         // Polar Integration keys
         private const val KEY_POLAR_ACCESS_TOKEN = "polar_access_token"
         private const val KEY_POLAR_REFRESH_TOKEN = "polar_refresh_token"
@@ -174,6 +182,43 @@ class SettingsAppSettingsRepository(
 
     override fun setImageRetentionThresholdDays(days: Int) {
         settings[KEY_IMAGE_RETENTION_DAYS] = days
+    }
+
+    // Daily Check-Ins
+    //
+    // Both check-ins default to off. Scheduling notifications a user never asked for would be
+    // the wrong first impression, so they opt in from settings.
+
+    override fun isMorningCheckInEnabled(): Boolean {
+        return settings.getBoolean(KEY_MORNING_CHECKIN_ENABLED, false)
+    }
+
+    override fun setMorningCheckInEnabled(enabled: Boolean) {
+        settings[KEY_MORNING_CHECKIN_ENABLED] = enabled
+    }
+
+    override fun getMorningCheckInTime(): String {
+        return settings.getString(KEY_MORNING_CHECKIN_TIME, DEFAULT_MORNING_CHECKIN_TIME)
+    }
+
+    override fun setMorningCheckInTime(time: String) {
+        settings[KEY_MORNING_CHECKIN_TIME] = time
+    }
+
+    override fun isEveningCheckInEnabled(): Boolean {
+        return settings.getBoolean(KEY_EVENING_CHECKIN_ENABLED, false)
+    }
+
+    override fun setEveningCheckInEnabled(enabled: Boolean) {
+        settings[KEY_EVENING_CHECKIN_ENABLED] = enabled
+    }
+
+    override fun getEveningCheckInTime(): String {
+        return settings.getString(KEY_EVENING_CHECKIN_TIME, DEFAULT_EVENING_CHECKIN_TIME)
+    }
+
+    override fun setEveningCheckInTime(time: String) {
+        settings[KEY_EVENING_CHECKIN_TIME] = time
     }
 
     // Polar Integration

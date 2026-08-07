@@ -394,6 +394,14 @@ private class FakeAppSettingsRepository : AppSettingsRepository {
     override fun clearProfileData() = Unit
     override fun getImageRetentionThresholdDays(): Int = 30
     override fun setImageRetentionThresholdDays(days: Int) = Unit
+    override fun isMorningCheckInEnabled(): Boolean = false
+    override fun setMorningCheckInEnabled(enabled: Boolean) {}
+    override fun getMorningCheckInTime(): String = "07:00"
+    override fun setMorningCheckInTime(time: String) {}
+    override fun isEveningCheckInEnabled(): Boolean = false
+    override fun setEveningCheckInEnabled(enabled: Boolean) {}
+    override fun getEveningCheckInTime(): String = "21:00"
+    override fun setEveningCheckInTime(time: String) {}
     override fun getPolarAccessToken(): String? = stringValues["polar_access_token"]
     override fun setPolarAccessToken(token: String) { stringValues["polar_access_token"] = token }
     override fun getPolarRefreshToken(): String? = stringValues["polar_refresh_token"]

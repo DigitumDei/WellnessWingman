@@ -1,0 +1,101 @@
+-- DailyCheckIn table schema
+--
+-- Stores the user's subjective day-level check-ins ("how did you sleep / how do you feel",
+-- "how did the day feel / anything you did not log"). These are deliberately NOT tracked
+-- entries: a TrackedEntry of type Sleep would suppress Polar's measured sleep data in
+-- DailySummaryService, and these answers are feel rather than measure.
+
+CREATE TABLE DailyCheckIn (
+    checkInId INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    externalId TEXT,
+    -- Epoch days, matching the DailySummary.summaryDate convention.
+    checkInDate INTEGER NOT NULL,
+    -- 'Morning' or 'Evening'.
+    slot TEXT NOT NULL,
+    -- Epoch millis of the actual answer, which may fall outside checkInDate
+    -- (an evening check-in answered after midnight still belongs to its own day).
+    capturedAt INTEGER NOT NULL,
+    responseText TEXT NOT NULL,
+    -- 'Typed' or 'Voice'.
+    inputSource TEXT NOT NULL,
+    -- Set once the user opens a health chat about this check-in. Deliberately not a
+    -- foreign key so this table stays valid regardless of chat's delete-cascade behaviour.
+    conversationExternalId TEXT
+);
+
+-- One check-in per slot per day; answering again replaces the previous answer.
+CREATE UNIQUE INDEX idx_daily_checkin_date_slot ON DailyCheckIn(checkInDate, slot);
+
+-- Queries
+
+-- Get every check-in, most recent day first (used by export)
+getAllCheckIns:
+SELECT * FROM DailyCheckIn
+ORDER BY checkInDate DESC, capturedAt ASC;
+
+-- Get all check-ins for a specific day, morning first
+getCheckInsForDate:
+SELECT * FROM DailyCheckIn
+WHERE checkInDate = ?
+ORDER BY capturedAt ASC;
+
+-- Get a single check-in by day and slot
+getCheckInForDateAndSlot:
+SELECT * FROM DailyCheckIn
+WHERE checkInDate = ? AND slot = ?;
+
+-- Get check-ins across a date range
+getCheckInsForDateRange:
+SELECT * FROM DailyCheckIn
+WHERE checkInDate >= ? AND checkInDate <= ?
+ORDER BY checkInDate DESC, capturedAt ASC;
+
+-- Get check-in by external ID
+getCheckInByExternalId:
+SELECT * FROM DailyCheckIn
+WHERE externalId = ?;
+
+-- Insert or replace the check-in for a day and slot
+upsertCheckInForDateAndSlot:
+INSERT OR REPLACE INTO DailyCheckIn(
+    externalId,
+    checkInDate,
+    slot,
+    capturedAt,
+    responseText,
+    inputSource,
+    conversationExternalId
+) VALUES (?, ?, ?, ?, ?, ?, ?);
+
+-- Attach a health-chat conversation to an existing check-in
+updateConversationExternalId:
+UPDATE DailyCheckIn
+SET conversationExternalId = ?
+WHERE checkInDate = ? AND slot = ?;
+
+-- Delete the check-in for a day and slot
+deleteCheckInForDateAndSlot:
+DELETE FROM DailyCheckIn
+WHERE checkInDate = ? AND slot = ?;
+
+-- Delete check-ins older than the specified day
+deleteOldCheckIns:
+DELETE FROM DailyCheckIn
+WHERE checkInDate < ?;
+
+-- Upsert by primary key (for import)
+upsertCheckIn:
+INSERT OR REPLACE INTO DailyCheckIn(
+    checkInId,
+    externalId,
+    checkInDate,
+    slot,
+    capturedAt,
+    responseText,
+    inputSource,
+    conversationExternalId
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+
+-- Get last inserted row ID
+lastInsertRowId:
+SELECT last_insert_rowid();

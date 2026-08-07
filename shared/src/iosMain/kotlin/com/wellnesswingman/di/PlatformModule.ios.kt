@@ -3,6 +3,8 @@ package com.wellnesswingman.di
 import com.russhwolf.settings.NSUserDefaultsSettings
 import com.russhwolf.settings.Settings
 import com.wellnesswingman.data.db.DriverFactory
+import com.wellnesswingman.domain.checkin.CheckInScheduling
+import com.wellnesswingman.domain.checkin.NoOpCheckInScheduling
 import com.wellnesswingman.platform.AudioRecordingService
 import com.wellnesswingman.platform.BackgroundExecutionService
 import com.wellnesswingman.platform.CameraCaptureOperations
@@ -41,4 +43,7 @@ val platformModule = module {
 
     // Background execution service (stub on iOS)
     single<BackgroundExecutionService> { IosBackgroundExecutionService() }
+
+    // Check-in scheduling (stub while iOS remains deferred)
+    single<CheckInScheduling> { NoOpCheckInScheduling() }
 }

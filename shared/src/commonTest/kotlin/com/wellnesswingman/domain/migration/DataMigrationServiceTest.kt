@@ -1,5 +1,8 @@
 package com.wellnesswingman.domain.migration
 
+import com.wellnesswingman.data.model.CheckInInputSource
+import com.wellnesswingman.data.model.CheckInSlot
+import com.wellnesswingman.data.model.DailyCheckIn
 import com.wellnesswingman.data.model.DailySummary
 import com.wellnesswingman.data.model.EntryAnalysis
 import com.wellnesswingman.data.model.EntryType
@@ -16,7 +19,11 @@ import com.wellnesswingman.data.model.export.ExportTrackedEntry
 import com.wellnesswingman.data.model.export.ExportUserProfile
 import com.wellnesswingman.data.model.export.ExportWeeklySummary
 import com.wellnesswingman.data.model.export.ExportWeightRecord
+import com.wellnesswingman.data.model.export.ExportDailyCheckIn
+import com.wellnesswingman.data.model.export.toDomain
+import com.wellnesswingman.data.model.export.toExport
 import com.wellnesswingman.data.repository.AppSettingsRepository
+import com.wellnesswingman.data.repository.DailyCheckInRepository
 import com.wellnesswingman.data.repository.DailySummaryRepository
 import com.wellnesswingman.data.repository.EntryAnalysisRepository
 import com.wellnesswingman.data.repository.LlmProvider
@@ -36,6 +43,7 @@ import kotlinx.datetime.LocalDate
 import kotlinx.serialization.json.Json
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 // region -- Fakes --
@@ -179,6 +187,14 @@ private class FakeAppSettingsRepository : AppSettingsRepository {
     override fun clearProfileData() { settings.clear() }
     override fun getImageRetentionThresholdDays(): Int = (settings["imageRetentionDays"] as? Int) ?: 30
     override fun setImageRetentionThresholdDays(days: Int) { settings["imageRetentionDays"] = days }
+    override fun isMorningCheckInEnabled(): Boolean = false
+    override fun setMorningCheckInEnabled(enabled: Boolean) {}
+    override fun getMorningCheckInTime(): String = "07:00"
+    override fun setMorningCheckInTime(time: String) {}
+    override fun isEveningCheckInEnabled(): Boolean = false
+    override fun setEveningCheckInEnabled(enabled: Boolean) {}
+    override fun getEveningCheckInTime(): String = "21:00"
+    override fun setEveningCheckInTime(time: String) {}
 
     // Polar Integration stubs
     override fun getPolarAccessToken(): String? = null
@@ -292,6 +308,7 @@ class DataMigrationServiceTest {
         weeklySummaryRepo: FakeWeeklySummaryRepository = FakeWeeklySummaryRepository(),
         appSettingsRepo: FakeAppSettingsRepository = FakeAppSettingsRepository(),
         weightHistoryRepo: FakeWeightHistoryRepository = FakeWeightHistoryRepository(),
+        dailyCheckInRepo: FakeDailyCheckInRepository = FakeDailyCheckInRepository(),
         fileSystem: FakeFileSystem = FakeFileSystem(),
         zipUtil: FakeZipUtil = FakeZipUtil()
     ): DefaultDataMigrationService = DefaultDataMigrationService(
@@ -302,9 +319,143 @@ class DataMigrationServiceTest {
         weeklySummaryRepository = weeklySummaryRepo,
         appSettingsRepository = appSettingsRepo,
         weightHistoryRepository = weightHistoryRepo,
+        dailyCheckInRepository = dailyCheckInRepo,
         fileSystem = fileSystem,
         zipUtil = zipUtil
     )
+
+    /** Records what was imported so export/import round-trips can be asserted. */
+    private class FakeDailyCheckInRepository(
+        private val stored: MutableList<DailyCheckIn> = mutableListOf()
+    ) : DailyCheckInRepository {
+        val upserted = mutableListOf<DailyCheckIn>()
+
+        fun seed(vararg checkIns: DailyCheckIn) {
+            stored.addAll(checkIns)
+        }
+
+        override suspend fun getAllCheckIns(): List<DailyCheckIn> = stored
+        override suspend fun getCheckInsForDate(date: LocalDate) =
+            stored.filter { it.checkInDate == date }
+        override suspend fun getCheckIn(date: LocalDate, slot: CheckInSlot) =
+            stored.firstOrNull { it.checkInDate == date && it.slot == slot }
+        override suspend fun getCheckInsForDateRange(startDate: LocalDate, endDate: LocalDate) =
+            stored.filter { it.checkInDate >= startDate && it.checkInDate <= endDate }
+        override suspend fun getCheckInByExternalId(externalId: String) =
+            stored.firstOrNull { it.externalId == externalId }
+        override suspend fun saveCheckIn(checkIn: DailyCheckIn): Long {
+            stored.add(checkIn)
+            return checkIn.checkInId
+        }
+        override suspend fun attachConversation(
+            date: LocalDate,
+            slot: CheckInSlot,
+            conversationExternalId: String
+        ) {}
+        override suspend fun deleteCheckIn(date: LocalDate, slot: CheckInSlot) {}
+        override suspend fun deleteOldCheckIns(beforeDate: LocalDate) {}
+        override suspend fun upsertCheckIn(checkIn: DailyCheckIn) {
+            upserted.add(checkIn)
+        }
+    }
+
+    // region -- Daily check-in export/import --
+
+    @Test
+    fun `check-ins survive an export and import round trip`() = runTest {
+        val date = LocalDate(2026, 8, 7)
+        val original = DailyCheckIn(
+            checkInId = 5,
+            checkInDate = date,
+            slot = CheckInSlot.MORNING,
+            capturedAt = Instant.fromEpochMilliseconds(1_785_012_345_000),
+            responseText = "Slept badly, feeling flat.",
+            inputSource = CheckInInputSource.VOICE,
+            conversationExternalId = "checkin-2026-08-07-morning"
+        )
+
+        val exported = original.toExport()
+        val reimported = exported.toDomain()
+
+        assertNotNull(reimported)
+        assertEquals(original.checkInDate, reimported.checkInDate)
+        assertEquals(original.slot, reimported.slot)
+        assertEquals(original.capturedAt, reimported.capturedAt)
+        assertEquals(original.responseText, reimported.responseText)
+        assertEquals(original.inputSource, reimported.inputSource)
+        // Exported even though chat history may not be; the column is not a foreign key.
+        assertEquals(original.conversationExternalId, reimported.conversationExternalId)
+    }
+
+    @Test
+    fun `import drops a check-in with an unrecognisable slot instead of guessing`() = runTest {
+        val checkInRepo = FakeDailyCheckInRepository()
+        val fileSystem = FakeFileSystem()
+        val zipUtil = FakeZipUtil()
+
+        val exportData = ExportData(
+            version = 1,
+            exportedAt = "2026-08-07T09:00:00Z",
+            dailyCheckIns = listOf(
+                ExportDailyCheckIn(
+                    checkInId = 1,
+                    checkInDate = "2026-08-07",
+                    slot = "Afternoon",
+                    capturedAt = "2026-08-07T13:00:00Z",
+                    responseText = "Not a real slot",
+                    inputSource = "Typed"
+                ),
+                ExportDailyCheckIn(
+                    checkInId = 2,
+                    checkInDate = "2026-08-07",
+                    slot = "Evening",
+                    capturedAt = "2026-08-07T21:00:00Z",
+                    responseText = "Good day",
+                    inputSource = "Typed"
+                )
+            )
+        )
+
+        zipUtil.onExtract = { _, destDir ->
+            fileSystem.directories.add(destDir)
+            fileSystem.files["$destDir/data.json"] =
+                Json.encodeToString(ExportData.serializer(), exportData).encodeToByteArray()
+        }
+
+        val service = createService(
+            dailyCheckInRepo = checkInRepo,
+            fileSystem = fileSystem,
+            zipUtil = zipUtil
+        )
+
+        val result = service.importData("/path/to/import.zip")
+
+        assertEquals(1, result.dailyCheckInsImported)
+        assertEquals(listOf("Good day"), checkInRepo.upserted.map { it.responseText })
+        assertTrue(result.errors.any { it.contains("unrecognised slot") })
+    }
+
+    @Test
+    fun `exported payload includes stored check-ins`() = runTest {
+        val checkInRepo = FakeDailyCheckInRepository()
+        checkInRepo.seed(
+            DailyCheckIn(
+                checkInId = 1,
+                checkInDate = LocalDate(2026, 8, 7),
+                slot = CheckInSlot.EVENING,
+                capturedAt = Instant.fromEpochMilliseconds(1_785_012_345_000),
+                responseText = "Walked at lunch, didn't log it"
+            )
+        )
+
+        val exported = checkInRepo.getAllCheckIns().map { it.toExport() }
+
+        assertEquals(1, exported.size)
+        assertEquals("Evening", exported.single().slot)
+        assertEquals("Walked at lunch, didn't log it", exported.single().responseText)
+    }
+
+    // endregion
 
     // region -- Export tests --
 

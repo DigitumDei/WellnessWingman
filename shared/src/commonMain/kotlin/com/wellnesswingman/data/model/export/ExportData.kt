@@ -1,5 +1,8 @@
 package com.wellnesswingman.data.model.export
 
+import com.wellnesswingman.data.model.CheckInInputSource
+import com.wellnesswingman.data.model.CheckInSlot
+import com.wellnesswingman.data.model.DailyCheckIn
 import com.wellnesswingman.data.model.DailySummary
 import com.wellnesswingman.data.model.EntryAnalysis
 import com.wellnesswingman.data.model.EntryType
@@ -151,7 +154,22 @@ data class ExportData(
     @SerialName("SummariesAnalyses") val summariesAnalyses: List<ExportSummaryAnalysis> = emptyList(),
     @SerialName("WeeklySummaries") val weeklySummaries: List<ExportWeeklySummary> = emptyList(),
     @SerialName("UserProfile") val userProfile: ExportUserProfile? = null,
-    @SerialName("WeightRecords") val weightRecords: List<ExportWeightRecord> = emptyList()
+    @SerialName("WeightRecords") val weightRecords: List<ExportWeightRecord> = emptyList(),
+    @SerialName("DailyCheckIns") val dailyCheckIns: List<ExportDailyCheckIn> = emptyList()
+)
+
+@Serializable
+data class ExportDailyCheckIn(
+    @SerialName("CheckInId") val checkInId: Long,
+    @SerialName("ExternalId") val externalId: String? = null,
+    @SerialName("CheckInDate") val checkInDate: String, // ISO 8601 date
+    @SerialName("Slot") val slot: String,               // "Morning" | "Evening"
+    @SerialName("CapturedAt") val capturedAt: String,   // ISO 8601
+    @SerialName("ResponseText") val responseText: String,
+    @SerialName("InputSource") val inputSource: String, // "Typed" | "Voice"
+    // Exported even though chat history may not be. The column is deliberately not a foreign
+    // key, so a reference to a conversation that was not exported dangles harmlessly.
+    @SerialName("ConversationExternalId") val conversationExternalId: String? = null
 )
 
 @Serializable
@@ -407,6 +425,43 @@ fun ExportDailySummary.toDomain(): DailySummary {
         generatedAt = generatedAt?.let { runCatching { parseCSharpInstant(it) }.getOrNull() },
         userComments = userComments,
         payloadJson = payloadJson
+    )
+}
+
+fun DailyCheckIn.toExport(): ExportDailyCheckIn = ExportDailyCheckIn(
+    checkInId = checkInId,
+    externalId = externalId,
+    checkInDate = checkInDate.toString(),
+    slot = slot.toStorageString(),
+    capturedAt = capturedAt.toString(),
+    responseText = responseText,
+    inputSource = inputSource.toStorageString(),
+    conversationExternalId = conversationExternalId
+)
+
+/**
+ * Returns null when the slot cannot be read. A check-in with no slot has nowhere to belong, and
+ * dropping it is better than importing it against a guessed one.
+ */
+fun ExportDailyCheckIn.toDomain(): DailyCheckIn? {
+    val parsedSlot = CheckInSlot.fromString(slot) ?: return null
+
+    val date = try {
+        LocalDate.parse(checkInDate.substringBefore('T'))
+    } catch (_: Exception) {
+        parseCSharpInstant(checkInDate).toLocalDateTime(TimeZone.UTC).date
+    }
+
+    return DailyCheckIn(
+        checkInId = checkInId,
+        externalId = externalId,
+        checkInDate = date,
+        slot = parsedSlot,
+        capturedAt = runCatching { parseCSharpInstant(capturedAt) }.getOrNull()
+            ?: date.atStartOfDayIn(TimeZone.UTC),
+        responseText = responseText,
+        inputSource = CheckInInputSource.fromString(inputSource),
+        conversationExternalId = conversationExternalId
     )
 }
 
