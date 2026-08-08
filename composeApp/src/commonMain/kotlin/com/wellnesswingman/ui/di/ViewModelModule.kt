@@ -4,6 +4,8 @@ import com.wellnesswingman.ui.screens.calendar.CalendarViewModel
 import com.wellnesswingman.ui.screens.calendar.WeekViewModel
 import com.wellnesswingman.ui.screens.calendar.YearViewModel
 import com.wellnesswingman.ui.screens.calendar.day.DayDetailViewModel
+import com.wellnesswingman.ui.screens.chat.HealthChatListViewModel
+import com.wellnesswingman.ui.screens.chat.HealthChatThreadViewModel
 import com.wellnesswingman.ui.screens.detail.EntryDetailViewModel
 import com.wellnesswingman.ui.screens.main.MainViewModel
 import com.wellnesswingman.ui.screens.nutrition.NutritionLabelScanViewModel
@@ -40,6 +42,15 @@ val viewModelModule = module {
     factoryOf(::DailySummaryViewModel)
     factoryOf(::PhotoReviewViewModel)
     factoryOf(::NutritionalProfilesViewModel)
+    factoryOf(::HealthChatListViewModel)
+    factory { params ->
+        HealthChatThreadViewModel(
+            conversationExternalId = params.get(),
+            healthChatService = get(),
+            healthChatRepository = get(),
+            settingsRepository = get(),
+        )
+    }
     factory { params ->
         NutritionLabelScanViewModel(
             profileId = profileIdFromParameter(runCatching { params.get<Long>() }.getOrNull()),

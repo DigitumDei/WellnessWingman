@@ -1,5 +1,6 @@
 package com.wellnesswingman.domain.llm
 
+import com.wellnesswingman.data.model.llm.LlmChatMessage
 import com.wellnesswingman.data.model.llm.ToolCall
 import com.wellnesswingman.data.model.llm.ToolDefinition
 import com.wellnesswingman.data.model.llm.ToolResult
@@ -61,5 +62,18 @@ interface LlmClient {
         jsonSchema: String? = null,
         tools: List<ToolDefinition> = emptyList(),
         toolExecutor: ToolExecutor? = null
+    ): LlmAnalysisResult
+
+    /**
+     * Generates a chat response from a conversation history.
+     * Supports user, assistant, and tool turns with optional system instructions.
+     */
+    suspend fun generateChatResponse(
+        messages: List<LlmChatMessage>,
+        systemInstruction: String? = null,
+        jsonSchema: String? = null,
+        tools: List<ToolDefinition> = emptyList(),
+        toolExecutor: ToolExecutor? = null,
+        onToolRoundCompleted: (() -> Unit)? = null
     ): LlmAnalysisResult
 }

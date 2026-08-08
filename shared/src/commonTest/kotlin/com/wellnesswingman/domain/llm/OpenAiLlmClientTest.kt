@@ -95,7 +95,7 @@ class OpenAiLlmClientTest {
     }
 
     @Test
-    fun `generateCompletion converts malformed tool arguments into tool error response`() = runTest {
+    fun `generateCompletion routes malformed tool arguments through executor capture`() = runTest {
         val requests = mutableListOf<ChatCompletionRequest>()
         val api = mockk<OpenAI>()
         coEvery { api.chatCompletion(any()) } answers {
@@ -135,7 +135,12 @@ class OpenAiLlmClientTest {
             ),
             toolExecutor = {
                 executorInvoked = true
-                error("should not be called")
+                com.wellnesswingman.data.model.llm.ToolResult(
+                    toolCallId = it.id,
+                    name = it.name,
+                    content = JsonPrimitive("Parse error"),
+                    isError = true,
+                )
             }
         )
 
@@ -181,6 +186,47 @@ class OpenAiLlmClientTest {
                 ),
                 toolExecutor = {
                     throw CancellationException("cancelled")
+                }
+            )
+        }
+    }
+
+    @Test
+    fun `generateCompletion propagates non-cancellation executor exception`() = runTest {
+        val api = mockk<OpenAI>()
+        coEvery { api.chatCompletion(any()) } returns toolCallCompletion(
+            ChatMessage(
+                role = ChatRole.Assistant,
+                content = null as String?,
+                toolCalls = listOf(
+                    OpenAiToolCall.Function(
+                        id = ToolId("call-1"),
+                        function = FunctionCall(
+                            nameOrNull = "lookup_calories",
+                            argumentsOrNull = """{"food":"apple"}"""
+                        )
+                    )
+                )
+            )
+        )
+
+        val client = OpenAiLlmClient(
+            apiKey = "test-key",
+            client = api
+        )
+
+        assertFailsWith<RuntimeException> {
+            client.generateCompletion(
+                prompt = "hello",
+                tools = listOf(
+                    ToolDefinition(
+                        name = "lookup_calories",
+                        description = "Looks up calories.",
+                        parametersSchema = buildJsonObject { put("type", JsonPrimitive("object")) }
+                    )
+                ),
+                toolExecutor = {
+                    throw RuntimeException("executor failed")
                 }
             )
         }

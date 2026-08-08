@@ -6,18 +6,23 @@ import com.aallam.openai.api.chat.ChatMessage
 import com.aallam.openai.api.chat.ToolCall as OpenAiToolCall
 import com.aallam.openai.api.chat.ChatResponseFormat
 import com.aallam.openai.api.chat.ChatRole
+import com.aallam.openai.api.chat.FunctionCall
 import com.aallam.openai.api.chat.ImagePart
 import com.aallam.openai.api.chat.Parameters
 import com.aallam.openai.api.chat.TextPart
 import com.aallam.openai.api.chat.ToolChoice
+import com.aallam.openai.api.chat.ToolId
 import com.aallam.openai.api.chat.chatCompletionRequest
 import com.aallam.openai.api.file.FileSource
 import com.aallam.openai.api.model.ModelId
 import com.aallam.openai.client.LoggingConfig
 import com.aallam.openai.client.OpenAI
 import com.aallam.openai.api.http.Timeout
+import com.wellnesswingman.data.model.llm.LlmChatMessage
+import com.wellnesswingman.data.model.llm.LlmChatRole
 import com.wellnesswingman.data.model.llm.ToolCall
 import com.wellnesswingman.data.model.llm.ToolDefinition
+import com.wellnesswingman.data.model.llm.ToolResult
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -126,6 +131,25 @@ class OpenAiLlmClient(
         )
     }
 
+    override suspend fun generateChatResponse(
+        messages: List<LlmChatMessage>,
+        systemInstruction: String?,
+        jsonSchema: String?,
+        tools: List<ToolDefinition>,
+        toolExecutor: ToolExecutor?,
+        onToolRoundCompleted: (() -> Unit)?,
+    ): LlmAnalysisResult {
+        val openAiMessages = toOpenAiMessages(messages, systemInstruction)
+        return runConversation(
+            messages = openAiMessages,
+            jsonSchema = jsonSchema,
+            tools = tools,
+            toolExecutor = toolExecutor,
+            startTime = Clock.System.now(),
+            onToolRoundCompleted = onToolRoundCompleted,
+        )
+    }
+
     private fun sanitize(content: String): String {
         return content.trim().removePrefix("```json").removeSuffix("```").trim()
     }
@@ -135,7 +159,8 @@ class OpenAiLlmClient(
         jsonSchema: String?,
         tools: List<ToolDefinition>,
         toolExecutor: ToolExecutor?,
-        startTime: kotlinx.datetime.Instant
+        startTime: kotlinx.datetime.Instant,
+        onToolRoundCompleted: (() -> Unit)? = null
     ): LlmAnalysisResult {
         var promptTokens = 0
         var completionTokens = 0
@@ -183,24 +208,30 @@ class OpenAiLlmClient(
                     "Unsupported OpenAI tool call type: ${toolCall::class.simpleName}"
                 }
 
-                val result = runCatching {
-                    val arguments = json.parseToJsonElement(toolCall.function.arguments).jsonObject
-                    executor(
-                        ToolCall(
-                            id = toolCall.id.id,
-                            name = toolCall.function.name,
-                            arguments = arguments
-                        )
-                    )
-                }.getOrElse { error ->
-                    if (error is CancellationException) throw error
-                    com.wellnesswingman.data.model.llm.ToolResult(
-                        toolCallId = toolCall.id.id,
-                        name = toolCall.function.name,
-                        content = JsonPrimitive(error.message ?: "Failed to parse tool arguments."),
-                        isError = true
-                    )
+                val parsedArguments = runCatching {
+                    json.parseToJsonElement(toolCall.function.arguments).jsonObject
                 }
+
+                val result = parsedArguments.fold(
+                    onSuccess = { arguments ->
+                        executor(
+                            ToolCall(
+                                id = toolCall.id.id,
+                                name = toolCall.function.name,
+                                arguments = arguments
+                            )
+                        )
+                    },
+                    onFailure = { error ->
+                        if (error is CancellationException) throw error
+                        ToolResult(
+                            toolCallId = toolCall.id.id,
+                            name = toolCall.function.name,
+                            content = JsonPrimitive("Failed to parse tool arguments: ${error.message ?: "Unknown error"}"),
+                            isError = true
+                        )
+                    }
+                )
 
                 messages.add(
                     ChatMessage(
@@ -211,6 +242,8 @@ class OpenAiLlmClient(
                     )
                 )
             }
+
+            onToolRoundCompleted?.invoke()
         }
 
         val completion = client.chatCompletion(
@@ -275,5 +308,57 @@ class OpenAiLlmClient(
             put("content", toolResult.content)
         }
         return json.encodeToString(JsonElement.serializer(), payload)
+    }
+
+    private fun toOpenAiMessages(
+        messages: List<LlmChatMessage>,
+        systemInstruction: String?
+    ): MutableList<ChatMessage> {
+        val result = mutableListOf<ChatMessage>()
+        if (systemInstruction != null) {
+            result.add(
+                ChatMessage(
+                    role = ChatRole.System,
+                    content = systemInstruction
+                )
+            )
+        }
+        for (msg in messages) {
+            when (msg.role) {
+                LlmChatRole.USER -> result.add(
+                    ChatMessage(role = ChatRole.User, content = msg.content ?: "")
+                )
+                LlmChatRole.ASSISTANT -> {
+                    val openAiToolCalls = msg.toolCalls?.map { tc ->
+                        OpenAiToolCall.Function(
+                            id = ToolId(tc.id ?: ""),
+                            function = FunctionCall(
+                                nameOrNull = tc.name,
+                                argumentsOrNull = json.encodeToString(JsonElement.serializer(), tc.arguments)
+                            )
+                        )
+                    }
+                    result.add(
+                        ChatMessage(
+                            role = ChatRole.Assistant,
+                            content = msg.content,
+                            toolCalls = openAiToolCalls
+                        )
+                    )
+                }
+                LlmChatRole.TOOL -> {
+                    val content = msg.toolResultJson ?: msg.content ?: ""
+                    result.add(
+                        ChatMessage(
+                            role = ChatRole.Tool,
+                            toolCallId = msg.toolCallId?.let(::ToolId),
+                            name = msg.toolName,
+                            content = content
+                        )
+                    )
+                }
+            }
+        }
+        return result
     }
 }

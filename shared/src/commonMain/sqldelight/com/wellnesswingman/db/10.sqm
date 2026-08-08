@@ -1,0 +1,4 @@
+-- Migration from version 10 to version 11
+-- Adds status column to ChatMessage for tracking PENDING/COMPLETED/ERROR
+
+ALTER TABLE ChatMessage ADD COLUMN status TEXT NOT NULL DEFAULT 'completed';

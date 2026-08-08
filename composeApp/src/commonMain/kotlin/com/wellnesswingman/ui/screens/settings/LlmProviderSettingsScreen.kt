@@ -15,7 +15,9 @@ import cafe.adriel.voyager.koin.getScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 
-class LlmProviderSettingsScreen : Screen {
+class LlmProviderSettingsScreen(
+    private val onSaved: (() -> Unit)? = null,
+) : Screen {
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
@@ -25,8 +27,13 @@ class LlmProviderSettingsScreen : Screen {
         val snackbarHostState = remember { SnackbarHostState() }
         LaunchedEffect(uiState.saveSuccess) {
             if (uiState.saveSuccess) {
-                snackbarHostState.showSnackbar("LLM settings saved successfully")
                 viewModel.clearSaveSuccess()
+                if (onSaved != null) {
+                    onSaved.invoke()
+                    navigator.pop()
+                } else {
+                    snackbarHostState.showSnackbar("LLM settings saved successfully")
+                }
             }
         }
 
