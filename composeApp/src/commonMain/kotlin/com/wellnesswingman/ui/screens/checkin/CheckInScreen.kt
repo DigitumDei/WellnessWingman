@@ -18,6 +18,7 @@ import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import com.wellnesswingman.data.model.CheckInSlot
 import com.wellnesswingman.ui.components.LoadingIndicator
+import com.wellnesswingman.ui.screens.chat.HealthChatThreadScreen
 import com.wellnesswingman.ui.screens.detail.VoiceRecordingButton
 import org.koin.core.parameter.parametersOf
 
@@ -132,6 +133,45 @@ data class CheckInScreen(val slot: CheckInSlot) : Screen {
                         } check-in.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                HorizontalDivider()
+
+                // Offered once there is something to talk about. Saving first keeps the
+                // check-in itself independent of whether the chat succeeds.
+                OutlinedButton(
+                    onClick = {
+                        viewModel.talkAboutThis { conversationExternalId ->
+                            navigator.push(HealthChatThreadScreen(conversationExternalId))
+                        }
+                    },
+                    enabled = commentsState.text.isNotBlank() &&
+                        !busy &&
+                        !uiState.isSaving &&
+                        !uiState.isStartingConversation,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    if (uiState.isStartingConversation) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Text("Starting conversation…")
+                    } else {
+                        Text(
+                            if (uiState.conversationExternalId != null) "Continue the conversation"
+                            else "Talk about this"
+                        )
+                    }
+                }
+
+                uiState.conversationError?.let { error ->
+                    Text(
+                        text = error,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
                     )
                 }
             }

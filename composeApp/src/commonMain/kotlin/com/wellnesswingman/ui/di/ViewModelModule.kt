@@ -1,7 +1,9 @@
 package com.wellnesswingman.ui.di
 
 import com.wellnesswingman.ui.screens.calendar.CalendarViewModel
+import com.wellnesswingman.ui.screens.checkin.CheckInConversationStarter
 import com.wellnesswingman.ui.screens.checkin.CheckInViewModel
+import com.wellnesswingman.ui.screens.checkin.HealthChatCheckInConversationStarter
 import com.wellnesswingman.ui.screens.settings.CheckInSettingsViewModel
 import com.wellnesswingman.ui.screens.calendar.WeekViewModel
 import com.wellnesswingman.ui.screens.calendar.YearViewModel
@@ -44,7 +46,14 @@ val viewModelModule = module {
             dailyCheckInRepository = get(),
             audioRecordingService = get(),
             llmClientFactory = get(),
-            fileSystem = get()
+            fileSystem = get(),
+            conversationStarter = get()
+        )
+    }
+    single<CheckInConversationStarter> {
+        HealthChatCheckInConversationStarter(
+            healthChatService = get(),
+            appSettingsRepository = get()
         )
     }
     factoryOf(::CheckInSettingsViewModel)

@@ -29,7 +29,12 @@ data class CheckInUiState(
     val isSaving: Boolean = false,
     /** True once an answer for this slot exists, whether saved now or earlier today. */
     val hasSavedAnswer: Boolean = false,
-    val saveError: String? = null
+    val saveError: String? = null,
+    /** True while the opening chat turn is in flight, before the thread opens. */
+    val isStartingConversation: Boolean = false,
+    val conversationError: String? = null,
+    /** Set once a chat thread exists for this check-in, so re-opening returns to it. */
+    val conversationExternalId: String? = null
 ) {
     /** The prompt shown above the input, and the reason this feature exists. */
     val questions: List<String>
@@ -60,7 +65,8 @@ class CheckInViewModel(
     private val dailyCheckInRepository: DailyCheckInRepository,
     private val audioRecordingService: AudioRecordingService,
     private val llmClientFactory: LlmClientFactory,
-    private val fileSystem: FileSystem
+    private val fileSystem: FileSystem,
+    private val conversationStarter: CheckInConversationStarter
 ) : ScreenModel {
 
     private val _uiState = MutableStateFlow(CheckInUiState(slot = slot))
@@ -95,7 +101,9 @@ class CheckInViewModel(
                 _uiState.value = _uiState.value.copy(
                     date = date,
                     isLoading = false,
-                    hasSavedAnswer = existing != null
+                    hasSavedAnswer = existing != null,
+                    // Re-opening a check-in returns to its thread rather than starting another.
+                    conversationExternalId = existing?.conversationExternalId
                 )
             } catch (e: Exception) {
                 Napier.e("Failed to load ${slot.toStorageString()} check-in", e)
@@ -139,7 +147,10 @@ class CheckInViewModel(
                 slot = slot,
                 capturedAt = Clock.System.now(),
                 responseText = text,
-                inputSource = inputSourceFor(text)
+                inputSource = inputSourceFor(text),
+                // Saving is an upsert, so this must be carried forward or re-answering would
+                // orphan the thread already started about this check-in.
+                conversationExternalId = _uiState.value.conversationExternalId
             )
 
             try {
@@ -166,6 +177,96 @@ class CheckInViewModel(
      */
     fun conversationExternalId(): String =
         "checkin-${_uiState.value.date}-${slot.toStorageString().lowercase()}"
+
+    /**
+     * Opens a health chat about this check-in.
+     *
+     * Sends an opening turn through the existing [HealthChatService], which creates the
+     * conversation on demand from the deterministic id — no new chat plumbing, and no changes to
+     * the chat feature itself. The assistant's reply is therefore already present when the
+     * thread opens, rather than the user landing in an empty thread.
+     *
+     * If a thread already exists for this check-in we go straight there instead of sending
+     * another opening turn.
+     *
+     * @param onReady invoked with the conversation id once the thread is ready to show.
+     */
+    fun talkAboutThis(onReady: (String) -> Unit) {
+        val state = _uiState.value
+        if (state.isStartingConversation) return
+
+        val existing = state.conversationExternalId
+        if (existing != null) {
+            onReady(existing)
+            return
+        }
+
+        val answer = commentsState.value.text.trim()
+        if (answer.isEmpty()) return
+
+        screenModelScope.launch {
+            _uiState.value = _uiState.value.copy(
+                isStartingConversation = true,
+                conversationError = null
+            )
+
+            val externalId = conversationExternalId()
+            try {
+                val result = conversationStarter.start(
+                    conversationExternalId = externalId,
+                    openingMessage = openingMessage(answer),
+                    title = conversationTitle()
+                )
+
+                when (result) {
+                    CheckInConversationResult.Started -> {
+                        dailyCheckInRepository.attachConversation(
+                            date = _uiState.value.date,
+                            slot = slot,
+                            conversationExternalId = externalId
+                        )
+                        _uiState.value = _uiState.value.copy(
+                            isStartingConversation = false,
+                            conversationExternalId = externalId
+                        )
+                        onReady(externalId)
+                    }
+                    CheckInConversationResult.ApiKeyMissing -> _uiState.value = _uiState.value.copy(
+                        isStartingConversation = false,
+                        conversationError = "Add an API key in settings to chat about your check-in."
+                    )
+                    is CheckInConversationResult.Failed -> _uiState.value = _uiState.value.copy(
+                        isStartingConversation = false,
+                        conversationError = result.message
+                    )
+                }
+            } catch (e: Exception) {
+                Napier.e("Failed to start a conversation about the ${slot.toStorageString()} check-in", e)
+                _uiState.value = _uiState.value.copy(
+                    isStartingConversation = false,
+                    conversationError = e.message ?: "Could not start the conversation"
+                )
+            }
+        }
+    }
+
+    /**
+     * Frames the check-in for the assistant. The user's words are passed through unaltered;
+     * only the surrounding context is added, so the assistant knows this is self-report rather
+     * than a measurement.
+     */
+    private fun openingMessage(answer: String): String {
+        val prompt = when (slot) {
+            CheckInSlot.MORNING ->
+                "This is my morning check-in for ${_uiState.value.date} — how I slept and how I feel."
+            CheckInSlot.EVENING ->
+                "This is my evening check-in for ${_uiState.value.date} — how the day felt, and anything I didn't log."
+        }
+        return "$prompt\n\n$answer"
+    }
+
+    private fun conversationTitle(): String =
+        "${slot.toStorageString()} check-in — ${_uiState.value.date}"
 
     private fun inputSourceFor(text: String): CheckInInputSource {
         val before = lastTranscribedText

@@ -575,6 +575,14 @@ private class FakeAppSettingsRepository(
     override fun clearProfileData() {}
     override fun getImageRetentionThresholdDays(): Int = 30
     override fun setImageRetentionThresholdDays(days: Int) {}
+    override fun isMorningCheckInEnabled(): Boolean = false
+    override fun setMorningCheckInEnabled(enabled: Boolean) {}
+    override fun getMorningCheckInTime(): String = "07:00"
+    override fun setMorningCheckInTime(time: String) {}
+    override fun isEveningCheckInEnabled(): Boolean = false
+    override fun setEveningCheckInEnabled(enabled: Boolean) {}
+    override fun getEveningCheckInTime(): String = "21:00"
+    override fun setEveningCheckInTime(time: String) {}
     override fun getPolarAccessToken(): String? = null
     override fun setPolarAccessToken(token: String) {}
     override fun getPolarRefreshToken(): String? = null
@@ -806,6 +814,14 @@ private class ThrowingAppSettingsRepository : AppSettingsRepository {
     override fun clearProfileData() {}
     override fun getImageRetentionThresholdDays(): Int = 30
     override fun setImageRetentionThresholdDays(days: Int) {}
+    override fun isMorningCheckInEnabled(): Boolean = false
+    override fun setMorningCheckInEnabled(enabled: Boolean) {}
+    override fun getMorningCheckInTime(): String = "07:00"
+    override fun setMorningCheckInTime(time: String) {}
+    override fun isEveningCheckInEnabled(): Boolean = false
+    override fun setEveningCheckInEnabled(enabled: Boolean) {}
+    override fun getEveningCheckInTime(): String = "21:00"
+    override fun setEveningCheckInTime(time: String) {}
     override fun getPolarAccessToken(): String? = null
     override fun setPolarAccessToken(token: String) {}
     override fun getPolarRefreshToken(): String? = null
