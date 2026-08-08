@@ -6,16 +6,32 @@ import com.wellnesswingman.data.model.EntryType
 import com.wellnesswingman.data.model.NutritionalProfile
 import com.wellnesswingman.data.model.ProcessingStatus
 import com.wellnesswingman.data.model.TrackedEntry
+import com.wellnesswingman.data.model.WeeklySummary
 import com.wellnesswingman.data.model.WeightRecord
 import com.wellnesswingman.data.model.llm.ToolCall
+import com.wellnesswingman.data.model.polar.PolarDailyActivity
+import com.wellnesswingman.data.model.polar.PolarMetricFamily
+import com.wellnesswingman.data.model.polar.PolarNightlyRecharge
+import com.wellnesswingman.data.model.polar.PolarSleepResult
+import com.wellnesswingman.data.model.polar.PolarSyncCheckpoint
+import com.wellnesswingman.data.model.polar.PolarTrainingSession
+import com.wellnesswingman.data.model.polar.PolarUserProfile
+import com.wellnesswingman.data.model.polar.StoredPolarActivity
+import com.wellnesswingman.data.model.polar.StoredPolarNightlyRecharge
+import com.wellnesswingman.data.model.polar.StoredPolarSleepResult
+import com.wellnesswingman.data.model.polar.StoredPolarTrainingSession
+import com.wellnesswingman.data.model.polar.StoredPolarUserProfile
 import com.wellnesswingman.data.model.llm.ToolDefinition
 import com.wellnesswingman.data.repository.AppSettingsRepository
 import com.wellnesswingman.data.repository.DailySummaryRepository
 import com.wellnesswingman.data.repository.EntryAnalysisRepository
 import com.wellnesswingman.data.repository.LlmProvider
 import com.wellnesswingman.data.repository.NutritionalProfileRepository
+import com.wellnesswingman.data.repository.PolarSyncRepository
 import com.wellnesswingman.data.repository.TrackedEntryRepository
+import com.wellnesswingman.data.repository.WeeklySummaryRepository
 import com.wellnesswingman.data.repository.WeightHistoryRepository
+import com.wellnesswingman.domain.polar.PolarInsightService
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
@@ -380,6 +396,295 @@ class ToolRegistryTest {
         })
         val detailedEntry = assertIs<JsonObject>(assertIs<JsonArray>(detailed["entries"]).single())
         assertTrue(detailedEntry.containsKey("latestInsightsJson"))
+    }
+
+    @Test
+    fun `get_entry_details returns the full analysis for chosen entries`() = runTest {
+        val at = instantOn(2026, 7, 22)
+        val registry = rangedRegistry(
+            entries = listOf(mealEntry(7L, at, 500.0, "risotto")),
+            analyses = mapOf(7L to mealAnalysis(7L, at, 500.0))
+        )
+
+        val content = registry.call("get_entry_details", buildJsonObject {
+            put("entryIds", JsonArray(listOf(JsonPrimitive(7))))
+        })
+
+        assertEquals(1, content["requested"]?.jsonPrimitive?.int)
+        assertFalse(content["truncated"]!!.jsonPrimitive.boolean)
+        val entry = assertIs<JsonObject>(assertIs<JsonArray>(content["entries"]).single())
+        assertEquals(7, entry["entryId"]?.jsonPrimitive?.int)
+        assertTrue(entry.containsKey("latestInsightsJson"))
+    }
+
+    @Test
+    fun `get_entry_details skips ids that do not exist`() = runTest {
+        val at = instantOn(2026, 7, 22)
+        val registry = rangedRegistry(
+            entries = listOf(mealEntry(7L, at, 500.0, "risotto")),
+            analyses = mapOf(7L to mealAnalysis(7L, at, 500.0))
+        )
+
+        val content = registry.call("get_entry_details", buildJsonObject {
+            put("entryIds", JsonArray(listOf(JsonPrimitive(7), JsonPrimitive(999))))
+        })
+
+        assertEquals(2, content["requested"]?.jsonPrimitive?.int)
+        assertEquals(1, assertIs<JsonArray>(content["entries"]).size)
+    }
+
+    @Test
+    fun `get_entry_details requires at least one id`() = runTest {
+        val registry = rangedRegistry()
+
+        val result = registry.execute(
+            ToolCall(
+                id = "call-1",
+                name = "get_entry_details",
+                arguments = buildJsonObject { put("entryIds", JsonArray(emptyList())) }
+            )
+        )
+
+        assertTrue(result.isError)
+    }
+
+    @Test
+    fun `get_entry_details caps how many entries one call can pull`() = runTest {
+        val entries = (1L..30L).map { mealEntry(it, instantOn(2026, 7, 22), 500.0, "meal $it") }
+        val registry = rangedRegistry(entries)
+
+        val content = registry.call("get_entry_details", buildJsonObject {
+            put("entryIds", JsonArray(entries.map { JsonPrimitive(it.entryId) }))
+        })
+
+        assertEquals(30, content["requested"]?.jsonPrimitive?.int)
+        assertTrue(content["truncated"]!!.jsonPrimitive.boolean)
+        assertEquals(
+            ToolRegistry.MAX_ENTRY_DETAILS,
+            assertIs<JsonArray>(content["entries"]).size
+        )
+    }
+
+    @Test
+    fun `get_daily_summaries returns summaries and user comments in range`() = runTest {
+        val registry = rangedRegistry(
+            dailySummaries = listOf(
+                DailySummary(
+                    summaryDate = LocalDate(2026, 7, 22),
+                    highlights = "Balanced day",
+                    recommendations = "More fibre",
+                    userComments = "Felt sluggish"
+                ),
+                DailySummary(
+                    summaryDate = LocalDate(2026, 6, 1),
+                    highlights = "Out of range",
+                    recommendations = "Ignore me"
+                )
+            )
+        )
+
+        val content = registry.call("get_daily_summaries", buildJsonObject {
+            put("startDate", JsonPrimitive("2026-07-20"))
+            put("endDate", JsonPrimitive("2026-07-26"))
+        })
+
+        assertEquals(1, content["count"]?.jsonPrimitive?.int)
+        val summary = assertIs<JsonObject>(assertIs<JsonArray>(content["summaries"]).single())
+        assertEquals("2026-07-22", summary["date"]?.jsonPrimitive?.content)
+        assertEquals("Balanced day", summary["highlights"]?.jsonPrimitive?.content)
+        assertEquals("Felt sluggish", summary["userComments"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `get_weekly_summaries returns weeks overlapping the range`() = runTest {
+        val registry = ToolRegistry(
+            trackedEntryRepository = FakeRangedTrackedEntryRepository(),
+            entryAnalysisRepository = FakeEntryAnalysisRepository(),
+            weightHistoryRepository = FakeWeightHistoryRepository(),
+            appSettingsRepository = FakeAppSettingsRepository(),
+            nutritionalProfileRepository = FakeNutritionalProfileRepository(),
+            weeklySummaryRepository = FakeWeeklySummaryRepository(
+                listOf(
+                    WeeklySummary(
+                        weekStartDate = LocalDate(2026, 7, 20),
+                        highlights = "Consistent week",
+                        recommendations = "Keep it up",
+                        mealCount = 18,
+                        exerciseCount = 3,
+                        totalEntries = 21
+                    )
+                )
+            ),
+            clock = fixedClock,
+            timeZoneProvider = { TimeZone.UTC }
+        )
+
+        val content = registry.call("get_weekly_summaries", buildJsonObject {
+            put("startDate", JsonPrimitive("2026-07-01"))
+            put("endDate", JsonPrimitive("2026-08-01"))
+        })
+
+        assertEquals(1, content["count"]?.jsonPrimitive?.int)
+        val week = assertIs<JsonObject>(assertIs<JsonArray>(content["summaries"]).single())
+        assertEquals("2026-07-20", week["weekStartDate"]?.jsonPrimitive?.content)
+        assertEquals(18, week["mealCount"]?.jsonPrimitive?.int)
+    }
+
+    @Test
+    fun `get_polar_context returns measured wearable days`() = runTest {
+        val date = LocalDate(2026, 7, 22)
+        val registry = ToolRegistry(
+            trackedEntryRepository = FakeRangedTrackedEntryRepository(),
+            entryAnalysisRepository = FakeEntryAnalysisRepository(),
+            weightHistoryRepository = FakeWeightHistoryRepository(),
+            appSettingsRepository = FakeAppSettingsRepository(polarConnected = true),
+            nutritionalProfileRepository = FakeNutritionalProfileRepository(),
+            polarInsightService = PolarInsightService(
+                FakePolarSyncRepository(
+                    activities = listOf(
+                        StoredPolarActivity(
+                            1, "activity:2026-07-22", "Polar", date, null, fixedNow,
+                            PolarDailyActivity("2026-07-22", 9120, "00:00:00", 61000, listOf(9120))
+                        )
+                    )
+                )
+            ),
+            clock = fixedClock,
+            timeZoneProvider = { TimeZone.UTC }
+        )
+
+        val content = registry.call("get_polar_context", buildJsonObject {
+            put("startDate", JsonPrimitive("2026-07-20"))
+            put("endDate", JsonPrimitive("2026-07-26"))
+        })
+
+        assertTrue(content["polarConnected"]!!.jsonPrimitive.boolean)
+        assertEquals(1, content["daysWithData"]?.jsonPrimitive?.int)
+        val day = assertIs<JsonObject>(assertIs<JsonArray>(content["days"]).single())
+        assertEquals("2026-07-22", day["date"]?.jsonPrimitive?.content)
+        assertTrue(
+            assertIs<JsonArray>(day["details"]).toString().contains("9120"),
+            "Expected the measured step count in the detail lines"
+        )
+    }
+
+    @Test
+    fun `get_polar_context says so plainly when Polar is not connected`() = runTest {
+        val registry = ToolRegistry(
+            trackedEntryRepository = FakeRangedTrackedEntryRepository(),
+            entryAnalysisRepository = FakeEntryAnalysisRepository(),
+            weightHistoryRepository = FakeWeightHistoryRepository(),
+            appSettingsRepository = FakeAppSettingsRepository(polarConnected = false),
+            nutritionalProfileRepository = FakeNutritionalProfileRepository(),
+            polarInsightService = PolarInsightService(FakePolarSyncRepository()),
+            clock = fixedClock,
+            timeZoneProvider = { TimeZone.UTC }
+        )
+
+        val content = registry.call("get_polar_context", buildJsonObject {
+            put("startDate", JsonPrimitive("2026-07-20"))
+            put("endDate", JsonPrimitive("2026-07-26"))
+        })
+
+        // Not connected is different from connected-with-no-data, and must not read as
+        // "you did nothing that week".
+        assertFalse(content["polarConnected"]!!.jsonPrimitive.boolean)
+        assertEquals(0, assertIs<JsonArray>(content["days"]).size)
+    }
+
+    @Test
+    fun `get_weight_history accepts an explicit date range`() = runTest {
+        val registry = ToolRegistry(
+            trackedEntryRepository = FakeRangedTrackedEntryRepository(),
+            entryAnalysisRepository = FakeEntryAnalysisRepository(),
+            weightHistoryRepository = FakeWeightHistoryRepository(
+                listOf(
+                    WeightRecord(
+                        weightRecordId = 1L,
+                        weightValue = 80.5,
+                        weightUnit = "kg",
+                        source = "manual",
+                        recordedAt = instantOn(2026, 7, 22)
+                    )
+                )
+            ),
+            appSettingsRepository = FakeAppSettingsRepository(),
+            nutritionalProfileRepository = FakeNutritionalProfileRepository(),
+            clock = fixedClock,
+            timeZoneProvider = { TimeZone.UTC }
+        )
+
+        val content = registry.call("get_weight_history", buildJsonObject {
+            put("startDate", JsonPrimitive("2026-07-20"))
+            put("endDate", JsonPrimitive("2026-07-26"))
+        })
+
+        val range = assertIs<JsonObject>(content["range"])
+        assertEquals("2026-07-20", range["startDate"]?.jsonPrimitive?.content)
+        assertEquals("2026-07-26", range["endDate"]?.jsonPrimitive?.content)
+        assertEquals(1, content["count"]?.jsonPrimitive?.int)
+        // The relative-days shape is not used when a range is given.
+        assertEquals(null, content["days"])
+    }
+
+    @Test
+    fun `get_nutrition_totals can group a period by week`() = runTest {
+        val (entries, analyses) = sixWeeksOfMeals()
+        val registry = rangedRegistry(entries, analyses)
+
+        val content = registry.call("get_nutrition_totals", buildJsonObject {
+            put("startDate", JsonPrimitive("2026-07-13"))
+            put("endDate", JsonPrimitive("2026-07-26"))
+            put("groupBy", JsonPrimitive("week"))
+        })
+
+        val buckets = assertIs<JsonArray>(content["buckets"])
+        assertEquals(2, buckets.size)
+        buckets.forEach { bucket ->
+            assertTrue(assertIs<JsonObject>(bucket).containsKey("weekStartDate"))
+        }
+    }
+
+    @Test
+    fun `reversed dates are exchanged rather than returning nothing`() = runTest {
+        val (entries, analyses) = sixWeeksOfMeals()
+        val registry = rangedRegistry(entries, analyses)
+
+        val content = registry.call("get_entries", buildJsonObject {
+            put("startDate", JsonPrimitive("2026-07-26"))
+            put("endDate", JsonPrimitive("2026-07-20"))
+        })
+
+        val range = assertIs<JsonObject>(content["range"])
+        assertTrue(range["swapped"]!!.jsonPrimitive.boolean)
+        assertEquals(7, content["totalMatching"]?.jsonPrimitive?.int)
+    }
+
+    @Test
+    fun `entry type filter narrows a ranged query`() = runTest {
+        val at = instantOn(2026, 7, 22)
+        val registry = rangedRegistry(
+            entries = listOf(
+                mealEntry(1L, at, 500.0, "lunch"),
+                TrackedEntry(
+                    entryId = 2L,
+                    entryType = EntryType.EXERCISE,
+                    capturedAt = at,
+                    processingStatus = ProcessingStatus.COMPLETED,
+                    userNotes = "run"
+                )
+            )
+        )
+
+        val content = registry.call("get_entries", buildJsonObject {
+            put("startDate", JsonPrimitive("2026-07-22"))
+            put("endDate", JsonPrimitive("2026-07-22"))
+            put("entryTypes", JsonArray(listOf(JsonPrimitive("Exercise"))))
+        })
+
+        assertEquals(1, content["totalMatching"]?.jsonPrimitive?.int)
+        val entry = assertIs<JsonObject>(assertIs<JsonArray>(content["entries"]).single())
+        assertEquals("Exercise", entry["entryType"]?.jsonPrimitive?.content)
     }
 
     // endregion
@@ -970,7 +1275,66 @@ class ToolRegistryTest {
         override suspend fun upsert(profile: NutritionalProfile) {}
     }
 
-    private class FakeAppSettingsRepository : AppSettingsRepository {
+    private class FakeWeeklySummaryRepository(
+        private val summaries: List<WeeklySummary> = emptyList()
+    ) : WeeklySummaryRepository {
+        override suspend fun getAllSummaries(): List<WeeklySummary> = summaries
+        override suspend fun getSummaryById(id: Long): WeeklySummary? = null
+        override suspend fun getSummaryForWeek(weekStart: LocalDate): WeeklySummary? =
+            summaries.find { it.weekStartDate == weekStart }
+        override suspend fun getSummariesForDateRange(
+            startDate: LocalDate,
+            endDate: LocalDate
+        ): List<WeeklySummary> =
+            summaries.filter { it.weekStartDate >= startDate && it.weekStartDate <= endDate }
+        override suspend fun getRecentSummaries(limit: Long): List<WeeklySummary> = summaries
+        override suspend fun insertSummary(summary: WeeklySummary): Long = 1L
+        override suspend fun updateSummary(summary: WeeklySummary) {}
+        override suspend fun updateSummaryByWeek(weekStart: LocalDate, summary: WeeklySummary) {}
+        override suspend fun updateUserComments(weekStart: LocalDate, comments: String?) {}
+        override suspend fun deleteSummary(id: Long) {}
+        override suspend fun deleteSummaryByWeek(weekStart: LocalDate) {}
+        override suspend fun deleteOldSummaries(beforeDate: LocalDate) {}
+    }
+
+    private class FakePolarSyncRepository(
+        private val activities: List<StoredPolarActivity> = emptyList(),
+        private val sleepResults: List<StoredPolarSleepResult> = emptyList()
+    ) : PolarSyncRepository {
+        override suspend fun upsertActivities(activities: List<PolarDailyActivity>, syncedAt: Instant) = 0
+        override suspend fun getActivities(
+            startDate: LocalDate,
+            endDateExclusive: LocalDate
+        ): List<StoredPolarActivity> =
+            activities.filter { it.localDate >= startDate && it.localDate < endDateExclusive }
+        override suspend fun upsertSleepResults(results: List<PolarSleepResult>, syncedAt: Instant) = 0
+        override suspend fun getSleepResults(
+            startDate: LocalDate,
+            endDateExclusive: LocalDate
+        ): List<StoredPolarSleepResult> =
+            sleepResults.filter { it.localDate >= startDate && it.localDate < endDateExclusive }
+        override suspend fun upsertTrainingSessions(sessions: List<PolarTrainingSession>, syncedAt: Instant) = 0
+        override suspend fun getTrainingSessions(
+            startDate: LocalDate,
+            endDateExclusive: LocalDate
+        ): List<StoredPolarTrainingSession> = emptyList()
+        override suspend fun upsertNightlyRecharge(results: List<PolarNightlyRecharge>, syncedAt: Instant) = 0
+        override suspend fun getNightlyRecharge(
+            startDate: LocalDate,
+            endDateExclusive: LocalDate
+        ): List<StoredPolarNightlyRecharge> = emptyList()
+        override suspend fun upsertUserProfile(userId: String, profile: PolarUserProfile, syncedAt: Instant) {}
+        override suspend fun getUserProfile(userId: String): StoredPolarUserProfile? = null
+        override suspend fun getCheckpoint(metricFamily: PolarMetricFamily): PolarSyncCheckpoint? = null
+        override suspend fun getAllCheckpoints(): List<PolarSyncCheckpoint> = emptyList()
+        override suspend fun updateCheckpoint(checkpoint: PolarSyncCheckpoint) {}
+        override suspend fun clearCheckpoint(metricFamily: PolarMetricFamily) {}
+        override suspend fun clearAll() {}
+    }
+
+    private class FakeAppSettingsRepository(
+        private val polarConnected: Boolean = false
+    ) : AppSettingsRepository {
         override fun getApiKey(provider: LlmProvider): String? = null
         override fun setApiKey(provider: LlmProvider, apiKey: String) {}
         override fun removeApiKey(provider: LlmProvider) {}
@@ -1012,6 +1376,6 @@ class ToolRegistryTest {
         override fun setPendingOAuthSessionId(sessionId: String) {}
         override fun clearPendingOAuthSession() {}
         override fun clearPolarTokens() {}
-        override fun isPolarConnected(): Boolean = false
+        override fun isPolarConnected(): Boolean = polarConnected
     }
 }
