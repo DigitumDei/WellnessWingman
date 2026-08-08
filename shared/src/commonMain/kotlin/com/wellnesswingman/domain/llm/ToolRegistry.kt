@@ -11,6 +11,7 @@ import com.wellnesswingman.data.model.NutritionTotals
 import com.wellnesswingman.data.model.analysis.MealAnalysisResult
 import com.wellnesswingman.data.model.analysis.UnifiedAnalysisResult
 import com.wellnesswingman.data.repository.AppSettingsRepository
+import com.wellnesswingman.data.repository.DailyCheckInRepository
 import com.wellnesswingman.data.repository.DailySummaryRepository
 import com.wellnesswingman.data.repository.EntryAnalysisRepository
 import com.wellnesswingman.data.repository.NutritionalProfileRepository
@@ -58,6 +59,7 @@ class ToolRegistry(
      */
     private val dailySummaryRepository: DailySummaryRepository? = null,
     private val weeklySummaryRepository: WeeklySummaryRepository? = null,
+    private val dailyCheckInRepository: DailyCheckInRepository? = null,
     private val polarInsightService: PolarInsightService? = null,
     private val dailyTotalsCalculator: DailyTotalsCalculator = DailyTotalsCalculator(),
     private val clock: Clock = Clock.System,
@@ -305,6 +307,14 @@ class ToolRegistry(
                     putJsonObject("weightRecords") {
                         put("total", JsonPrimitive(weightRecords.size))
                     }
+                    dailyCheckInRepository?.let { repository ->
+                        val allCheckIns = repository.getAllCheckIns()
+                        putJsonObject("checkIns") {
+                            put("total", JsonPrimitive(allCheckIns.size))
+                            put("earliestDate", allCheckIns.minOfOrNull { it.checkInDate }?.toString()?.let(::JsonPrimitive) ?: JsonNull)
+                            put("latestDate", allCheckIns.maxOfOrNull { it.checkInDate }?.toString()?.let(::JsonPrimitive) ?: JsonNull)
+                        }
+                    }
                     put("polarConnected", JsonPrimitive(appSettingsRepository.isPolarConnected()))
                 }
             )
@@ -330,6 +340,11 @@ class ToolRegistry(
             val summaryDates = dailySummaryRepository
                 ?.getSummariesForDateRange(window.startDate, window.endDate)
                 ?.map { it.summaryDate }
+                ?.toSet()
+                .orEmpty()
+            val checkInDates = dailyCheckInRepository
+                ?.getCheckInsForDateRange(window.startDate, window.endDate)
+                ?.map { it.checkInDate }
                 ?.toSet()
                 .orEmpty()
 
@@ -370,6 +385,9 @@ class ToolRegistry(
                             }
                             sleepHours?.let { put("sleepHours", JsonPrimitive(it)) }
                             put("hasDailySummary", JsonPrimitive(date in summaryDates))
+                            // Flagged in the index so the model knows which days are worth a
+                            // get_check_ins call, without pulling the text during a wide scan.
+                            if (date in checkInDates) put("hasCheckIns", JsonPrimitive(true))
                         }
                     }))
                 }
@@ -559,6 +577,42 @@ class ToolRegistry(
                             put("sleepCount", JsonPrimitive(summary.sleepCount))
                             put("totalEntries", JsonPrimitive(summary.totalEntries))
                             putNullable("userComments", summary.userComments)
+                        }
+                    }))
+                }
+            )
+        }
+
+        val checkIns = dailyCheckInRepository
+        if (checkIns != null) register(
+            definition = ToolDefinition(
+                name = "get_check_ins",
+                description = "Get the user's own morning and evening check-ins for a date range: how they said they slept, how they felt, how the day went, and anything they did not log. This is subjective self-report, not measured data — treat it as their lived experience rather than something to correct.",
+                parametersSchema = dateRangeSchema(
+                    extraDescription = "Maximum span $MAX_DETAIL_DAYS days."
+                )
+            )
+        ) { call ->
+            val window = resolveWindow(call, MAX_DETAIL_DAYS)
+                ?: return@register invalidRange(call)
+
+            val found = checkIns.getCheckInsForDateRange(window.startDate, window.endDate)
+
+            ToolResult(
+                toolCallId = call.id,
+                name = call.name,
+                content = buildJsonObject {
+                    put("range", rangeJson(window))
+                    put("count", JsonPrimitive(found.size))
+                    put("checkIns", JsonArray(found.map { checkIn ->
+                        buildJsonObject {
+                            put("date", JsonPrimitive(checkIn.checkInDate.toString()))
+                            put("slot", JsonPrimitive(checkIn.slot.toStorageString()))
+                            put("capturedAt", JsonPrimitive(checkIn.capturedAt.toString()))
+                            // The user's own words, unaltered. No mood or energy score is derived
+                            // from them: that would turn feel back into measure.
+                            put("response", JsonPrimitive(checkIn.responseText))
+                            put("inputSource", JsonPrimitive(checkIn.inputSource.toStorageString()))
                         }
                     }))
                 }

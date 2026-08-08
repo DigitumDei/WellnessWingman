@@ -62,6 +62,7 @@ val domainModule = module {
             nutritionalProfileRepository = get(),
             dailySummaryRepository = get(),
             weeklySummaryRepository = get(),
+            dailyCheckInRepository = get(),
             polarInsightService = get(),
             dailyTotalsCalculator = get()
         )
