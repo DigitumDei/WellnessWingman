@@ -55,6 +55,11 @@ val dataModule = module {
         SqlDelightPolarSyncRepository(get())
     }
 
+    // Health Chat
+    single<HealthChatRepository> {
+        SqlDelightHealthChatRepository(get())
+    }
+
     // Polar OAuth
     single { PolarOAuthRepository(get(), get()) }
 

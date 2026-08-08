@@ -1,17 +1,28 @@
 -- Migration from version 9 to version 10
--- Adds DailyCheckIn for subjective morning and evening check-ins.
--- These are stored outside the TrackedEntry stream on purpose: a Sleep entry suppresses
--- Polar's measured sleep data in DailySummaryService, and check-ins record feel, not measure.
+-- Adds ChatConversation and ChatMessage tables for health-chat feature
 
-CREATE TABLE DailyCheckIn (
-    checkInId INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-    externalId TEXT,
-    checkInDate INTEGER NOT NULL,
-    slot TEXT NOT NULL,
-    capturedAt INTEGER NOT NULL,
-    responseText TEXT NOT NULL,
-    inputSource TEXT NOT NULL,
-    conversationExternalId TEXT
+CREATE TABLE ChatConversation (
+    conversationId INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    externalId TEXT NOT NULL UNIQUE,
+    title TEXT NOT NULL DEFAULT '',
+    provider TEXT,
+    model TEXT,
+    createdAt INTEGER NOT NULL,
+    updatedAt INTEGER NOT NULL
 );
 
-CREATE UNIQUE INDEX idx_daily_checkin_date_slot ON DailyCheckIn(checkInDate, slot);
+CREATE TABLE ChatMessage (
+    messageId INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    conversationId INTEGER NOT NULL,
+    role TEXT NOT NULL,
+    content TEXT NOT NULL,
+    createdAt INTEGER NOT NULL,
+    provider TEXT,
+    model TEXT,
+    toolCallsJson TEXT,
+    toolResultJson TEXT,
+    FOREIGN KEY (conversationId) REFERENCES ChatConversation(conversationId) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_chat_message_conversation ON ChatMessage(conversationId, createdAt);
+CREATE INDEX idx_chat_conversation_updated ON ChatConversation(updatedAt DESC);

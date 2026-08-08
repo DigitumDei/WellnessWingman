@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CalendarViewMonth
+import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -34,6 +35,7 @@ import com.wellnesswingman.ui.components.EmptyState
 import com.wellnesswingman.ui.components.ErrorMessage
 import com.wellnesswingman.ui.components.LoadingIndicator
 import com.wellnesswingman.ui.screens.calendar.WeekViewScreen
+import com.wellnesswingman.ui.screens.chat.HealthChatListScreen
 import com.wellnesswingman.ui.screens.calendar.day.DailySummaryActionCard
 import com.wellnesswingman.ui.screens.calendar.day.PolarMetricsCard
 import com.wellnesswingman.ui.screens.calendar.day.daySummaryActionDescription
@@ -84,6 +86,9 @@ class MainScreen : Screen {
                 TopAppBar(
                     title = { Text("Today") },
                     actions = {
+                        IconButton(onClick = { navigator.push(HealthChatListScreen()) }) {
+                            Icon(Icons.Default.Chat, contentDescription = "Health Chat")
+                        }
                         IconButton(onClick = { navigator.push(WeekViewScreen()) }) {
                             Icon(Icons.Default.CalendarViewMonth, contentDescription = "Calendar")
                         }

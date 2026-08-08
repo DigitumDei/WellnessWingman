@@ -12,7 +12,7 @@ import kotlinx.datetime.LocalDate
 import kotlin.test.*
 
 /**
- * Covers the 9 -> 10 migration that introduces DailyCheckIn.
+ * Covers the 11 -> 12 migration that introduces DailyCheckIn.
  *
  * The "old" database is built by creating the current schema and dropping the check-in table,
  * which is a faithful stand-in here because the migration only adds that table and its index —
@@ -62,7 +62,7 @@ class DailyCheckInDatabaseMigrationTest {
         dropCheckInTable()
         assertFalse(tableExists("DailyCheckIn"), "Precondition: table should be absent")
 
-        WellnessWingmanDatabase.Schema.migrate(driver, 9, 10)
+        WellnessWingmanDatabase.Schema.migrate(driver, 11, 12)
 
         assertTrue(tableExists("DailyCheckIn"), "Migration should have created DailyCheckIn")
     }
@@ -70,7 +70,7 @@ class DailyCheckInDatabaseMigrationTest {
     @Test
     fun `migrated table accepts and returns check-ins`() = runTest {
         dropCheckInTable()
-        WellnessWingmanDatabase.Schema.migrate(driver, 9, 10)
+        WellnessWingmanDatabase.Schema.migrate(driver, 11, 12)
 
         val repository = SqlDelightDailyCheckInRepository(WellnessWingmanDatabase(driver))
         val date = LocalDate(2026, 8, 7)
@@ -93,7 +93,7 @@ class DailyCheckInDatabaseMigrationTest {
     @Test
     fun `migrated unique index still enforces one check-in per slot per day`() = runTest {
         dropCheckInTable()
-        WellnessWingmanDatabase.Schema.migrate(driver, 9, 10)
+        WellnessWingmanDatabase.Schema.migrate(driver, 11, 12)
 
         val repository = SqlDelightDailyCheckInRepository(WellnessWingmanDatabase(driver))
         val date = LocalDate(2026, 8, 7)

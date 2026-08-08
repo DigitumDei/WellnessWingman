@@ -1,7 +1,10 @@
 package com.wellnesswingman.domain.llm
 
+import com.wellnesswingman.data.model.llm.LlmChatMessage
+import com.wellnesswingman.data.model.llm.LlmChatRole
 import com.wellnesswingman.data.model.llm.ToolCall
 import com.wellnesswingman.data.model.llm.ToolDefinition
+import com.wellnesswingman.data.model.llm.ToolResult
 import io.github.aakira.napier.Napier
 import io.ktor.client.*
 import io.ktor.client.call.*
@@ -161,12 +164,34 @@ class GeminiLlmClient(
         )
     }
 
+    override suspend fun generateChatResponse(
+        messages: List<LlmChatMessage>,
+        systemInstruction: String?,
+        jsonSchema: String?,
+        tools: List<ToolDefinition>,
+        toolExecutor: ToolExecutor?,
+        onToolRoundCompleted: (() -> Unit)?,
+    ): LlmAnalysisResult {
+        val contents = toGeminiContents(messages)
+        return runConversation(
+            contents = contents,
+            jsonSchema = jsonSchema,
+            tools = tools,
+            toolExecutor = toolExecutor,
+            startTime = Clock.System.now(),
+            chatSystemInstruction = systemInstruction,
+            onToolRoundCompleted = onToolRoundCompleted,
+        )
+    }
+
     private suspend fun runConversation(
         contents: MutableList<GeminiContent>,
         jsonSchema: String?,
         tools: List<ToolDefinition>,
         toolExecutor: ToolExecutor?,
-        startTime: kotlinx.datetime.Instant
+        startTime: kotlinx.datetime.Instant,
+        chatSystemInstruction: String? = null,
+        onToolRoundCompleted: (() -> Unit)? = null
     ): LlmAnalysisResult {
         var promptTokens = 0
         var completionTokens = 0
@@ -178,7 +203,8 @@ class GeminiLlmClient(
                     contents = contents,
                     tools = tools.takeIf { it.isNotEmpty() }?.let(::geminiTools),
                     toolConfig = toolConfig(tools),
-                    systemInstruction = systemInstruction(tools),
+                    systemInstruction = chatSystemInstruction?.let { GeminiContent(parts = listOf(GeminiPart(text = it))) }
+                        ?: systemInstruction(tools),
                     generationConfig = GenerationConfig(
                         responseMimeType = if (jsonSchema != null) "application/json" else null
                     )
@@ -221,25 +247,31 @@ class GeminiLlmClient(
                 GeminiContent(
                     role = "user",
                     parts = functionCalls.map { functionCall ->
-                        val result = runCatching {
-                            val arguments = functionCall.args.asJsonObjectOrNull()
+                        val parsedArguments = runCatching {
+                            functionCall.args.asJsonObjectOrNull()
                                 ?: throw IllegalArgumentException("Tool arguments must be a JSON object.")
-                            executor(
-                                ToolCall(
-                                    id = functionCall.id,
-                                    name = functionCall.name,
-                                    arguments = arguments
-                                )
-                            )
-                        }.getOrElse { error ->
-                            if (error is CancellationException) throw error
-                            com.wellnesswingman.data.model.llm.ToolResult(
-                                toolCallId = functionCall.id,
-                                name = functionCall.name,
-                                content = JsonPrimitive(error.message ?: "Tool execution failed."),
-                                isError = true
-                            )
                         }
+
+                        val result = parsedArguments.fold(
+                            onSuccess = { arguments ->
+                                executor(
+                                    ToolCall(
+                                        id = functionCall.id,
+                                        name = functionCall.name,
+                                        arguments = arguments
+                                    )
+                                )
+                            },
+                            onFailure = { error ->
+                                if (error is CancellationException) throw error
+                                ToolResult(
+                                    toolCallId = functionCall.id,
+                                    name = functionCall.name,
+                                    content = JsonPrimitive("Failed to parse tool arguments: ${error.message ?: "Unknown error"}"),
+                                    isError = true
+                                )
+                            }
+                        )
                         GeminiPart(
                             functionResponse = GeminiFunctionResponse(
                                 id = functionCall.id,
@@ -253,6 +285,7 @@ class GeminiLlmClient(
                     }
                 )
             )
+            onToolRoundCompleted?.invoke()
         }
 
         val response = executeRequest(
@@ -260,7 +293,8 @@ class GeminiLlmClient(
                 contents = contents,
                 tools = tools.takeIf { it.isNotEmpty() }?.let(::geminiTools),
                 toolConfig = toolConfig(tools),
-                systemInstruction = systemInstruction(tools),
+                systemInstruction = chatSystemInstruction?.let { GeminiContent(parts = listOf(GeminiPart(text = it))) }
+                    ?: systemInstruction(tools),
                 generationConfig = GenerationConfig(
                     responseMimeType = if (jsonSchema != null) "application/json" else null
                 )
@@ -338,6 +372,79 @@ class GeminiLlmClient(
                 )
             )
         }
+
+    private fun toGeminiContents(messages: List<LlmChatMessage>): MutableList<GeminiContent> {
+        val contents = mutableListOf<GeminiContent>()
+        var i = 0
+        while (i < messages.size) {
+            val msg = messages[i]
+            when (msg.role) {
+                LlmChatRole.USER -> contents.add(
+                    GeminiContent(
+                        role = "user",
+                        parts = listOf(GeminiPart(text = msg.content ?: ""))
+                    )
+                )
+                LlmChatRole.ASSISTANT -> {
+                    val parts = mutableListOf<GeminiPart>()
+                    if (msg.content != null) {
+                        parts.add(GeminiPart(text = msg.content))
+                    }
+                    msg.toolCalls?.forEach { tc ->
+                        parts.add(
+                            GeminiPart(
+                                functionCall = GeminiFunctionCall(
+                                    id = tc.id,
+                                    name = tc.name,
+                                    args = tc.arguments
+                                )
+                            )
+                        )
+                    }
+                    contents.add(
+                        GeminiContent(
+                            role = "model",
+                            parts = parts.ifEmpty { listOf(GeminiPart(text = "")) }
+                        )
+                    )
+                }
+                LlmChatRole.TOOL -> {
+                    val toolParts = mutableListOf<GeminiPart>()
+                    while (i < messages.size && messages[i].role == LlmChatRole.TOOL) {
+                        val toolMsg = messages[i]
+                        val responseJson = if (toolMsg.toolResultJson != null) {
+                            val parsed = json.parseToJsonElement(toolMsg.toolResultJson)
+                            if (parsed is JsonObject) parsed else buildJsonObject { put("content", parsed) }
+                        } else {
+                            buildJsonObject {
+                                put("ok", JsonPrimitive(true))
+                                put("content", JsonPrimitive(toolMsg.content ?: ""))
+                            }
+                        }
+                        toolParts.add(
+                            GeminiPart(
+                                functionResponse = GeminiFunctionResponse(
+                                    id = toolMsg.toolCallId,
+                                    name = toolMsg.toolName ?: "",
+                                    response = responseJson
+                                )
+                            )
+                        )
+                        i++
+                    }
+                    contents.add(
+                        GeminiContent(
+                            role = "user",
+                            parts = toolParts
+                        )
+                    )
+                    continue
+                }
+            }
+            i++
+        }
+        return contents
+    }
 }
 
 // Gemini API request/response models
