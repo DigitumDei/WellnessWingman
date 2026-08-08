@@ -256,13 +256,16 @@ class CheckInViewModel(
      * than a measurement.
      */
     private fun openingMessage(answer: String): String {
-        val prompt = when (slot) {
-            CheckInSlot.MORNING ->
-                "This is my morning check-in for ${_uiState.value.date} — how I slept and how I feel."
-            CheckInSlot.EVENING ->
-                "This is my evening check-in for ${_uiState.value.date} — how the day felt, and anything I didn't log."
+        val what = when (slot) {
+            CheckInSlot.MORNING -> "how I slept and how I feel"
+            CheckInSlot.EVENING -> "how the day felt, and anything I didn't log"
         }
-        return "$prompt\n\n$answer"
+        // "already saved" is load-bearing. Without it the assistant reads this as a request to
+        // record the check-in and apologises for not being able to, which is both wrong and
+        // unsettling when the answer is in fact already stored.
+        return "My ${slot.toStorageString().lowercase()} check-in for ${_uiState.value.date} " +
+            "is already saved in the app. I want to talk it through, not log it again.\n\n" +
+            "What I said about $what:\n\n$answer"
     }
 
     private fun conversationTitle(): String =

@@ -178,6 +178,12 @@ class CheckInViewModelTest {
         // The user's words go through unaltered, with framing around them.
         assertTrue(call.openingMessage.contains("Slept badly, woke at three. Feeling flat."))
         assertTrue(call.openingMessage.contains("morning check-in"))
+        // Without this the assistant reads the message as "please record this" and apologises
+        // for being unable to save a check-in that is in fact already stored.
+        assertTrue(
+            call.openingMessage.contains("already saved"),
+            "The opening turn must say the check-in is already stored"
+        )
         // Renamed, because the chat service would otherwise title the thread from the framing.
         assertEquals("Morning check-in — $today", call.title)
 
