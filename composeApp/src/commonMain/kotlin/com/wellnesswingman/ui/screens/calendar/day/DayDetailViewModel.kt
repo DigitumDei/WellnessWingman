@@ -9,8 +9,15 @@ import com.wellnesswingman.data.model.ProcessingStatus
 import com.wellnesswingman.data.model.TrackedEntry
 import com.wellnesswingman.data.model.analysis.MealAnalysisResult
 import com.wellnesswingman.data.model.analysis.UnifiedAnalysisResult
+import com.wellnesswingman.data.model.CheckInSlot
+import com.wellnesswingman.data.repository.AppSettingsRepository
+import com.wellnesswingman.data.repository.DailyCheckInRepository
 import com.wellnesswingman.data.repository.DailySummaryRepository
 import com.wellnesswingman.data.repository.EntryAnalysisRepository
+import com.wellnesswingman.domain.checkin.CheckInScheduleCalculator
+import com.wellnesswingman.domain.checkin.CheckInSlotSetting
+import com.wellnesswingman.domain.checkin.DayCheckInPlanner
+import com.wellnesswingman.domain.checkin.DayCheckInSlot
 import com.wellnesswingman.data.repository.TrackedEntryRepository
 import com.wellnesswingman.domain.analysis.DailySummaryService
 import com.wellnesswingman.domain.analysis.DailyTotalsCalculator
@@ -34,7 +41,9 @@ class DayDetailViewModel(
     private val dailySummaryService: DailySummaryService,
     private val dailyTotalsCalculator: DailyTotalsCalculator,
     private val polarInsightService: PolarInsightService,
-    private val fileSystem: FileSystemOperations
+    private val fileSystem: FileSystemOperations,
+    private val dailyCheckInRepository: DailyCheckInRepository,
+    private val appSettingsRepository: AppSettingsRepository
 ) : ScreenModel {
 
     private val _uiState = MutableStateFlow<DayDetailUiState>(DayDetailUiState.Loading)
@@ -76,7 +85,14 @@ class DayDetailViewModel(
                 val filteredEntries = entries.filter { it.entryType != EntryType.DAILY_SUMMARY }
                 val polarContext = polarInsightService.getDayContext(date)
 
-                if (shouldShowEmptyDayState(filteredEntries.size, polarContext.hasData)) {
+                val checkInSlots = loadCheckInSlots(date)
+
+                if (shouldShowEmptyDayState(
+                        entryCount = filteredEntries.size,
+                        polarHasData = polarContext.hasData,
+                        checkInSlotCount = checkInSlots.size
+                    )
+                ) {
                     _uiState.value = DayDetailUiState.Empty
                     _summaryCardState.value = SummaryCardState.Hidden
                 } else {
@@ -91,7 +107,8 @@ class DayDetailViewModel(
                         nutritionTotals = nutritionTotals,
                         hasCompletedMeals = hasCompletedMeals,
                         polarContext = polarContext,
-                        thumbnails = thumbnails
+                        thumbnails = thumbnails,
+                        checkInSlots = checkInSlots
                     )
 
                     updateSummaryCardState(date, hasDaySummaryInputs(hasCompletedMeals, polarContext.hasData))
@@ -100,6 +117,61 @@ class DayDetailViewModel(
                 Napier.e("Failed to load day $date", e)
                 _uiState.value = DayDetailUiState.Error(e.message ?: "Unknown error")
             }
+        }
+    }
+
+    /**
+     * Re-reads just the check-in slots for the day already on screen.
+     *
+     * Returning from the capture screen has to update the day, but a full reload would discard
+     * thumbnails and re-run the Polar and summary work for no reason. Cheap enough to call on
+     * every re-entry into composition.
+     */
+    fun refreshCheckIns() {
+        val date = currentDate ?: return
+        val state = _uiState.value as? DayDetailUiState.Success ?: return
+
+        screenModelScope.launch {
+            val slots = loadCheckInSlots(date)
+            if (slots != state.checkInSlots) {
+                _uiState.value = state.copy(checkInSlots = slots)
+            }
+        }
+    }
+
+    /**
+     * Check-in slots for the day: answers already given, plus — on today only — a blank slot
+     * once its prompt window has opened. Failing to read them must not take the whole day
+     * screen down with it, so this degrades to showing none.
+     */
+    private suspend fun loadCheckInSlots(date: LocalDate): List<DayCheckInSlot> {
+        return try {
+            val zone = TimeZone.currentSystemDefault()
+            val nowLocal = Clock.System.now().toLocalDateTime(zone)
+
+            DayCheckInPlanner.plan(
+                date = date,
+                today = nowLocal.date,
+                now = nowLocal.time,
+                settings = mapOf(
+                    CheckInSlot.MORNING to CheckInSlotSetting(
+                        enabled = appSettingsRepository.isMorningCheckInEnabled(),
+                        timeOfDay = CheckInScheduleCalculator.parseTimeOfDay(
+                            appSettingsRepository.getMorningCheckInTime()
+                        )
+                    ),
+                    CheckInSlot.EVENING to CheckInSlotSetting(
+                        enabled = appSettingsRepository.isEveningCheckInEnabled(),
+                        timeOfDay = CheckInScheduleCalculator.parseTimeOfDay(
+                            appSettingsRepository.getEveningCheckInTime()
+                        )
+                    )
+                ),
+                checkIns = dailyCheckInRepository.getCheckInsForDate(date)
+            )
+        } catch (e: Exception) {
+            Napier.w("Failed to load check-ins for $date. Continuing without them.", e)
+            emptyList()
         }
     }
 
@@ -206,8 +278,12 @@ class DayDetailViewModel(
     }
 }
 
-internal fun shouldShowEmptyDayState(entryCount: Int, polarHasData: Boolean): Boolean =
-    entryCount == 0 && !polarHasData
+// A day holding only a check-in is not an empty day: "slept badly, feel flat" is content.
+internal fun shouldShowEmptyDayState(
+    entryCount: Int,
+    polarHasData: Boolean,
+    checkInSlotCount: Int = 0
+): Boolean = entryCount == 0 && !polarHasData && checkInSlotCount == 0
 
 internal fun hasDaySummaryInputs(hasCompletedMeals: Boolean, polarHasData: Boolean): Boolean =
     hasCompletedMeals || polarHasData
@@ -219,7 +295,8 @@ sealed class DayDetailUiState {
         val nutritionTotals: NutritionTotals = NutritionTotals(),
         val hasCompletedMeals: Boolean = false,
         val polarContext: PolarDayContext,
-        val thumbnails: Map<Long, ByteArray> = emptyMap()
+        val thumbnails: Map<Long, ByteArray> = emptyMap(),
+        val checkInSlots: List<DayCheckInSlot> = emptyList()
     ) : DayDetailUiState()
     object Empty : DayDetailUiState()
     data class Error(val message: String) : DayDetailUiState()

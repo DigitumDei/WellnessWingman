@@ -102,7 +102,9 @@ val viewModelModule = module {
             dailySummaryService = get(),
             dailyTotalsCalculator = get(),
             polarInsightService = get(),
-            fileSystem = get()
+            fileSystem = get(),
+            dailyCheckInRepository = get(),
+            appSettingsRepository = get()
         )
     }
     factory { params ->
