@@ -11,6 +11,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import com.wellnesswingman.data.model.CheckInSlot
+import com.wellnesswingman.domain.checkin.CheckInScheduleCalculator
 import io.github.aakira.napier.Napier
 
 /**
@@ -23,7 +24,15 @@ import io.github.aakira.napier.Napier
  */
 class CheckInNotifier(private val context: Context) {
 
-    fun notifyCheckIn(slot: CheckInSlot) {
+    /**
+     * @param forDate the day the notification is about. Carried through the deep link so that
+     *   answering a notification the following morning still records against the evening it
+     *   was raised for, rather than whatever day it happens to be when it is tapped.
+     */
+    fun notifyCheckIn(
+        slot: CheckInSlot,
+        forDate: String = CheckInScheduleCalculator.todayIsoDate()
+    ) {
         if (!hasNotificationPermission()) {
             // Nothing actionable here — the settings screen is responsible for telling the user
             // their check-ins cannot be delivered.
@@ -39,7 +48,7 @@ class CheckInNotifier(private val context: Context) {
 
         createChannel(notificationManager)
 
-        val notification = buildNotification(slot)
+        val notification = buildNotification(slot, forDate)
         notificationManager.notify(notificationIdFor(slot), notification)
 
         Napier.i("Posted ${slot.toStorageString()} check-in notification")
@@ -68,7 +77,7 @@ class CheckInNotifier(private val context: Context) {
         notificationManager.createNotificationChannel(channel)
     }
 
-    private fun buildNotification(slot: CheckInSlot): Notification {
+    private fun buildNotification(slot: CheckInSlot, forDate: String): Notification {
         val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             Notification.Builder(context, CHANNEL_ID)
         } else {
@@ -92,7 +101,7 @@ class CheckInNotifier(private val context: Context) {
             .setStyle(Notification.BigTextStyle().bigText(text))
             .setSmallIcon(android.R.drawable.ic_menu_agenda)
             .setAutoCancel(true)
-            .setContentIntent(contentIntent(slot))
+            .setContentIntent(contentIntent(slot, forDate))
             .build()
     }
 
@@ -101,13 +110,14 @@ class CheckInNotifier(private val context: Context) {
      * OAuth callback, and MainActivity is already `singleTask`, so this routes through
      * `onNewIntent` rather than creating a second activity instance.
      */
-    private fun contentIntent(slot: CheckInSlot): PendingIntent {
+    private fun contentIntent(slot: CheckInSlot, forDate: String): PendingIntent {
         val path = when (slot) {
             CheckInSlot.MORNING -> "morning"
             CheckInSlot.EVENING -> "evening"
         }
 
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("wellnesswingman://checkin/$path")).apply {
+        val uri = Uri.parse("wellnesswingman://checkin/$path?date=$forDate")
+        val intent = Intent(Intent.ACTION_VIEW, uri).apply {
             setPackage(context.packageName)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }

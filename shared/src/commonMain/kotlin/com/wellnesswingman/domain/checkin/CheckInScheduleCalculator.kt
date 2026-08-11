@@ -81,6 +81,15 @@ object CheckInScheduleCalculator {
      * dependency of their own. The testable arithmetic stays in the pure overloads above; this is
      * only the impure edge that reads the clock.
      */
+    /**
+     * Today's local date as `YYYY-MM-DD`.
+     *
+     * Exists for the same reason as [nextOccurrenceEpochMillis]: platform code stamps the day a
+     * notification is raised for, and does so without needing a kotlinx-datetime dependency.
+     */
+    fun todayIsoDate(): String =
+        Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date.toString()
+
     fun nextOccurrenceEpochMillis(timeOfDaySetting: String): Long? {
         return nextOccurrence(
             now = Clock.System.now(),

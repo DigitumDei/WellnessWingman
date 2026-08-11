@@ -79,8 +79,13 @@ class MainActivity : ComponentActivity(), KoinComponent {
             return true
         }
 
-        Napier.d("Check-in deep link received for ${slot.toStorageString()}")
-        pendingCheckInStore.request(slot)
+        // The notification names the day it was raised for. Answering last night's prompt this
+        // morning must still record against last night, not today. An unparseable or absent
+        // date falls back to today, which is the pre-existing behaviour.
+        val isoDate = uri.getQueryParameter("date")
+
+        Napier.d("Check-in deep link received for ${slot.toStorageString()}, date=${isoDate ?: "today"}")
+        pendingCheckInStore.request(slot, isoDate)
         return true
     }
 
