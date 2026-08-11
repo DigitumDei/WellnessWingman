@@ -1,5 +1,8 @@
 package com.wellnesswingman.domain.llm
 
+import com.wellnesswingman.data.model.CheckInInputSource
+import com.wellnesswingman.data.model.CheckInSlot
+import com.wellnesswingman.data.model.DailyCheckIn
 import com.wellnesswingman.data.model.DailySummary
 import com.wellnesswingman.data.model.EntryAnalysis
 import com.wellnesswingman.data.model.EntryType
@@ -23,6 +26,7 @@ import com.wellnesswingman.data.model.polar.StoredPolarTrainingSession
 import com.wellnesswingman.data.model.polar.StoredPolarUserProfile
 import com.wellnesswingman.data.model.llm.ToolDefinition
 import com.wellnesswingman.data.repository.AppSettingsRepository
+import com.wellnesswingman.data.repository.DailyCheckInRepository
 import com.wellnesswingman.data.repository.DailySummaryRepository
 import com.wellnesswingman.data.repository.EntryAnalysisRepository
 import com.wellnesswingman.data.repository.LlmProvider
@@ -396,6 +400,147 @@ class ToolRegistryTest {
         })
         val detailedEntry = assertIs<JsonObject>(assertIs<JsonArray>(detailed["entries"]).single())
         assertTrue(detailedEntry.containsKey("latestInsightsJson"))
+    }
+
+    private fun checkIn(
+        date: LocalDate,
+        slot: CheckInSlot,
+        text: String,
+        source: CheckInInputSource = CheckInInputSource.TYPED
+    ) = DailyCheckIn(
+        checkInDate = date,
+        slot = slot,
+        capturedAt = instantOn(date.year, date.monthNumber, date.dayOfMonth, if (slot == CheckInSlot.MORNING) 7 else 21),
+        responseText = text,
+        inputSource = source
+    )
+
+    private fun checkInRegistry(
+        checkIns: List<DailyCheckIn>,
+        entries: List<TrackedEntry> = emptyList(),
+        analyses: Map<Long, EntryAnalysis> = emptyMap()
+    ) = ToolRegistry(
+        trackedEntryRepository = FakeRangedTrackedEntryRepository(entries),
+        entryAnalysisRepository = FakeEntryAnalysisRepository(analyses),
+        weightHistoryRepository = FakeWeightHistoryRepository(),
+        appSettingsRepository = FakeAppSettingsRepository(),
+        nutritionalProfileRepository = FakeNutritionalProfileRepository(),
+        dailySummaryRepository = FakeDailySummaryRepository(),
+        dailyCheckInRepository = FakeDailyCheckInRepository(checkIns),
+        clock = fixedClock,
+        timeZoneProvider = { TimeZone.UTC }
+    )
+
+    @Test
+    fun `get_check_ins returns the user's own words for a period`() = runTest {
+        val registry = checkInRegistry(
+            listOf(
+                checkIn(
+                    LocalDate(2026, 7, 22),
+                    CheckInSlot.MORNING,
+                    "Slept badly, woke at three. Feeling flat.",
+                    CheckInInputSource.VOICE
+                ),
+                checkIn(
+                    LocalDate(2026, 7, 22),
+                    CheckInSlot.EVENING,
+                    "Better than this morning. Walked 40 minutes at lunch."
+                ),
+                checkIn(LocalDate(2026, 6, 1), CheckInSlot.MORNING, "Out of range")
+            )
+        )
+
+        val content = registry.call("get_check_ins", buildJsonObject {
+            put("startDate", JsonPrimitive("2026-07-20"))
+            put("endDate", JsonPrimitive("2026-07-26"))
+        })
+
+        assertEquals(2, content["count"]?.jsonPrimitive?.int)
+        val entries = assertIs<JsonArray>(content["checkIns"]).map { assertIs<JsonObject>(it) }
+
+        val morning = entries.single { it["slot"]?.jsonPrimitive?.content == "Morning" }
+        // Verbatim: the whole point is what they said, not a derived score.
+        assertEquals(
+            "Slept badly, woke at three. Feeling flat.",
+            morning["response"]?.jsonPrimitive?.content
+        )
+        assertEquals("Voice", morning["inputSource"]?.jsonPrimitive?.content)
+        assertEquals("2026-07-22", morning["date"]?.jsonPrimitive?.content)
+
+        assertTrue(entries.any { it["slot"]?.jsonPrimitive?.content == "Evening" })
+    }
+
+    @Test
+    fun `get_check_ins reports no score or rating fields`() = runTest {
+        val registry = checkInRegistry(
+            listOf(checkIn(LocalDate(2026, 7, 22), CheckInSlot.MORNING, "Rough night"))
+        )
+
+        val content = registry.call("get_check_ins", buildJsonObject {
+            put("startDate", JsonPrimitive("2026-07-22"))
+            put("endDate", JsonPrimitive("2026-07-22"))
+        })
+
+        val entry = assertIs<JsonObject>(assertIs<JsonArray>(content["checkIns"]).single())
+        // Guards the design rule: check-ins stay feel, never measure.
+        assertEquals(null, entry["score"])
+        assertEquals(null, entry["mood"])
+        assertEquals(null, entry["rating"])
+    }
+
+    @Test
+    fun `get_check_ins is empty rather than failing for a period with none`() = runTest {
+        val registry = checkInRegistry(emptyList())
+
+        val content = registry.call("get_check_ins", buildJsonObject {
+            put("startDate", JsonPrimitive("2026-07-20"))
+            put("endDate", JsonPrimitive("2026-07-26"))
+        })
+
+        assertEquals(0, content["count"]?.jsonPrimitive?.int)
+        assertEquals(0, assertIs<JsonArray>(content["checkIns"]).size)
+    }
+
+    @Test
+    fun `daily overview flags which days have a check-in`() = runTest {
+        val registry = checkInRegistry(
+            checkIns = listOf(checkIn(LocalDate(2026, 7, 22), CheckInSlot.MORNING, "Slept badly"))
+        )
+
+        val content = registry.call("get_daily_overview", buildJsonObject {
+            put("startDate", JsonPrimitive("2026-07-20"))
+            put("endDate", JsonPrimitive("2026-07-23"))
+        })
+
+        val days = assertIs<JsonArray>(content["days"]).map { assertIs<JsonObject>(it) }
+        val flagged = days.single { it["date"]?.jsonPrimitive?.content == "2026-07-22" }
+        assertTrue(flagged["hasCheckIns"]!!.jsonPrimitive.boolean)
+        // Absent, not false, on days without one — the index stays compact.
+        assertEquals(null, days.single { it["date"]?.jsonPrimitive?.content == "2026-07-21" }["hasCheckIns"])
+    }
+
+    @Test
+    fun `get_data_availability reports the span of check-ins`() = runTest {
+        val registry = checkInRegistry(
+            listOf(
+                checkIn(LocalDate(2026, 7, 1), CheckInSlot.MORNING, "First"),
+                checkIn(LocalDate(2026, 7, 22), CheckInSlot.EVENING, "Latest")
+            )
+        )
+
+        val content = registry.call("get_data_availability")
+
+        val checkInInfo = assertIs<JsonObject>(content["checkIns"])
+        assertEquals(2, checkInInfo["total"]?.jsonPrimitive?.int)
+        assertEquals("2026-07-01", checkInInfo["earliestDate"]?.jsonPrimitive?.content)
+        assertEquals("2026-07-22", checkInInfo["latestDate"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `get_check_ins is not advertised without a check-in source`() = runTest {
+        val registry = rangedRegistry()
+
+        assertFalse(registry.definitions().map { it.name }.contains("get_check_ins"))
     }
 
     @Test
@@ -1275,6 +1420,28 @@ class ToolRegistryTest {
         override suspend fun upsert(profile: NutritionalProfile) {}
     }
 
+    private class FakeDailyCheckInRepository(
+        private val checkIns: List<DailyCheckIn> = emptyList()
+    ) : DailyCheckInRepository {
+        override suspend fun getAllCheckIns(): List<DailyCheckIn> = checkIns
+        override suspend fun getCheckInsForDate(date: LocalDate) =
+            checkIns.filter { it.checkInDate == date }
+        override suspend fun getCheckIn(date: LocalDate, slot: CheckInSlot) =
+            checkIns.firstOrNull { it.checkInDate == date && it.slot == slot }
+        override suspend fun getCheckInsForDateRange(startDate: LocalDate, endDate: LocalDate) =
+            checkIns.filter { it.checkInDate >= startDate && it.checkInDate <= endDate }
+        override suspend fun getCheckInByExternalId(externalId: String): DailyCheckIn? = null
+        override suspend fun saveCheckIn(checkIn: DailyCheckIn) = 1L
+        override suspend fun attachConversation(
+            date: LocalDate,
+            slot: CheckInSlot,
+            conversationExternalId: String
+        ) {}
+        override suspend fun deleteCheckIn(date: LocalDate, slot: CheckInSlot) {}
+        override suspend fun deleteOldCheckIns(beforeDate: LocalDate) {}
+        override suspend fun upsertCheckIn(checkIn: DailyCheckIn) {}
+    }
+
     private class FakeWeeklySummaryRepository(
         private val summaries: List<WeeklySummary> = emptyList()
     ) : WeeklySummaryRepository {
@@ -1362,6 +1529,14 @@ class ToolRegistryTest {
         override fun clearProfileData() {}
         override fun getImageRetentionThresholdDays(): Int = 30
         override fun setImageRetentionThresholdDays(days: Int) {}
+        override fun isMorningCheckInEnabled(): Boolean = false
+        override fun setMorningCheckInEnabled(enabled: Boolean) {}
+        override fun getMorningCheckInTime(): String = "07:00"
+        override fun setMorningCheckInTime(time: String) {}
+        override fun isEveningCheckInEnabled(): Boolean = false
+        override fun setEveningCheckInEnabled(enabled: Boolean) {}
+        override fun getEveningCheckInTime(): String = "21:00"
+        override fun setEveningCheckInTime(time: String) {}
         override fun getPolarAccessToken(): String? = null
         override fun setPolarAccessToken(token: String) {}
         override fun getPolarRefreshToken(): String? = null

@@ -10,8 +10,10 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import com.wellnesswingman.data.model.CheckInSlot
 import com.wellnesswingman.data.repository.AppSettingsRepository
 import com.wellnesswingman.domain.capture.PendingCapture
+import com.wellnesswingman.domain.checkin.PendingCheckInStore
 import com.wellnesswingman.domain.capture.PendingCaptureStore
 import com.wellnesswingman.domain.oauth.PendingOAuthResultStore
 import com.wellnesswingman.platform.FileSystem
@@ -29,6 +31,7 @@ class MainActivity : ComponentActivity(), KoinComponent {
     private val fileSystem: FileSystem by inject()
     private val pendingOAuthResultStore: PendingOAuthResultStore by inject()
     private val appSettingsRepository: AppSettingsRepository by inject()
+    private val pendingCheckInStore: PendingCheckInStore by inject()
 
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -41,6 +44,7 @@ class MainActivity : ComponentActivity(), KoinComponent {
 
         requestNotificationPermissionIfNeeded()
         handleOAuthDeepLink(intent)
+        handleCheckInDeepLink(intent)
         handleShareIntent(intent)
 
         setContent {
@@ -52,9 +56,37 @@ class MainActivity : ComponentActivity(), KoinComponent {
         super.onNewIntent(intent)
         setIntent(intent)
         if (handleOAuthDeepLink(intent)) return
+        if (handleCheckInDeepLink(intent)) return
         if (handleShareIntent(intent)) {
             recreate()
         }
+    }
+
+    /**
+     * Routes `wellnesswingman://checkin/{morning|evening}` from the check-in notification.
+     *
+     * The slot is handed to [PendingCheckInStore] rather than navigated directly, so the
+     * composition owns navigation and a configuration change cannot replay it.
+     */
+    private fun handleCheckInDeepLink(intent: Intent?): Boolean {
+        if (intent?.action != Intent.ACTION_VIEW) return false
+        val uri = intent.data ?: return false
+        if (uri.scheme != "wellnesswingman" || uri.host != "checkin") return false
+
+        val slot = CheckInSlot.fromString(uri.lastPathSegment)
+        if (slot == null) {
+            Napier.w("Check-in deep link had an unrecognisable slot: ${uri.lastPathSegment}")
+            return true
+        }
+
+        // The notification names the day it was raised for. Answering last night's prompt this
+        // morning must still record against last night, not today. An unparseable or absent
+        // date falls back to today, which is the pre-existing behaviour.
+        val isoDate = uri.getQueryParameter("date")
+
+        Napier.d("Check-in deep link received for ${slot.toStorageString()}, date=${isoDate ?: "today"}")
+        pendingCheckInStore.request(slot, isoDate)
+        return true
     }
 
     private fun handleOAuthDeepLink(intent: Intent?): Boolean {

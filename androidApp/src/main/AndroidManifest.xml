@@ -13,6 +13,12 @@
     <!-- Foreground service permission -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <!--
+        Check-in alarms are cancelled by a reboot, so they must be re-armed on boot.
+        No SCHEDULE_EXACT_ALARM: check-ins use setAndAllowWhileIdle, which pierces Doze
+        without an exact-alarm permission Play would not grant a wellness app.
+    -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
@@ -60,7 +66,40 @@
                     android:host="oauth"
                     android:pathPrefix="/result" />
             </intent-filter>
+
+            <!-- Check-in notification deep link -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="wellnesswingman"
+                    android:host="checkin"
+                    android:pathPrefix="/" />
+            </intent-filter>
         </activity>
+
+        <!-- Fires at the configured check-in time, then re-arms for the next day -->
+        <receiver
+            android:name="com.wellnesswingman.checkin.CheckInAlarmReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.wellnesswingman.action.CHECK_IN" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Re-arms alarms after events that silently invalidate them -->
+        <receiver
+            android:name="com.wellnesswingman.checkin.CheckInBootReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
 
         <!-- Analysis foreground service for background LLM processing -->
         <service

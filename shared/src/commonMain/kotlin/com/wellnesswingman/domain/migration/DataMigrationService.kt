@@ -10,6 +10,7 @@ import com.wellnesswingman.data.repository.DailySummaryRepository
 import com.wellnesswingman.data.repository.EntryAnalysisRepository
 import com.wellnesswingman.data.repository.NutritionalProfileRepository
 import com.wellnesswingman.data.repository.TrackedEntryRepository
+import com.wellnesswingman.data.repository.DailyCheckInRepository
 import com.wellnesswingman.data.repository.WeeklySummaryRepository
 import com.wellnesswingman.data.repository.WeightHistoryRepository
 import com.wellnesswingman.platform.FileSystemOperations
@@ -34,6 +35,7 @@ data class ImportResult(
     val summariesImported: Int = 0,
     val weeklySummariesImported: Int = 0,
     val weightRecordsImported: Int = 0,
+    val dailyCheckInsImported: Int = 0,
     val errors: List<String> = emptyList()
 ) {
     val isSuccess get() = errors.isEmpty()
@@ -47,6 +49,7 @@ class DefaultDataMigrationService(
     private val weeklySummaryRepository: WeeklySummaryRepository,
     private val appSettingsRepository: AppSettingsRepository,
     private val weightHistoryRepository: WeightHistoryRepository,
+    private val dailyCheckInRepository: DailyCheckInRepository,
     private val fileSystem: FileSystemOperations,
     private val zipUtil: ZipOperations
 ) : DataMigrationService {
@@ -68,6 +71,7 @@ class DefaultDataMigrationService(
         val summaries = dailySummaryRepository.getAllSummaries()
         val weeklySummaries = weeklySummaryRepository.getAllSummaries()
         val weightRecords = weightHistoryRepository.getAllWeightRecords()
+        val dailyCheckIns = dailyCheckInRepository.getAllCheckIns()
 
         // Gather user profile
         val userProfile = ExportUserProfile(
@@ -108,7 +112,8 @@ class DefaultDataMigrationService(
             summariesAnalyses = emptyList(), // Kotlin doesn't have this junction table
             weeklySummaries = weeklySummaries.map { it.toExport() },
             userProfile = userProfile,
-            weightRecords = weightRecords.map { it.toExport() }
+            weightRecords = weightRecords.map { it.toExport() },
+            dailyCheckIns = dailyCheckIns.map { it.toExport() }
         )
 
         // 3. Serialize to JSON
@@ -329,7 +334,25 @@ class DefaultDataMigrationService(
                 }
             }
 
-            Napier.i("Import completed: $entriesImported entries, $nutritionalProfilesImported nutritional profiles, $analysesImported analyses, $summariesImported daily summaries, $weeklySummariesImported weekly summaries, $weightRecordsImported weight records")
+            // 11. Upsert daily check-ins
+            var dailyCheckInsImported = 0
+            for (exportCheckIn in exportData.dailyCheckIns) {
+                try {
+                    val domainCheckIn = exportCheckIn.toDomain()
+                    if (domainCheckIn == null) {
+                        Napier.w("Skipping check-in ${exportCheckIn.checkInId}: unrecognised slot '${exportCheckIn.slot}'")
+                        errors.add("Skipped check-in ${exportCheckIn.checkInId}: unrecognised slot")
+                        continue
+                    }
+                    dailyCheckInRepository.upsertCheckIn(domainCheckIn)
+                    dailyCheckInsImported++
+                } catch (e: Exception) {
+                    Napier.w("Failed to import check-in ${exportCheckIn.checkInId}", e)
+                    errors.add("Failed to import check-in ${exportCheckIn.checkInId}: ${e.message}")
+                }
+            }
+
+            Napier.i("Import completed: $entriesImported entries, $nutritionalProfilesImported nutritional profiles, $analysesImported analyses, $summariesImported daily summaries, $weeklySummariesImported weekly summaries, $weightRecordsImported weight records, $dailyCheckInsImported check-ins")
             return ImportResult(
                 entriesImported = entriesImported,
                 nutritionalProfilesImported = nutritionalProfilesImported,
@@ -337,6 +360,7 @@ class DefaultDataMigrationService(
                 summariesImported = summariesImported,
                 weeklySummariesImported = weeklySummariesImported,
                 weightRecordsImported = weightRecordsImported,
+                dailyCheckInsImported = dailyCheckInsImported,
                 errors = errors
             )
         } finally {

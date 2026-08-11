@@ -11,23 +11,27 @@ val localProps = Properties().apply {
     if (f.exists()) load(f.inputStream())
 }
 
-// Derive a monotonic versionCode from the git commit count so each build supersedes
-// the last. This restores Android's downgrade protection: an older (e.g. backup-restored)
-// APK has fewer commits -> a lower versionCode -> the OS refuses to silently reinstall it
-// over a newer build. Falls back to 1 when git history is unavailable (source archive / CI
-// shallow clone).
+// Application version: MAJOR.MINOR.BUILD.
 //
-// Uses Gradle's providers.exec API so the git output is tracked as a build input and the
-// Configuration Cache is correctly invalidated when the commit count changes.
-val computedVersionCode = try {
-    providers.exec {
-        commandLine("git", "rev-list", "--count", "HEAD")
-        workingDir = rootProject.projectDir
-        isIgnoreExitValue = true
-    }.standardOutput.asText.map { it.trim().toIntOrNull() ?: 1 }.get()
-} catch (e: Exception) {
-    1
-}
+// Bump these deliberately when releasing. Nothing derives them from git, which is the point:
+// a version must describe the software, not which branch happens to be checked out. A commit
+// count only rises along one line of history, so it falls when you switch to an older branch
+// or after a squash merge — and Android then refuses the install as a downgrade, on debug
+// builds just as much as release.
+//
+//   0.1.1 -> 10001      bump build
+//   0.2.0 -> 20000      bump minor, reset build
+//   1.0.0 -> 1000000    bump major
+//
+// versionCode only ever increases, so a real device keeps proper downgrade protection: an
+// older APK cannot silently replace a newer install. And because the number no longer depends
+// on git, switching branches never blocks a local install.
+val versionMajor = 0
+val versionMinor = 1
+val versionBuild = 1
+
+val appVersionName = "$versionMajor.$versionMinor.$versionBuild"
+val appVersionCode = versionMajor * 1_000_000 + versionMinor * 10_000 + versionBuild
 
 android {
     namespace = "com.wellnesswingman"
@@ -37,8 +41,8 @@ android {
         applicationId = "com.wellnesswingman"
         minSdk = 26
         targetSdk = 34
-        versionCode = computedVersionCode
-        versionName = "1.0.0"
+        versionCode = appVersionCode
+        versionName = appVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -56,6 +60,13 @@ android {
     }
 
     buildTypes {
+        // Deliberately no applicationIdSuffix: debug builds are what actually runs on real
+        // devices day to day, and a separate application id would strand that history in the
+        // old package. The version scheme above is what keeps installs working across branches.
+        debug {
+            versionNameSuffix = "-debug"
+        }
+
         release {
             isMinifyEnabled = false
             proguardFiles(

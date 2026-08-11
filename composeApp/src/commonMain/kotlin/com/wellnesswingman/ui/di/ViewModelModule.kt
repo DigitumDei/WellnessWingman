@@ -1,6 +1,10 @@
 package com.wellnesswingman.ui.di
 
 import com.wellnesswingman.ui.screens.calendar.CalendarViewModel
+import com.wellnesswingman.ui.screens.checkin.CheckInConversationStarter
+import com.wellnesswingman.ui.screens.checkin.CheckInViewModel
+import com.wellnesswingman.ui.screens.checkin.HealthChatCheckInConversationStarter
+import com.wellnesswingman.ui.screens.settings.CheckInSettingsViewModel
 import com.wellnesswingman.ui.screens.calendar.WeekViewModel
 import com.wellnesswingman.ui.screens.calendar.YearViewModel
 import com.wellnesswingman.ui.screens.calendar.day.DayDetailViewModel
@@ -33,9 +37,28 @@ val viewModelModule = module {
             polarInsightService = get(),
             fileSystem = get(),
             pendingCaptureStore = get(),
-            polarSyncOrchestrator = get()
+            polarSyncOrchestrator = get(),
+            dayCheckInsProvider = get()
         )
     }
+    factory { params ->
+        CheckInViewModel(
+            slot = params.get(),
+            checkInDate = params.getOrNull(),
+            dailyCheckInRepository = get(),
+            audioRecordingService = get(),
+            llmClientFactory = get(),
+            fileSystem = get(),
+            conversationStarter = get()
+        )
+    }
+    single<CheckInConversationStarter> {
+        HealthChatCheckInConversationStarter(
+            healthChatService = get(),
+            appSettingsRepository = get()
+        )
+    }
+    factoryOf(::CheckInSettingsViewModel)
     factoryOf(::SettingsViewModel)
     factoryOf(::PolarSettingsViewModel)
     factoryOf(::WeightHistoryViewModel)
@@ -81,7 +104,8 @@ val viewModelModule = module {
             dailySummaryService = get(),
             dailyTotalsCalculator = get(),
             polarInsightService = get(),
-            fileSystem = get()
+            fileSystem = get(),
+            dayCheckInsProvider = get()
         )
     }
     factory { params ->

@@ -21,6 +21,8 @@ import com.wellnesswingman.domain.migration.DataMigrationService
 import com.wellnesswingman.domain.migration.DefaultDataMigrationService
 import com.wellnesswingman.domain.navigation.CalendarNavigationService
 import com.wellnesswingman.domain.navigation.HistoricalNavigationContext
+import com.wellnesswingman.domain.checkin.DayCheckInsProvider
+import com.wellnesswingman.domain.checkin.PendingCheckInStore
 import com.wellnesswingman.domain.oauth.PendingOAuthResultStore
 import com.wellnesswingman.domain.polar.PolarInsightService
 import com.wellnesswingman.domain.polar.PolarSyncOrchestrator
@@ -41,6 +43,10 @@ val domainModule = module {
     // Idempotent photo entry processing (app-scoped; survives configuration changes)
     singleOf(::PhotoEntryProcessor)
 
+    // Check-ins
+    singleOf(::PendingCheckInStore)
+    single { DayCheckInsProvider(get(), get()) }
+
     // OAuth
     singleOf(::PendingOAuthResultStore)
     singleOf(::PolarInsightService)
@@ -58,6 +64,7 @@ val domainModule = module {
             nutritionalProfileRepository = get(),
             dailySummaryRepository = get(),
             weeklySummaryRepository = get(),
+            dailyCheckInRepository = get(),
             polarInsightService = get(),
             dailyTotalsCalculator = get()
         )
@@ -89,6 +96,7 @@ val domainModule = module {
             llmClientFactory = get(),
             toolRegistry = get(),
             dailyTotalsCalculator = get(),
+            dailyCheckInRepository = get(),
             weightHistoryRepository = get(),
             polarInsightService = get()
         )
@@ -134,6 +142,7 @@ val domainModule = module {
             weeklySummaryRepository = get(),
             appSettingsRepository = get(),
             weightHistoryRepository = get(),
+            dailyCheckInRepository = get(),
             fileSystem = get(),
             zipUtil = get()
         )

@@ -14,6 +14,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -23,9 +24,12 @@ import cafe.adriel.voyager.core.screen.ScreenKey
 import cafe.adriel.voyager.koin.getScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import com.wellnesswingman.data.model.CheckInSlot
 import com.wellnesswingman.data.model.NutritionTotals
 import com.wellnesswingman.data.model.TrackedEntry
+import com.wellnesswingman.domain.checkin.DayCheckInSlot
 import com.wellnesswingman.domain.polar.PolarDayContext
+import com.wellnesswingman.ui.screens.checkin.CheckInScreen
 import com.wellnesswingman.ui.components.EmptyState
 import com.wellnesswingman.ui.components.ErrorMessage
 import com.wellnesswingman.ui.components.LoadingIndicator
@@ -53,6 +57,12 @@ data class DayDetailScreen(val date: LocalDate) : Screen {
         // Load entries for this date
         viewModel.loadDay(date)
 
+        // Re-runs when this screen comes back to the top, so an answer given on the capture
+        // screen appears here without reloading the whole day.
+        LaunchedEffect(Unit) {
+            viewModel.refreshCheckIns()
+        }
+
         Scaffold(
             topBar = {
                 TopAppBar(
@@ -76,6 +86,8 @@ data class DayDetailScreen(val date: LocalDate) : Screen {
                     polarContext = state.polarContext,
                     summaryCardState = summaryCardState,
                     isGeneratingSummary = isGeneratingSummary,
+                    checkInSlots = state.checkInSlots,
+                    onCheckInClick = { slot -> navigator.push(CheckInScreen(slot, date)) },
                     onEntryClick = { entry -> navigator.push(EntryDetailScreen(entry.entryId)) },
                     onGenerateSummary = { viewModel.generateDailySummary() },
                     onViewSummary = { navigator.push(DailySummaryScreen(date)) },
@@ -126,6 +138,8 @@ fun DayEntryList(
     polarContext: PolarDayContext,
     summaryCardState: SummaryCardState,
     isGeneratingSummary: Boolean,
+    checkInSlots: List<DayCheckInSlot> = emptyList(),
+    onCheckInClick: (CheckInSlot) -> Unit = {},
     onEntryClick: (TrackedEntry) -> Unit,
     onGenerateSummary: () -> Unit,
     onViewSummary: () -> Unit,
@@ -172,6 +186,25 @@ fun DayEntryList(
         if (polarContext.hasData) {
             item(key = "polar_summary") {
                 PolarMetricsCard(polarContext = polarContext)
+            }
+        }
+
+        // How the day felt, above the measured entries: it is the user's own account, and it
+        // reads as context for what follows rather than another logged item.
+        if (checkInSlots.isNotEmpty()) {
+            item(key = "checkins_header") {
+                Text(
+                    text = "Check-ins",
+                    style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+            }
+
+            items(checkInSlots, key = { "checkin_${it.slot.toStorageString()}" }) { slot ->
+                CheckInCard(
+                    slot = slot,
+                    onClick = { onCheckInClick(slot.slot) }
+                )
             }
         }
 
@@ -309,6 +342,74 @@ internal fun daySummaryActionDescription(hasTrackedEntries: Boolean, hasPolarDat
         else ->
             "Generate a daily recap for this day."
     }
+
+/**
+ * A check-in on the day screen: either what the user said, or an invitation to say it.
+ *
+ * The blank state is deliberately quiet — an outline rather than a filled card — so an
+ * unanswered prompt sitting there all day reads as available, not as an unread alert.
+ */
+@Composable
+internal fun CheckInCard(
+    slot: DayCheckInSlot,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val label = when (slot.slot) {
+        CheckInSlot.MORNING -> "Morning"
+        CheckInSlot.EVENING -> "Evening"
+    }
+    val prompt = when (slot.slot) {
+        CheckInSlot.MORNING -> "How did you sleep? How do you feel?"
+        CheckInSlot.EVENING -> "How did the day feel? Anything you didn't log?"
+    }
+
+    val colors = if (slot.isAnswered) {
+        CardDefaults.cardColors()
+    } else {
+        CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+    }
+
+    Card(
+        onClick = onClick,
+        colors = colors,
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold
+                )
+                if (!slot.isAnswered) {
+                    Text(
+                        text = "Tap to check in",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+
+            Text(
+                text = slot.checkIn?.responseText ?: prompt,
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (slot.isAnswered) {
+                    MaterialTheme.colorScheme.onSurface
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                }
+            )
+        }
+    }
+}
 
 @Composable
 internal fun PolarMetricsCard(
