@@ -150,34 +150,47 @@ class CheckInViewModel(
         if (text.isEmpty()) return
 
         screenModelScope.launch {
-            _uiState.value = _uiState.value.copy(isSaving = true, saveError = null)
+            persist(text)?.let(onSaved)
+        }
+    }
 
-            val checkIn = DailyCheckIn(
-                checkInDate = _uiState.value.date,
-                slot = slot,
-                capturedAt = Clock.System.now(),
-                responseText = text,
-                inputSource = inputSourceFor(text),
-                // Saving is an upsert, so this must be carried forward or re-answering would
-                // orphan the thread already started about this check-in.
-                conversationExternalId = _uiState.value.conversationExternalId
+    /**
+     * Writes the answer, returning it on success and null on failure.
+     *
+     * Separate from [save] so starting a conversation can persist first and only proceed if
+     * that worked: the conversation link is stored with an UPDATE against an existing row, so
+     * chatting about an unsaved answer would both lose the answer and leave the thread
+     * unlinked.
+     */
+    private suspend fun persist(text: String): DailyCheckIn? {
+        _uiState.value = _uiState.value.copy(isSaving = true, saveError = null)
+
+        val checkIn = DailyCheckIn(
+            checkInDate = _uiState.value.date,
+            slot = slot,
+            capturedAt = Clock.System.now(),
+            responseText = text,
+            inputSource = inputSourceFor(text),
+            // Saving is an upsert, so this must be carried forward or re-answering would
+            // orphan the thread already started about this check-in.
+            conversationExternalId = _uiState.value.conversationExternalId
+        )
+
+        return try {
+            dailyCheckInRepository.saveCheckIn(checkIn)
+            commentsManager.markSaved()
+            _uiState.value = _uiState.value.copy(
+                isSaving = false,
+                hasSavedAnswer = true
             )
-
-            try {
-                dailyCheckInRepository.saveCheckIn(checkIn)
-                commentsManager.markSaved()
-                _uiState.value = _uiState.value.copy(
-                    isSaving = false,
-                    hasSavedAnswer = true
-                )
-                onSaved(checkIn)
-            } catch (e: Exception) {
-                Napier.e("Failed to save ${slot.toStorageString()} check-in", e)
-                _uiState.value = _uiState.value.copy(
-                    isSaving = false,
-                    saveError = e.message ?: "Could not save your check-in"
-                )
-            }
+            checkIn
+        } catch (e: Exception) {
+            Napier.e("Failed to save ${slot.toStorageString()} check-in", e)
+            _uiState.value = _uiState.value.copy(
+                isSaving = false,
+                saveError = e.message ?: "Could not save your check-in"
+            )
+            null
         }
     }
 
@@ -215,6 +228,12 @@ class CheckInViewModel(
         if (answer.isEmpty()) return
 
         screenModelScope.launch {
+            // Persist first. The conversation link is written with an UPDATE against an
+            // existing row, so chatting about an unsaved answer would silently lose the answer
+            // and leave the thread unlinked — reopening would then start a second opening turn
+            // into the same conversation.
+            if (persist(answer) == null) return@launch
+
             _uiState.value = _uiState.value.copy(
                 isStartingConversation = true,
                 conversationError = null

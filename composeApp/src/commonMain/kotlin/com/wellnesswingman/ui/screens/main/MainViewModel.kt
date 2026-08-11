@@ -216,7 +216,15 @@ class MainViewModel(
             thumbnails = thumbnails,
             checkInSlots = checkInSlots
         )
-        updateSummaryCardState(today, hasMainSummaryInputs(hasCompletedMeals, polarContext.hasData))
+        updateSummaryCardState(
+            today,
+            hasMainSummaryInputs(
+                hasCompletedMeals = hasCompletedMeals,
+                polarHasData = polarContext.hasData,
+                // Only an answered check-in counts; a waiting prompt is not yet content.
+                hasAnsweredCheckIn = checkInSlots.any { it.isAnswered }
+            )
+        )
     }
 
     private suspend fun updateSummaryCardState(date: LocalDate, hasSummaryInputs: Boolean) {
@@ -366,8 +374,13 @@ internal fun shouldShowEmptyMainState(
     checkInSlotCount: Int = 0
 ): Boolean = entryCount == 0 && !polarHasData && checkInSlotCount == 0
 
-internal fun hasMainSummaryInputs(hasCompletedMeals: Boolean, polarHasData: Boolean): Boolean =
-    hasCompletedMeals || polarHasData
+// An answered check-in is enough to summarise: DailySummaryService generates from one, and
+// without this the action card stays hidden, leaving no way to reach that path.
+internal fun hasMainSummaryInputs(
+    hasCompletedMeals: Boolean,
+    polarHasData: Boolean,
+    hasAnsweredCheckIn: Boolean = false
+): Boolean = hasCompletedMeals || polarHasData || hasAnsweredCheckIn
 
 sealed class SummaryCardState {
     object Hidden : SummaryCardState()

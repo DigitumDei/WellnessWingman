@@ -199,6 +199,49 @@ class CheckInViewModelTest {
     }
 
     @Test
+    fun `talking about an unsaved answer saves it first`() = runTest(dispatcher) {
+        // attachConversation is an UPDATE against an existing row. Starting a conversation
+        // without saving first lost the answer entirely and left the thread unlinked, so
+        // reopening sent a second opening turn into the same conversation.
+        val checkInRepo = FakeDailyCheckInRepository()
+        val starter = RecordingConversationStarter()
+        val vm = viewModel(checkInRepo, starter)
+        advanceUntilIdle()
+
+        vm.updateText("Slept badly and never tapped save")
+        vm.talkAboutThis { }
+        advanceUntilIdle()
+
+        val saved = checkInRepo.saved.singleOrNull()
+        assertNotNull(saved, "The answer must be persisted before the conversation starts")
+        assertEquals("Slept badly and never tapped save", saved.responseText)
+
+        // And the row exists, so the conversation link actually lands.
+        assertEquals(expectedConversationId, checkInRepo.attached.single().third)
+        assertTrue(vm.uiState.value.hasSavedAnswer)
+    }
+
+    @Test
+    fun `a failed save does not open a conversation`() = runTest(dispatcher) {
+        val failingRepo = object : DailyCheckInRepository by FakeDailyCheckInRepository() {
+            override suspend fun saveCheckIn(checkIn: DailyCheckIn): Long =
+                throw RuntimeException("disk full")
+        }
+        val starter = RecordingConversationStarter()
+        val vm = viewModel(failingRepo, starter)
+        advanceUntilIdle()
+
+        vm.updateText("Slept badly")
+        var opened: String? = null
+        vm.talkAboutThis { opened = it }
+        advanceUntilIdle()
+
+        assertTrue(starter.calls.isEmpty(), "No conversation when the answer could not be kept")
+        assertNull(opened)
+        assertNotNull(vm.uiState.value.saveError)
+    }
+
+    @Test
     fun `re-opening an existing thread does not start another conversation`() = runTest(dispatcher) {
         val checkInRepo = FakeDailyCheckInRepository()
         checkInRepo.seed(

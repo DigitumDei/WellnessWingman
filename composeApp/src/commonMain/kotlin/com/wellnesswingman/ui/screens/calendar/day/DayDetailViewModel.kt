@@ -105,7 +105,15 @@ class DayDetailViewModel(
                         checkInSlots = checkInSlots
                     )
 
-                    updateSummaryCardState(date, hasDaySummaryInputs(hasCompletedMeals, polarContext.hasData))
+                    updateSummaryCardState(
+                        date,
+                        hasDaySummaryInputs(
+                            hasCompletedMeals = hasCompletedMeals,
+                            polarHasData = polarContext.hasData,
+                            // Only an answered check-in counts; a waiting prompt is not content.
+                            hasAnsweredCheckIn = checkInSlots.any { it.isAnswered }
+                        )
+                    )
                 }
             } catch (e: Exception) {
                 Napier.e("Failed to load day $date", e)
@@ -254,8 +262,13 @@ internal fun shouldShowEmptyDayState(
     checkInSlotCount: Int = 0
 ): Boolean = entryCount == 0 && !polarHasData && checkInSlotCount == 0
 
-internal fun hasDaySummaryInputs(hasCompletedMeals: Boolean, polarHasData: Boolean): Boolean =
-    hasCompletedMeals || polarHasData
+// An answered check-in is enough to summarise: DailySummaryService generates from one, and
+// without this the action card stays hidden, leaving no way to reach that path.
+internal fun hasDaySummaryInputs(
+    hasCompletedMeals: Boolean,
+    polarHasData: Boolean,
+    hasAnsweredCheckIn: Boolean = false
+): Boolean = hasCompletedMeals || polarHasData || hasAnsweredCheckIn
 
 sealed class DayDetailUiState {
     object Loading : DayDetailUiState()
