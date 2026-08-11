@@ -34,7 +34,9 @@ data class CheckInUiState(
     val isStartingConversation: Boolean = false,
     val conversationError: String? = null,
     /** Set once a chat thread exists for this check-in, so re-opening returns to it. */
-    val conversationExternalId: String? = null
+    val conversationExternalId: String? = null,
+    /** True when answering for a past day, which the screen says out loud. */
+    val isBackfill: Boolean = false
 ) {
     /** The prompt shown above the input, and the reason this feature exists. */
     val questions: List<String>
@@ -62,6 +64,13 @@ data class CheckInUiState(
  */
 class CheckInViewModel(
     private val slot: CheckInSlot,
+    /**
+     * The day being checked in about. Null means today.
+     *
+     * Explicit rather than assumed, because a check-in answered for yesterday must be stored
+     * against yesterday — otherwise it lands on the wrong day and feeds the wrong summary.
+     */
+    private val checkInDate: LocalDate? = null,
     private val dailyCheckInRepository: DailyCheckInRepository,
     private val audioRecordingService: AudioRecordingService,
     private val llmClientFactory: LlmClientFactory,
@@ -94,7 +103,7 @@ class CheckInViewModel(
 
     private fun load() {
         screenModelScope.launch {
-            val date = today()
+            val date = checkInDate ?: today()
             try {
                 val existing = dailyCheckInRepository.getCheckIn(date, slot)
                 commentsManager.loadComments(existing?.responseText)
@@ -103,7 +112,8 @@ class CheckInViewModel(
                     isLoading = false,
                     hasSavedAnswer = existing != null,
                     // Re-opening a check-in returns to its thread rather than starting another.
-                    conversationExternalId = existing?.conversationExternalId
+                    conversationExternalId = existing?.conversationExternalId,
+                    isBackfill = date != today()
                 )
             } catch (e: Exception) {
                 Napier.e("Failed to load ${slot.toStorageString()} check-in", e)

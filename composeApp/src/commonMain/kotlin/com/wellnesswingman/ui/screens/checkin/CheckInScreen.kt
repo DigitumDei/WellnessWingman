@@ -13,11 +13,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.core.screen.Screen
+import cafe.adriel.voyager.core.screen.ScreenKey
 import cafe.adriel.voyager.koin.getScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import com.wellnesswingman.data.model.CheckInSlot
 import com.wellnesswingman.ui.components.LoadingIndicator
+import com.wellnesswingman.util.DateTimeUtil
+import kotlinx.datetime.LocalDate
 import com.wellnesswingman.ui.screens.chat.HealthChatThreadScreen
 import com.wellnesswingman.ui.screens.detail.VoiceRecordingButton
 import org.koin.core.parameter.parametersOf
@@ -28,12 +31,18 @@ import org.koin.core.parameter.parametersOf
  * Reached from the check-in notification deep link, or from inside the app for the current day —
  * a missed notification must not mean a lost check-in.
  */
-data class CheckInScreen(val slot: CheckInSlot) : Screen {
+data class CheckInScreen(
+    val slot: CheckInSlot,
+    /** The day being checked in about; null means today. */
+    val date: LocalDate? = null
+) : Screen {
+
+    override val key: ScreenKey get() = "CheckInScreen:${slot.toStorageString()}:${date ?: "today"}"
 
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
-        val viewModel = getScreenModel<CheckInViewModel> { parametersOf(slot) }
+        val viewModel = getScreenModel<CheckInViewModel> { parametersOf(slot, date) }
         val uiState by viewModel.uiState.collectAsState()
         val commentsState by viewModel.commentsState.collectAsState()
 
@@ -42,7 +51,20 @@ data class CheckInScreen(val slot: CheckInSlot) : Screen {
         Scaffold(
             topBar = {
                 TopAppBar(
-                    title = { Text(uiState.title) },
+                    title = {
+                        Column {
+                            Text(uiState.title)
+                            // Named explicitly when answering for a past day, so a backfilled
+                            // answer cannot be mistaken for today's.
+                            if (uiState.isBackfill) {
+                                Text(
+                                    text = DateTimeUtil.formatDateFull(uiState.date),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    },
                     navigationIcon = {
                         IconButton(onClick = { navigator.pop() }) {
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -73,7 +95,12 @@ data class CheckInScreen(val slot: CheckInSlot) : Screen {
                 }
 
                 Text(
-                    text = "In your own words — there are no scores here.",
+                    text = if (uiState.isBackfill) {
+                        "In your own words — there are no scores here. This will be saved " +
+                            "against ${DateTimeUtil.formatDate(uiState.date)}, not today."
+                    } else {
+                        "In your own words — there are no scores here."
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

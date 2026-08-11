@@ -98,28 +98,88 @@ class DayCheckInPlannerTest {
             checkIns = listOf(checkIn(CheckInSlot.MORNING, date = yesterday, text = "Rough night"))
         )
 
-        assertEquals(1, slots.size)
-        assertTrue(slots.single().isAnswered)
+        val morning = slots.single { it.slot == CheckInSlot.MORNING }
+        assertTrue(morning.isAnswered)
+        assertEquals("Rough night", morning.checkIn?.responseText)
     }
 
     @Test
-    fun `no blank prompt on a past day`() {
-        // Capture always writes to the current day, so offering a blank slot on a past date
-        // would record the answer against the wrong day.
-        val slots = plan(date = yesterday, now = LocalTime(22, 0))
+    fun `yesterday offers both slots so a missed check-in can be answered`() {
+        // Realising in the morning that you skipped the evening before is the ordinary case.
+        val slots = plan(date = yesterday, now = LocalTime(7, 30))
 
-        assertTrue(slots.isEmpty())
+        assertEquals(listOf(CheckInSlot.MORNING, CheckInSlot.EVENING), slots.map { it.slot })
+        assertTrue(slots.all { it.isBackfill })
     }
 
     @Test
-    fun `a past day shows only what was answered, never an empty second slot`() {
+    fun `a past day ignores the time-of-day rule`() {
+        // The day is over, so "an hour before 21:00" is meaningless there. At 00:05 today,
+        // yesterday's evening slot must still be offered.
+        val slots = plan(date = yesterday, now = LocalTime(0, 5))
+
+        assertEquals(listOf(CheckInSlot.MORNING, CheckInSlot.EVENING), slots.map { it.slot })
+    }
+
+    @Test
+    fun `today's slots are not marked as backfill`() {
+        val slots = plan(now = LocalTime(22, 0))
+
+        assertTrue(slots.none { it.isBackfill })
+    }
+
+    @Test
+    fun `a past day fills only the slot still missing`() {
         val slots = plan(
             date = yesterday,
             now = LocalTime(22, 0),
             checkIns = listOf(checkIn(CheckInSlot.EVENING, date = yesterday, text = "Long day"))
         )
 
-        assertEquals(listOf(CheckInSlot.EVENING), slots.map { it.slot })
+        val evening = slots.single { it.slot == CheckInSlot.EVENING }
+        assertTrue(evening.isAnswered)
+        assertFalse(evening.isBackfill, "An answered slot is a record, not a prompt")
+
+        val morning = slots.single { it.slot == CheckInSlot.MORNING }
+        assertTrue(morning.isPrompt)
+        assertTrue(morning.isBackfill)
+    }
+
+    @Test
+    fun `backfill stops at the window edge`() {
+        val lastAllowed = LocalDate(2026, 8, 2)   // 7 days before today
+        val tooOld = LocalDate(2026, 8, 1)        // 8 days
+
+        assertTrue(plan(date = lastAllowed, now = LocalTime(9, 0)).isNotEmpty())
+        assertTrue(
+            plan(date = tooOld, now = LocalTime(9, 0)).isEmpty(),
+            "Recalling how you slept beyond the window is not something anyone can do usefully"
+        )
+    }
+
+    @Test
+    fun `an old day still shows what was answered at the time`() {
+        val longAgo = LocalDate(2026, 1, 1)
+
+        val slots = plan(
+            date = longAgo,
+            now = LocalTime(9, 0),
+            checkIns = listOf(checkIn(CheckInSlot.MORNING, date = longAgo, text = "New year"))
+        )
+
+        assertEquals(1, slots.size)
+        assertTrue(slots.single().isAnswered)
+    }
+
+    @Test
+    fun `future days never offer a slot`() {
+        val tomorrow = LocalDate(2026, 8, 10)
+
+        assertTrue(
+            plan(date = tomorrow, now = LocalTime(9, 0)).isEmpty(),
+            "There is nothing to report on a day that has not happened"
+        )
+        assertFalse(DayCheckInPlanner.isBackfillable(tomorrow, today))
     }
 
     @Test

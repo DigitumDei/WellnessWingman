@@ -37,12 +37,14 @@ val viewModelModule = module {
             polarInsightService = get(),
             fileSystem = get(),
             pendingCaptureStore = get(),
-            polarSyncOrchestrator = get()
+            polarSyncOrchestrator = get(),
+            dayCheckInsProvider = get()
         )
     }
     factory { params ->
         CheckInViewModel(
             slot = params.get(),
+            checkInDate = params.getOrNull(),
             dailyCheckInRepository = get(),
             audioRecordingService = get(),
             llmClientFactory = get(),
@@ -103,8 +105,7 @@ val viewModelModule = module {
             dailyTotalsCalculator = get(),
             polarInsightService = get(),
             fileSystem = get(),
-            dailyCheckInRepository = get(),
-            appSettingsRepository = get()
+            dayCheckInsProvider = get()
         )
     }
     factory { params ->

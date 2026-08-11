@@ -87,7 +87,7 @@ data class DayDetailScreen(val date: LocalDate) : Screen {
                     summaryCardState = summaryCardState,
                     isGeneratingSummary = isGeneratingSummary,
                     checkInSlots = state.checkInSlots,
-                    onCheckInClick = { slot -> navigator.push(CheckInScreen(slot)) },
+                    onCheckInClick = { slot -> navigator.push(CheckInScreen(slot, date)) },
                     onEntryClick = { entry -> navigator.push(EntryDetailScreen(entry.entryId)) },
                     onGenerateSummary = { viewModel.generateDailySummary() },
                     onViewSummary = { navigator.push(DailySummaryScreen(date)) },

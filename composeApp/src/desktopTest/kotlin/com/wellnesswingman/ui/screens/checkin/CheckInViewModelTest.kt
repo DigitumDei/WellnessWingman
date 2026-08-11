@@ -17,7 +17,9 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import kotlinx.datetime.Clock
+import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.minus
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlin.test.AfterTest
@@ -149,9 +151,11 @@ class CheckInViewModelTest {
 
     private fun viewModel(
         checkInRepo: DailyCheckInRepository,
-        starter: CheckInConversationStarter
+        starter: CheckInConversationStarter,
+        checkInDate: LocalDate? = null
     ) = CheckInViewModel(
         slot = CheckInSlot.MORNING,
+        checkInDate = checkInDate,
         dailyCheckInRepository = checkInRepo,
         audioRecordingService = AudioRecordingService(),
         llmClientFactory = LlmClientFactory(MinimalSettings()),
@@ -291,6 +295,43 @@ class CheckInViewModelTest {
         advanceUntilIdle()
 
         assertTrue(starter.calls.isEmpty())
+    }
+
+    @Test
+    fun `a backfilled answer is recorded against the day it is about`() = runTest(dispatcher) {
+        // The reason blank slots were originally today-only: storing yesterday's answer against
+        // today would put it on the wrong day and feed the wrong daily summary.
+        val yesterday = today.minus(1, DateTimeUnit.DAY)
+        val checkInRepo = FakeDailyCheckInRepository()
+        val vm = viewModel(checkInRepo, RecordingConversationStarter(), checkInDate = yesterday)
+        advanceUntilIdle()
+
+        vm.updateText("Forgot to check in last night")
+        vm.save()
+        advanceUntilIdle()
+
+        val saved = checkInRepo.saved.single()
+        assertEquals(yesterday, saved.checkInDate)
+        assertTrue(
+            saved.capturedAt.toLocalDateTime(TimeZone.currentSystemDefault()).date >= yesterday,
+            "capturedAt records when it was answered, which may be after the day it is about"
+        )
+        assertTrue(vm.uiState.value.isBackfill)
+    }
+
+    @Test
+    fun `a backfilled conversation id uses the day being discussed`() = runTest(dispatcher) {
+        val yesterday = today.minus(1, DateTimeUnit.DAY)
+        val checkInRepo = FakeDailyCheckInRepository()
+        val starter = RecordingConversationStarter()
+        val vm = viewModel(checkInRepo, starter, checkInDate = yesterday)
+        advanceUntilIdle()
+
+        vm.updateText("Rough night, forgot to say")
+        vm.talkAboutThis { }
+        advanceUntilIdle()
+
+        assertEquals("checkin-$yesterday-morning", starter.calls.single().externalId)
     }
 
     @Test
