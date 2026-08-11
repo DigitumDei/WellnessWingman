@@ -21,6 +21,7 @@ import com.wellnesswingman.domain.migration.DataMigrationService
 import com.wellnesswingman.domain.migration.DefaultDataMigrationService
 import com.wellnesswingman.domain.navigation.CalendarNavigationService
 import com.wellnesswingman.domain.navigation.HistoricalNavigationContext
+import com.wellnesswingman.domain.checkin.DayCheckInsProvider
 import com.wellnesswingman.domain.checkin.PendingCheckInStore
 import com.wellnesswingman.domain.oauth.PendingOAuthResultStore
 import com.wellnesswingman.domain.polar.PolarInsightService
@@ -44,6 +45,7 @@ val domainModule = module {
 
     // Check-ins
     singleOf(::PendingCheckInStore)
+    single { DayCheckInsProvider(get(), get()) }
 
     // OAuth
     singleOf(::PendingOAuthResultStore)

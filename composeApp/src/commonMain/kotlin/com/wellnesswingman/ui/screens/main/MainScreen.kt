@@ -26,6 +26,7 @@ import cafe.adriel.voyager.koin.getScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import com.wellnesswingman.domain.oauth.PendingOAuthResultStore
+import com.wellnesswingman.data.model.CheckInSlot
 import com.wellnesswingman.data.model.EntryType
 import com.wellnesswingman.data.model.NutritionTotals
 import com.wellnesswingman.data.model.ProcessingStatus
@@ -36,6 +37,9 @@ import com.wellnesswingman.ui.components.ErrorMessage
 import com.wellnesswingman.ui.components.LoadingIndicator
 import com.wellnesswingman.ui.screens.calendar.WeekViewScreen
 import com.wellnesswingman.ui.screens.chat.HealthChatListScreen
+import com.wellnesswingman.domain.checkin.DayCheckInSlot
+import com.wellnesswingman.ui.screens.checkin.CheckInScreen
+import com.wellnesswingman.ui.screens.calendar.day.CheckInCard
 import com.wellnesswingman.ui.screens.calendar.day.DailySummaryActionCard
 import com.wellnesswingman.ui.screens.calendar.day.PolarMetricsCard
 import com.wellnesswingman.ui.screens.calendar.day.daySummaryActionDescription
@@ -71,6 +75,12 @@ class MainScreen : Screen {
             if (oauthResult != null) {
                 navigator.push(listOf(SettingsScreen(), PolarSettingsScreen()))
             }
+        }
+
+        // Re-runs when this screen returns to the top, so a check-in answered on the capture
+        // screen shows here. The screen model outlives that trip, so nothing else would.
+        LaunchedEffect(Unit) {
+            viewModel.refreshCheckIns()
         }
 
         // Recovery: navigate to PhotoReviewScreen if a pending capture exists after process death
@@ -123,6 +133,8 @@ class MainScreen : Screen {
                     polarContext = state.polarContext,
                     summaryCardState = summaryCardState,
                     isGeneratingSummary = isGeneratingSummary,
+                    checkInSlots = state.checkInSlots,
+                    onCheckInClick = { slot -> navigator.push(CheckInScreen(slot)) },
                     onEntryClick = { entry -> navigator.push(EntryDetailScreen(entry.entryId)) },
                     onGenerateSummary = { viewModel.generateDailySummary() },
                     onViewSummary = { navigator.push(DailySummaryScreen(Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date)) },
@@ -144,6 +156,8 @@ fun EntryList(
     polarContext: PolarDayContext,
     summaryCardState: SummaryCardState,
     isGeneratingSummary: Boolean,
+    checkInSlots: List<DayCheckInSlot> = emptyList(),
+    onCheckInClick: (CheckInSlot) -> Unit = {},
     onEntryClick: (TrackedEntry) -> Unit,
     onGenerateSummary: () -> Unit,
     onViewSummary: () -> Unit,
@@ -183,6 +197,24 @@ fun EntryList(
         if (polarContext.hasData) {
             item(key = "polar_summary") {
                 PolarMetricsCard(polarContext = polarContext)
+            }
+        }
+
+        // How the day felt, above the measured entries.
+        if (checkInSlots.isNotEmpty()) {
+            item(key = "checkins_header") {
+                Text(
+                    text = "Check-ins",
+                    style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+            }
+
+            items(checkInSlots, key = { "checkin_${it.slot.toStorageString()}" }) { slot ->
+                CheckInCard(
+                    slot = slot,
+                    onClick = { onCheckInClick(slot.slot) }
+                )
             }
         }
 

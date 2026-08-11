@@ -15,6 +15,8 @@ import com.wellnesswingman.data.repository.TrackedEntryRepository
 import com.wellnesswingman.domain.analysis.DailySummaryService
 import com.wellnesswingman.domain.analysis.DailyTotalsCalculator
 import com.wellnesswingman.domain.capture.PendingCaptureStore
+import com.wellnesswingman.domain.checkin.DayCheckInSlot
+import com.wellnesswingman.domain.checkin.DayCheckInsProvider
 import com.wellnesswingman.domain.polar.PolarDayContext
 import com.wellnesswingman.domain.polar.PolarInsightService
 import com.wellnesswingman.domain.polar.PolarSyncOrchestrator
@@ -43,7 +45,8 @@ class MainViewModel(
     private val polarInsightService: PolarInsightService,
     private val fileSystem: FileSystem,
     private val pendingCaptureStore: PendingCaptureStore,
-    private val polarSyncOrchestrator: PolarSyncOrchestrator
+    private val polarSyncOrchestrator: PolarSyncOrchestrator,
+    private val dayCheckInsProvider: DayCheckInsProvider
 ) : ScreenModel {
 
     private val _uiState = MutableStateFlow<MainUiState>(MainUiState.Loading)
@@ -187,8 +190,14 @@ class MainViewModel(
     private suspend fun renderTodayState(today: LocalDate, entries: List<TrackedEntry>) {
         val filteredEntries = entries.filter { it.entryType != EntryType.DAILY_SUMMARY }
         val polarContext = polarInsightService.getDayContext(today)
+        val checkInSlots = dayCheckInsProvider.slotsFor(today)
 
-        if (shouldShowEmptyMainState(filteredEntries.size, polarContext.hasData)) {
+        if (shouldShowEmptyMainState(
+                entryCount = filteredEntries.size,
+                polarHasData = polarContext.hasData,
+                checkInSlotCount = checkInSlots.size
+            )
+        ) {
             _uiState.value = MainUiState.Empty
             _summaryCardState.value = SummaryCardState.Hidden
             return
@@ -204,7 +213,8 @@ class MainViewModel(
             nutritionTotals = nutritionTotals,
             hasCompletedMeals = hasCompletedMeals,
             polarContext = polarContext,
-            thumbnails = thumbnails
+            thumbnails = thumbnails,
+            checkInSlots = checkInSlots
         )
         updateSummaryCardState(today, hasMainSummaryInputs(hasCompletedMeals, polarContext.hasData))
     }
@@ -220,6 +230,31 @@ class MainViewModel(
             SummaryCardState.HasSummary(existingSummary.summaryId)
         } else {
             SummaryCardState.NoSummary
+        }
+    }
+
+    /**
+     * Re-reads the check-in slots for today.
+     *
+     * The screen model outlives a trip to the capture screen, so without this an answer just
+     * given does not appear until the app restarts. Patching the existing state avoids
+     * discarding thumbnails and re-running the Polar and summary work; from any other state a
+     * full load is needed, since a first check-in turns an empty day into a populated one.
+     */
+    fun refreshCheckIns() {
+        screenModelScope.launch {
+            val today = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date
+            val state = _uiState.value
+
+            if (state !is MainUiState.Success) {
+                loadEntries()
+                return@launch
+            }
+
+            val slots = dayCheckInsProvider.slotsFor(today)
+            if (slots != state.checkInSlots) {
+                _uiState.value = state.copy(checkInSlots = slots)
+            }
         }
     }
 
@@ -318,13 +353,18 @@ sealed class MainUiState {
         val nutritionTotals: NutritionTotals = NutritionTotals(),
         val hasCompletedMeals: Boolean = false,
         val polarContext: PolarDayContext,
-        val thumbnails: Map<Long, ByteArray> = emptyMap()
+        val thumbnails: Map<Long, ByteArray> = emptyMap(),
+        val checkInSlots: List<DayCheckInSlot> = emptyList()
     ) : MainUiState()
     data class Error(val message: String) : MainUiState()
 }
 
-internal fun shouldShowEmptyMainState(entryCount: Int, polarHasData: Boolean): Boolean =
-    entryCount == 0 && !polarHasData
+// A day holding only a check-in — or an unanswered prompt waiting to be tapped — is not empty.
+internal fun shouldShowEmptyMainState(
+    entryCount: Int,
+    polarHasData: Boolean,
+    checkInSlotCount: Int = 0
+): Boolean = entryCount == 0 && !polarHasData && checkInSlotCount == 0
 
 internal fun hasMainSummaryInputs(hasCompletedMeals: Boolean, polarHasData: Boolean): Boolean =
     hasCompletedMeals || polarHasData

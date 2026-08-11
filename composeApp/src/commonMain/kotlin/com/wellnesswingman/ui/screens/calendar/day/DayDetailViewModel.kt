@@ -9,15 +9,10 @@ import com.wellnesswingman.data.model.ProcessingStatus
 import com.wellnesswingman.data.model.TrackedEntry
 import com.wellnesswingman.data.model.analysis.MealAnalysisResult
 import com.wellnesswingman.data.model.analysis.UnifiedAnalysisResult
-import com.wellnesswingman.data.model.CheckInSlot
-import com.wellnesswingman.data.repository.AppSettingsRepository
-import com.wellnesswingman.data.repository.DailyCheckInRepository
 import com.wellnesswingman.data.repository.DailySummaryRepository
 import com.wellnesswingman.data.repository.EntryAnalysisRepository
-import com.wellnesswingman.domain.checkin.CheckInScheduleCalculator
-import com.wellnesswingman.domain.checkin.CheckInSlotSetting
-import com.wellnesswingman.domain.checkin.DayCheckInPlanner
 import com.wellnesswingman.domain.checkin.DayCheckInSlot
+import com.wellnesswingman.domain.checkin.DayCheckInsProvider
 import com.wellnesswingman.data.repository.TrackedEntryRepository
 import com.wellnesswingman.domain.analysis.DailySummaryService
 import com.wellnesswingman.domain.analysis.DailyTotalsCalculator
@@ -42,8 +37,7 @@ class DayDetailViewModel(
     private val dailyTotalsCalculator: DailyTotalsCalculator,
     private val polarInsightService: PolarInsightService,
     private val fileSystem: FileSystemOperations,
-    private val dailyCheckInRepository: DailyCheckInRepository,
-    private val appSettingsRepository: AppSettingsRepository
+    private val dayCheckInsProvider: DayCheckInsProvider
 ) : ScreenModel {
 
     private val _uiState = MutableStateFlow<DayDetailUiState>(DayDetailUiState.Loading)
@@ -129,9 +123,17 @@ class DayDetailViewModel(
      */
     fun refreshCheckIns() {
         val date = currentDate ?: return
-        val state = _uiState.value as? DayDetailUiState.Success ?: return
 
         screenModelScope.launch {
+            val state = _uiState.value
+            if (state !is DayDetailUiState.Success) {
+                // A first check-in turns an empty day into a populated one, so the whole day
+                // has to be rebuilt rather than patched.
+                currentDate = null
+                loadDay(date)
+                return@launch
+            }
+
             val slots = loadCheckInSlots(date)
             if (slots != state.checkInSlots) {
                 _uiState.value = state.copy(checkInSlots = slots)
@@ -139,41 +141,8 @@ class DayDetailViewModel(
         }
     }
 
-    /**
-     * Check-in slots for the day: answers already given, plus — on today only — a blank slot
-     * once its prompt window has opened. Failing to read them must not take the whole day
-     * screen down with it, so this degrades to showing none.
-     */
-    private suspend fun loadCheckInSlots(date: LocalDate): List<DayCheckInSlot> {
-        return try {
-            val zone = TimeZone.currentSystemDefault()
-            val nowLocal = Clock.System.now().toLocalDateTime(zone)
-
-            DayCheckInPlanner.plan(
-                date = date,
-                today = nowLocal.date,
-                now = nowLocal.time,
-                settings = mapOf(
-                    CheckInSlot.MORNING to CheckInSlotSetting(
-                        enabled = appSettingsRepository.isMorningCheckInEnabled(),
-                        timeOfDay = CheckInScheduleCalculator.parseTimeOfDay(
-                            appSettingsRepository.getMorningCheckInTime()
-                        )
-                    ),
-                    CheckInSlot.EVENING to CheckInSlotSetting(
-                        enabled = appSettingsRepository.isEveningCheckInEnabled(),
-                        timeOfDay = CheckInScheduleCalculator.parseTimeOfDay(
-                            appSettingsRepository.getEveningCheckInTime()
-                        )
-                    )
-                ),
-                checkIns = dailyCheckInRepository.getCheckInsForDate(date)
-            )
-        } catch (e: Exception) {
-            Napier.w("Failed to load check-ins for $date. Continuing without them.", e)
-            emptyList()
-        }
-    }
+    private suspend fun loadCheckInSlots(date: LocalDate): List<DayCheckInSlot> =
+        dayCheckInsProvider.slotsFor(date)
 
     private suspend fun calculateNutritionTotals(entries: List<TrackedEntry>): NutritionTotals {
         try {
