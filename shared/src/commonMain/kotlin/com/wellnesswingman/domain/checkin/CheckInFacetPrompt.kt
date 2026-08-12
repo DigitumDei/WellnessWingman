@@ -47,9 +47,13 @@ object CheckInFacetPrompt {
                   },
                   "confidence": { "type": "number", "description": "0.0 to 1.0" },
                   "possiblyAlreadyLogged": { "type": "boolean" },
-                  "alreadyLoggedReason": { "type": "string" }
+                  "alreadyLoggedReason": { "type": "string" },
+                  "eatenOnCheckInDate": {
+                    "type": "boolean",
+                    "description": "False when the user says they ate it on a different day, e.g. 'last night' in a morning check-in."
+                  }
                 },
-                "required": ["name", "nutrition"]
+                "required": ["name", "nutrition", "eatenOnCheckInDate"]
               }
             },
             "factors": {
@@ -99,6 +103,10 @@ object CheckInFacetPrompt {
             You are reading a short, subjective daily check-in from a health-tracking app. The
             user was asked: "$question"
 
+            This check-in is about ${checkIn.checkInDate} (the ${checkIn.slot.toStorageString()
+            .lowercase()} check-in). Anything the user places outside that day — "last night",
+            "yesterday" — belongs to a different day, which matters for the food flag below.
+
             Their answer, verbatim:
             <check_in>
             ${sanitize(checkIn.responseText)}
@@ -117,6 +125,13 @@ object CheckInFacetPrompt {
                plausibly refers to something in <tracked_entries>, set possiblyAlreadyLogged to
                true and say which in alreadyLoggedReason. Do not include food they mention
                wanting, avoiding, or planning to eat.
+
+               Set eatenOnCheckInDate to false when the user places the food on a different day.
+               A morning check-in invites exactly this — "I had two beers late last night and
+               slept badly" describes yesterday's drinking, and those calories belong to
+               yesterday, not to the day this check-in is about. Still report the item; the flag
+               is what keeps it out of the wrong day's totals. When they give no timing, assume
+               it belongs to the check-in's own day and set the flag true.
 
             2. factors — specific things that helped or hurt. For each, decide:
                - valence: Good if it helped or felt positive, Bad if it hurt or felt negative.

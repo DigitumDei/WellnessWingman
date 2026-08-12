@@ -6,6 +6,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Notes
@@ -456,9 +458,13 @@ private fun CaptureOptions(
     modifier: Modifier = Modifier,
     onDescribeClick: () -> Unit = {}
 ) {
+    // Scrollable since the third option: three 120dp buttons plus padding need roughly 400dp
+    // below the app bar, which a landscape phone does not have. Without this the column is
+    // clipped and an option becomes unreachable rather than merely cramped.
     Column(
         modifier = modifier
             .fillMaxSize()
+            .verticalScroll(rememberScrollState())
             .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center

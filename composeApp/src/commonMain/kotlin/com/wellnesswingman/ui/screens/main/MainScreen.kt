@@ -173,7 +173,10 @@ fun EntryList(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         when {
-            hasCompletedMeals -> item(key = "nutrition_summary") {
+            // Mentioned food counts as a reason to show the card. Without it a day whose only
+            // food came from a check-in computes real totals and then hides them, so the
+            // calories exist in the summary and the database but nowhere the user can see.
+            hasCompletedMeals || nutritionTotals.hasMentionedFood -> item(key = "nutrition_summary") {
                 DailyNutritionCard(
                     nutritionTotals = nutritionTotals,
                     summaryCardState = summaryCardState,
@@ -226,7 +229,11 @@ fun EntryList(
                 Text(
                     text = "Entries",
                     style = MaterialTheme.typography.titleLarge,
-                    modifier = Modifier.padding(top = if (hasCompletedMeals || polarContext.hasData) 8.dp else 0.dp)
+                    modifier = Modifier.padding(
+                        top = if (hasCompletedMeals || nutritionTotals.hasMentionedFood ||
+                            polarContext.hasData
+                        ) 8.dp else 0.dp
+                    )
                 )
             }
         }

@@ -12,6 +12,7 @@ import com.wellnesswingman.checkin.CheckInScheduler
 import com.wellnesswingman.data.repository.PolarOAuthRepository
 import com.wellnesswingman.di.getSharedModules
 import com.wellnesswingman.di.platformModule
+import com.wellnesswingman.domain.checkin.CheckInAnalysisService
 import com.wellnesswingman.domain.checkin.CheckInScheduling
 import com.wellnesswingman.domain.analysis.StaleEntryRecoveryService
 import com.wellnesswingman.domain.oauth.PendingOAuthResultStore
@@ -66,6 +67,13 @@ class WellnessWingmanApp : Application() {
         // Reset any entries stuck in Processing from a previous crash/force-close
         CoroutineScope(Dispatchers.IO).launch {
             koinApp.koin.get<StaleEntryRecoveryService>().recoverStaleEntries()
+        }
+
+        // Re-run check-in extractions the process death interrupted. Their scope is
+        // application-level but not durable, so a kill between writing the pending row and the
+        // response arriving would otherwise leave the card reading "Reading your answer" forever.
+        CoroutineScope(Dispatchers.IO).launch {
+            koinApp.koin.get<CheckInAnalysisService>().recoverPendingAnalyses()
         }
 
         // Recover pending OAuth session that survived process death

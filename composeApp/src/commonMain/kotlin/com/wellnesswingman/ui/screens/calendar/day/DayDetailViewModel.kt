@@ -202,11 +202,11 @@ class DayDetailViewModel(
         val service = checkInAnalysisService ?: return
         val date = currentDate ?: return
 
-        screenModelScope.launch {
-            // Reflect the pending state immediately; the completion signal brings the result.
-            service.retry(date, slot)
-            refreshCheckIns()
-        }
+        // Background scope, so leaving the screen mid-request does not strand the row as
+        // pending. The result arrives through analysisCompletions.
+        service.retryInBackground(date, slot)
+
+        screenModelScope.launch { refreshCheckIns() }
     }
 
     /**

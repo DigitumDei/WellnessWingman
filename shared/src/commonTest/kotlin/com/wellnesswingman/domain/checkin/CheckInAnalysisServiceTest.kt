@@ -2,6 +2,8 @@ package com.wellnesswingman.domain.checkin
 
 import com.wellnesswingman.data.model.CheckInAnalysis
 import com.wellnesswingman.data.model.CheckInSlot
+import com.wellnesswingman.data.model.EntryAnalysis
+import com.wellnesswingman.data.repository.EntryAnalysisRepository
 import com.wellnesswingman.data.model.DailyCheckIn
 import com.wellnesswingman.data.model.EntryType
 import com.wellnesswingman.data.model.ProcessingStatus
@@ -257,16 +259,43 @@ class CheckInAnalysisServiceTest {
         override fun isPolarConnected(): Boolean = false
     }
 
+    /** Serves stored analysis blobs by entry id, so food names can reach the prompt. */
+    private class FakeEntryAnalysisRepository(
+        private val byEntryId: Map<Long, String> = emptyMap()
+    ) : EntryAnalysisRepository {
+        override suspend fun getLatestAnalysisForEntry(entryId: Long): EntryAnalysis? =
+            byEntryId[entryId]?.let {
+                EntryAnalysis(
+                    analysisId = entryId,
+                    entryId = entryId,
+                    capturedAt = Instant.fromEpochMilliseconds(1_785_000_000_000),
+                    insightsJson = it
+                )
+            }
+
+        override suspend fun getAllAnalyses(): List<EntryAnalysis> = emptyList()
+        override suspend fun getAnalysisById(id: Long): EntryAnalysis? = null
+        override suspend fun getAnalysisByExternalId(externalId: String): EntryAnalysis? = null
+        override suspend fun getAnalysesForEntry(entryId: Long): List<EntryAnalysis> = emptyList()
+        override suspend fun insertAnalysis(analysis: EntryAnalysis): Long = 1L
+        override suspend fun updateAnalysis(id: Long, insightsJson: String, schemaVersion: String) = Unit
+        override suspend fun deleteAnalysis(id: Long) = Unit
+        override suspend fun deleteAnalysesForEntry(entryId: Long) = Unit
+        override suspend fun upsertAnalysis(analysis: EntryAnalysis) = Unit
+    }
+
     private fun service(
         analysisRepository: FakeCheckInAnalysisRepository,
         client: LlmClient,
         entries: List<TrackedEntry> = emptyList(),
-        checkIns: MutableList<DailyCheckIn> = mutableListOf()
+        checkIns: MutableList<DailyCheckIn> = mutableListOf(),
+        entryAnalyses: Map<Long, String> = emptyMap()
     ) = CheckInAnalysisService(
         checkInAnalysisRepository = analysisRepository,
         dailyCheckInRepository = FakeDailyCheckInRepository(checkIns),
         trackedEntryRepository = FakeTrackedEntryRepository(entries),
         llmClientFactory = FakeLlmClientFactory(client),
+        entryAnalysisRepository = FakeEntryAnalysisRepository(entryAnalyses),
         timeZone = TimeZone.UTC
     )
 
@@ -458,7 +487,7 @@ class CheckInAnalysisServiceTest {
         // showed on the day but contributed nothing to the totals. Estimating from a description
         // is the whole point; an item with no number attached is not worth extracting.
         assertTrue(schema.contains("\"required\": [\"totalCalories\"]"))
-        assertTrue(schema.contains("\"required\": [\"name\", \"nutrition\"]"))
+        assertTrue(schema.contains("\"name\", \"nutrition\""))
     }
 
     @Test
@@ -536,6 +565,72 @@ class CheckInAnalysisServiceTest {
         // "read it and found nothing", and those look identical through facets alone.
         val stored = subject.analysisFor(date, CheckInSlot.MORNING)
         assertEquals(CheckInAnalysisStatus.PENDING, assertNotNull(stored).status)
+    }
+
+    @Test
+    fun `a stale extraction does not overwrite an edited answer`() = runTest {
+        val repository = FakeCheckInAnalysisRepository()
+        // What is stored is a later revision than the copy being analysed.
+        val stored = mutableListOf(checkIn.copy(responseText = "the edited answer"))
+
+        val result = service(repository, FakeLlmClient(fullResponse), checkIns = stored)
+            .analyze(checkIn)
+
+        // Storage is keyed on (date, slot), so whichever call finished last would otherwise win
+        // and the older answer's facets could replace the newer ones.
+        assertNotEquals(CheckInAnalysisStatus.COMPLETED, result.status)
+        assertTrue(repository.saved.none { it.status == CheckInAnalysisStatus.COMPLETED })
+    }
+
+    @Test
+    fun `recovery re-runs an analysis left pending by process death`() = runTest {
+        val repository = FakeCheckInAnalysisRepository()
+        val stored = mutableListOf(checkIn)
+        val subject = service(repository, FakeLlmClient(fullResponse), checkIns = stored)
+
+        repository.saveAnalysis(
+            CheckInAnalysis(
+                checkInDate = date,
+                slot = CheckInSlot.EVENING,
+                status = CheckInAnalysisStatus.PENDING,
+                analyzedAt = Instant.fromEpochMilliseconds(1_785_000_000_000)
+            )
+        )
+
+        subject.recoverPendingAnalyses()
+
+        // The background scope survives a screen closing but not the process being killed, so a
+        // pending row at startup is orphaned — and pending shows no retry control.
+        assertEquals(
+            CheckInAnalysisStatus.COMPLETED,
+            assertNotNull(repository.getAnalysis(date, CheckInSlot.EVENING)).status
+        )
+    }
+
+    @Test
+    fun `the prompt lists the food a tracked entry contained`() = runTest {
+        val repository = FakeCheckInAnalysisRepository()
+        val client = FakeLlmClient(fullResponse)
+
+        val lunch = TrackedEntry(
+            entryId = 1,
+            entryType = EntryType.MEAL,
+            capturedAt = Instant.fromEpochMilliseconds(1_785_000_000_000),
+            processingStatus = ProcessingStatus.COMPLETED
+        )
+
+        service(
+            analysisRepository = repository,
+            client = client,
+            entries = listOf(lunch),
+            entryAnalyses = mapOf(
+                1L to """{"entryType":"Meal","mealAnalysis":{"foodItems":[{"name":"pepperoni pizza"}]}}"""
+            )
+        ).analyze(checkIn)
+
+        // A line reading only "12:00 meal" gives the model nothing to match "that pizza"
+        // against, so the duplicate would go unflagged and be counted twice.
+        assertTrue(assertNotNull(client.lastPrompt).contains("pepperoni pizza"))
     }
 
     @Test

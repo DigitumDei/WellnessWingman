@@ -101,7 +101,14 @@ private fun confidenceFromWord(text: String): Double? = when {
     else -> null
 }
 
-/** Extracts the first number in a string, tolerating a leading `~` and a trailing unit. */
+/**
+ * Extracts the first number in a string, tolerating a leading `~`, a trailing unit, and thousands
+ * separators.
+ *
+ * Grouping separators are skipped rather than treated as terminators. Ending the scan at the
+ * comma in "1,200 kcal" would return 1.0 — not a rejected field but a confidently wrong one, and
+ * these serializers exist precisely to read the strings models produce.
+ */
 private fun firstNumberIn(text: String): Double? {
     val builder = StringBuilder()
 
@@ -110,6 +117,9 @@ private fun firstNumberIn(text: String): Double? {
             char.isDigit() -> builder.append(char)
             char == '.' && !builder.contains('.') && builder.isNotEmpty() -> builder.append(char)
             char == '-' && builder.isEmpty() -> builder.append(char)
+            // A separator only counts as grouping when digits already precede it, so a stray
+            // comma before any number still terminates nothing and is simply skipped.
+            isGroupingSeparator(char) && builder.isNotEmpty() -> Unit
             builder.isNotEmpty() -> return builder.toString().toDoubleOrNull()
             else -> Unit
         }
@@ -117,3 +127,18 @@ private fun firstNumberIn(text: String): Double? {
 
     return builder.toString().toDoubleOrNull()
 }
+
+/**
+ * Thousands separators worth tolerating. A comma is ambiguous — decimal separator in much of
+ * Europe — but models answering an English prompt use it for grouping, and reading "1,200" as
+ * 1200 is the far likelier intent for a calorie count.
+ *
+ * A plain space is deliberately NOT included, even though some locales group with it: it would
+ * read "2 beers 300 kcal" as 2300, which is a worse failure than the truncation this fixes.
+ */
+private fun isGroupingSeparator(char: Char): Boolean =
+    // comma, underscore, no-break space, narrow no-break space
+    when (char.code) {
+        0x2C, 0x5F, 0xA0, 0x202F -> true
+        else -> false
+    }

@@ -122,6 +122,31 @@ class LenientNumbersTest {
     }
 
     @Test
+    fun `thousands separators do not truncate the number`() {
+        val nutrition = json.decodeFromString(
+            NutritionEstimate.serializer(),
+            """{"totalCalories":"1,200 kcal","sodium":"2_400 mg"}"""
+        )
+
+        // Stopping at the comma yielded 1.0 — not a rejected field but a confidently wrong one,
+        // and a 1,200-calorie day silently becoming 1 calorie is the worst kind of wrong.
+        assertEquals(1200.0, nutrition.totalCalories)
+        assertEquals(2400.0, nutrition.sodium)
+    }
+
+    @Test
+    fun `a space still separates two different numbers`() {
+        val nutrition = json.decodeFromString(
+            NutritionEstimate.serializer(),
+            """{"totalCalories":"2 beers 300 kcal"}"""
+        )
+
+        // A plain space is deliberately not treated as grouping: reading this as 2300 would be
+        // worse than taking the first number.
+        assertEquals(2.0, nutrition.totalCalories)
+    }
+
+    @Test
     fun `an unreadable nutrition value becomes null rather than zero`() {
         val nutrition = json.decodeFromString(
             NutritionEstimate.serializer(),

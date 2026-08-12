@@ -65,6 +65,30 @@ class DailyTotalsCalculatorCheckInTest {
     }
 
     @Test
+    fun `food eaten on another day is excluded from the total`() {
+        val totals = calculator.calculate(
+            listOf(meal(1840.0)),
+            listOf(
+                CheckInFacets(
+                    mentionedFood = listOf(
+                        MentionedFood(
+                            name = "two beers",
+                            nutrition = NutritionEstimate(totalCalories = 300.0),
+                            eatenOnCheckInDate = false
+                        ),
+                        mentioned("toast", 180.0)
+                    )
+                )
+            )
+        )
+
+        // "I had two beers late last night and slept badly" is a natural morning answer. Those
+        // calories belong to yesterday, not to the day the check-in happens to be filed on.
+        assertEquals(2020.0, totals.calories)
+        assertEquals(180.0, totals.mentionedCalories)
+    }
+
+    @Test
     fun `macros from mentioned food are merged too`() {
         val totals = calculator.calculate(
             listOf(meal(500.0, protein = 30.0)),

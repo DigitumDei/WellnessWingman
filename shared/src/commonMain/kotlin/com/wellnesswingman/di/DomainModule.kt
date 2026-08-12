@@ -64,7 +64,8 @@ val domainModule = module {
             checkInAnalysisRepository = get(),
             dailyCheckInRepository = get(),
             trackedEntryRepository = get(),
-            llmClientFactory = get()
+            llmClientFactory = get(),
+            entryAnalysisRepository = get()
         )
     }
 

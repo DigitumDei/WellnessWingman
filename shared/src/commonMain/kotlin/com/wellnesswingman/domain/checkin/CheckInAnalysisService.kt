@@ -8,11 +8,15 @@ import com.wellnesswingman.data.model.ProcessingStatus
 import com.wellnesswingman.data.model.TrackedEntry
 import com.wellnesswingman.data.model.analysis.CheckInAnalysisStatus
 import com.wellnesswingman.data.model.analysis.CheckInFacets
+import com.wellnesswingman.data.model.analysis.MealAnalysisResult
+import com.wellnesswingman.data.model.analysis.UnifiedAnalysisResult
 import com.wellnesswingman.data.repository.CheckInAnalysisRepository
 import com.wellnesswingman.data.repository.DailyCheckInRepository
+import com.wellnesswingman.data.repository.EntryAnalysisRepository
 import com.wellnesswingman.data.repository.TrackedEntryRepository
 import com.wellnesswingman.domain.llm.LlmClientFactory
 import io.github.aakira.napier.Napier
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -22,8 +26,10 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
+import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.minus
 import kotlinx.datetime.atStartOfDayIn
 import kotlinx.datetime.atTime
 import kotlinx.datetime.toInstant
@@ -50,6 +56,11 @@ class CheckInAnalysisService(
     private val dailyCheckInRepository: DailyCheckInRepository,
     private val trackedEntryRepository: TrackedEntryRepository,
     private val llmClientFactory: LlmClientFactory,
+    /**
+     * Supplies the food names that make duplicate detection possible. Optional so the service
+     * still runs without it; absent simply means entries are described by type and time alone.
+     */
+    private val entryAnalysisRepository: EntryAnalysisRepository? = null,
     private val timeZone: TimeZone = TimeZone.currentSystemDefault(),
     private val clock: Clock = Clock.System,
     /**
@@ -132,6 +143,18 @@ class CheckInAnalysisService(
             val facets = parseFacets(result.content)
                 ?: error("The response could not be read as check-in facets")
 
+            // Storage is keyed on (date, slot), so a slow extraction of an old answer would
+            // otherwise overwrite the result for an answer the user has since edited — whichever
+            // call happens to finish last wins. Dropping the stale result is the safe outcome:
+            // the newer answer's own extraction is already running or done.
+            if (!isStillCurrent(checkIn)) {
+                Napier.i(
+                    "Discarding a stale extraction for the ${checkIn.slot.toStorageString()} " +
+                        "check-in on ${checkInDateLabel(checkIn)}; the answer changed while it ran"
+                )
+                return existingOrPending(checkIn)
+            }
+
             store(
                 checkIn = checkIn,
                 status = CheckInAnalysisStatus.COMPLETED,
@@ -141,6 +164,8 @@ class CheckInAnalysisService(
                 errorMessage = null
             )
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
+
             Napier.e(
                 "Failed to extract facets from the ${checkIn.slot.toStorageString()} " +
                     "check-in for ${checkInDateLabel(checkIn)}",
@@ -158,10 +183,23 @@ class CheckInAnalysisService(
     }
 
     /**
-     * Re-runs extraction for a check-in the user asks about again.
+     * Re-runs extraction for a check-in the user asks about again, on this service's own scope.
+     *
+     * Runs in the background for the same reason the initial extraction does: a retry launched
+     * from a screen would be cancelled the moment the user navigated away, mid-request, leaving
+     * the row stuck on pending with no completion event and nothing to retry from.
+     *
+     * @return the [Job] doing the work, so tests and callers that care can await it.
+     */
+    fun retryInBackground(date: LocalDate, slot: CheckInSlot): Job = backgroundScope.launch {
+        retry(date, slot)
+    }
+
+    /**
+     * Re-runs extraction and waits for the result.
      *
      * Reads the check-in fresh rather than trusting a passed-in copy, so a retry after editing
-     * the answer analyses what is actually stored.
+     * the answer analyses what is actually stored. Prefer [retryInBackground] from UI code.
      */
     suspend fun retry(date: LocalDate, slot: CheckInSlot): CheckInAnalysis? {
         val checkIn = try {
@@ -172,6 +210,65 @@ class CheckInAnalysisService(
         } ?: return null
 
         return analyze(checkIn)
+    }
+
+    /**
+     * Whether the stored answer still matches the one being analysed.
+     *
+     * A read failure counts as current: refusing to store a good extraction because the check
+     * itself failed would be the worse outcome.
+     */
+    private suspend fun isStillCurrent(checkIn: DailyCheckIn): Boolean = try {
+        val stored = dailyCheckInRepository.getCheckIn(checkIn.checkInDate, checkIn.slot)
+        stored == null || stored.responseText == checkIn.responseText
+    } catch (e: Exception) {
+        Napier.w("Could not confirm the check-in is unchanged: ${e.message}")
+        true
+    }
+
+    /** The row as it currently stands, for returning when a stale result is discarded. */
+    private suspend fun existingOrPending(checkIn: DailyCheckIn): CheckInAnalysis =
+        analysisFor(checkIn.checkInDate, checkIn.slot)
+            ?: CheckInAnalysis(
+                checkInDate = checkIn.checkInDate,
+                slot = checkIn.slot,
+                status = CheckInAnalysisStatus.PENDING,
+                analyzedAt = clock.now()
+            )
+
+    /**
+     * Re-runs extractions that were left pending by the process being killed.
+     *
+     * The background scope survives a screen closing but not the app being terminated. If Android
+     * kills the process between writing the pending row and the response arriving, that row stays
+     * PENDING forever: the card reads "Reading your answer…" indefinitely and offers no retry,
+     * because pending is not a failure state.
+     *
+     * Safe to call unconditionally at startup — the scope is fresh, so nothing is genuinely in
+     * flight and every pending row is by definition orphaned.
+     *
+     * Bounded to [RECOVERY_WINDOW_DAYS] and [MAX_RECOVERED_PER_START] so a long-abandoned install
+     * cannot fire a burst of paid calls on first launch.
+     */
+    suspend fun recoverPendingAnalyses() {
+        // Computed here rather than passed in, so androidApp needs no kotlinx-datetime types on
+        // its call path — a dependency this module deliberately keeps out of the Android module.
+        val today = clock.now().toLocalDateTime(timeZone).date
+
+        val stranded = try {
+            checkInAnalysisRepository
+                .getAnalysesForDateRange(today.minus(RECOVERY_WINDOW_DAYS, DateTimeUnit.DAY), today)
+                .filter { it.isPending }
+                .take(MAX_RECOVERED_PER_START)
+        } catch (e: Exception) {
+            Napier.w("Failed to look for stranded check-in analyses: ${e.message}")
+            return
+        }
+
+        if (stranded.isEmpty()) return
+
+        Napier.i("Recovering ${stranded.size} check-in analyses stranded as pending")
+        stranded.forEach { retry(it.checkInDate, it.slot) }
     }
 
     /**
@@ -260,13 +357,65 @@ class CheckInAnalysisService(
         emptyList()
     }
 
-    private fun TrackedEntry.describe(): String {
+    /**
+     * Describes an entry well enough to be recognised when the user mentions it again.
+     *
+     * The food names matter more than anything else here. A line reading only "12:00 meal" tells
+     * the model nothing it can match against "that pizza at lunch", so an evening check-in
+     * describing a photographed meal would go unflagged and be counted a second time — the exact
+     * failure `possiblyAlreadyLogged` exists to prevent.
+     */
+    private suspend fun TrackedEntry.describe(): String {
         val localTime = capturedAt.toLocalDateTime(timeZone).time
         val hour = localTime.hour.toString().padStart(2, '0')
         val minute = localTime.minute.toString().padStart(2, '0')
         val note = userNotes?.takeIf { it.isNotBlank() }?.let { " — $it" }.orEmpty()
+        val foods = foodNames().takeIf { it.isNotEmpty() }
+            ?.joinToString(", ")
+            ?.let { " — contained: $it" }
+            .orEmpty()
 
-        return "$hour:$minute ${entryType.name.lowercase()}$note"
+        return "$hour:$minute ${entryType.name.lowercase()}$note$foods"
+    }
+
+    /**
+     * Food names from the entry's most recent analysis.
+     *
+     * Degrades to nothing on any failure: a missing or unreadable analysis costs duplicate
+     * detection for that entry, which is a far smaller problem than losing the extraction.
+     */
+    private suspend fun TrackedEntry.foodNames(): List<String> {
+        val repository = entryAnalysisRepository ?: return emptyList()
+
+        return try {
+            val analysis = repository.getLatestAnalysisForEntry(entryId) ?: return emptyList()
+            val meal = parseMealAnalysis(analysis.insightsJson) ?: return emptyList()
+
+            meal.foodItems.mapNotNull { it.name.takeIf { name -> name.isNotBlank() } }
+                .take(MAX_FOOD_NAMES_PER_ENTRY)
+        } catch (e: Exception) {
+            Napier.w("Failed to read food names for entry $entryId: ${e.message}")
+            emptyList()
+        }
+    }
+
+    /**
+     * Reads a meal analysis from a stored blob, which may be a unified result or a bare meal
+     * result depending on when it was written. Mirrors how the day view models read the same
+     * column.
+     */
+    private fun parseMealAnalysis(insightsJson: String): MealAnalysisResult? {
+        if (insightsJson.isBlank()) return null
+
+        return try {
+            json.decodeFromString(UnifiedAnalysisResult.serializer(), insightsJson).mealAnalysis
+        } catch (e: Exception) {
+            try {
+                json.decodeFromString(MealAnalysisResult.serializer(), insightsJson)
+            } catch (e2: Exception) {
+                null
+            }
+        }
     }
 
     /**
@@ -321,4 +470,21 @@ class CheckInAnalysisService(
     }
 
     private fun checkInDateLabel(checkIn: DailyCheckIn): String = checkIn.checkInDate.toString()
+
+    companion object {
+        /**
+         * Cap on food names listed per tracked entry. Enough to recognise a meal, short of
+         * turning the duplicate-candidate block into the bulk of the prompt.
+         */
+        const val MAX_FOOD_NAMES_PER_ENTRY = 8
+
+        /**
+         * How far back startup recovery looks. Matches the check-in backfill window: a pending
+         * row older than that describes a day the user can no longer answer for anyway.
+         */
+        const val RECOVERY_WINDOW_DAYS = DayCheckInPlanner.BACKFILL_DAYS
+
+        /** Ceiling on recovery attempts per launch, so a stale install cannot fire a burst. */
+        const val MAX_RECOVERED_PER_START = 4
+    }
 }

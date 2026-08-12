@@ -1,6 +1,7 @@
 package com.wellnesswingman.domain.capture
 
 import com.wellnesswingman.data.model.EntryType
+import com.wellnesswingman.data.model.ProcessingStatus
 import com.wellnesswingman.data.model.TrackedEntry
 import com.wellnesswingman.data.repository.TrackedEntryRepository
 import com.wellnesswingman.domain.analysis.BackgroundAnalysisService
@@ -112,7 +113,14 @@ class TextEntryProcessor(
             val entryId = trackedEntryRepository.insertEntry(entry)
 
             val apiKeyMissing = !llmClientFactory.hasCurrentApiKey()
-            if (!apiKeyMissing) {
+            if (apiKeyMissing) {
+                // SKIPPED, not the default PENDING. EntryDetailScreen offers a re-analyse
+                // control for SKIPPED and FAILED entries only, so leaving this PENDING would
+                // strand the entry: once a key is configured there would be no way to analyse
+                // it short of deleting and retyping it. Matches what AnalysisOrchestrator does
+                // when it finds no key.
+                trackedEntryRepository.updateEntryStatus(entryId, ProcessingStatus.SKIPPED)
+            } else {
                 backgroundAnalysisService.queueEntry(entryId, text)
             }
 

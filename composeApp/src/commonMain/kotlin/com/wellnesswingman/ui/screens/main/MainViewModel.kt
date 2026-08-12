@@ -323,10 +323,11 @@ class MainViewModel(
     fun retryCheckInAnalysis(slot: CheckInSlot) {
         val service = checkInAnalysisService ?: return
 
-        screenModelScope.launch {
-            service.retry(today(), slot)
-            refreshCheckIns()
-        }
+        // Background scope, so leaving the screen mid-request does not strand the row as
+        // pending. The result arrives through analysisCompletions.
+        service.retryInBackground(today(), slot)
+
+        screenModelScope.launch { refreshCheckIns() }
     }
 
     fun loadEntries() {

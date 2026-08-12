@@ -47,12 +47,13 @@ data class CheckInFacets(
     /**
      * Food that should count toward the day's nutrition.
      *
-     * Excludes anything the model matched to an already-tracked entry. Day totals merge tracked
-     * and mentioned food, so without this filter a meal both photographed and talked about in the
-     * evening check-in would be counted twice.
+     * Excludes two kinds of item. Anything matched to an already-tracked entry, because day
+     * totals merge tracked and mentioned food and a meal both photographed and talked about
+     * would otherwise be counted twice. And anything eaten on a different day, because a morning
+     * check-in that mentions last night's beers must not move those calories into today.
      */
     val countableFood: List<MentionedFood>
-        get() = mentionedFood.filter { !it.possiblyAlreadyLogged }
+        get() = mentionedFood.filter { !it.possiblyAlreadyLogged && it.eatenOnCheckInDate }
 
     val goodFactors: List<CheckInFactor>
         get() = factors.filter { it.valence == FactorValence.GOOD }
@@ -107,7 +108,20 @@ data class MentionedFood(
      * taken on trust.
      */
     @SerialName("alreadyLoggedReason")
-    val alreadyLoggedReason: String? = null
+    val alreadyLoggedReason: String? = null,
+
+    /**
+     * Whether this was eaten on the day the check-in is about.
+     *
+     * A morning check-in invites exactly the answer that breaks this: "I had two beers late last
+     * night and slept badly". Those calories belong to yesterday, and without this flag they
+     * would be added to today's totals purely because that is when the check-in was filed.
+     *
+     * Defaults to true, which is the ordinary case and what an older stored analysis meant
+     * before this field existed.
+     */
+    @SerialName("eatenOnCheckInDate")
+    val eatenOnCheckInDate: Boolean = true
 )
 
 /**

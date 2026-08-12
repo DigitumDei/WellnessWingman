@@ -19,6 +19,8 @@ import com.wellnesswingman.data.model.CheckInSlot
 import com.wellnesswingman.data.model.DailyCheckIn
 import com.wellnesswingman.data.model.analysis.CheckInFacets
 import com.wellnesswingman.data.repository.CheckInAnalysisRepository
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeoutOrNull
 import com.wellnesswingman.data.repository.DailyCheckInRepository
 import com.wellnesswingman.data.repository.DailySummaryRepository
 import com.wellnesswingman.data.repository.EntryAnalysisRepository
@@ -103,6 +105,13 @@ class DailySummaryService(
                 Napier.w("Failed to load check-ins for $date. Continuing without them.", e)
                 emptyList()
             }
+
+            // Generating a summary right after answering a check-in is the common case, and the
+            // extraction it triggered is usually still in flight. Reading only completed facets
+            // would silently omit mentioned food from the persisted totals, and nothing
+            // regenerates the summary when the extraction later lands — leaving a stored summary
+            // permanently inconsistent with what the day screens show.
+            awaitCheckInExtraction(date)
 
             val checkInAnalyses = try {
                 checkInAnalysisRepository?.getAnalysesForDate(date)?.associateBy { it.slot }
@@ -659,7 +668,42 @@ Return ONLY the JSON object.
     }
 
     /** Strips XML closing-tag sequences so user text cannot break prompt delimiters. */
+    /**
+     * Waits, briefly, for any in-flight check-in extraction for [date] to finish.
+     *
+     * Bounded rather than open-ended: a summary that is a few seconds late is fine, one that
+     * never arrives because an extraction hung is not. On timeout the summary proceeds with
+     * whatever completed, which is the behaviour that shipped before this wait existed.
+     */
+    private suspend fun awaitCheckInExtraction(date: LocalDate) {
+        val repository = checkInAnalysisRepository ?: return
+
+        withTimeoutOrNull(CHECK_IN_EXTRACTION_TIMEOUT_MS) {
+            while (true) {
+                val stillRunning = try {
+                    repository.getAnalysesForDate(date).any { it.isPending }
+                } catch (e: Exception) {
+                    Napier.w("Could not check for pending check-in extraction: ${e.message}")
+                    false
+                }
+
+                if (!stillRunning) return@withTimeoutOrNull
+                delay(CHECK_IN_EXTRACTION_POLL_MS)
+            }
+        } ?: Napier.i(
+            "Check-in extraction for $date did not finish in time; " +
+                "summarising with what completed"
+        )
+    }
+
     private fun sanitizeForPrompt(text: String): String = text.replace("</", "< /")
+
+    companion object {
+        /** How long a summary will wait for a check-in extraction still in flight. */
+        const val CHECK_IN_EXTRACTION_TIMEOUT_MS = 8_000L
+
+        const val CHECK_IN_EXTRACTION_POLL_MS = 400L
+    }
 
     @kotlinx.serialization.Serializable
     private data class DailySummaryPayloadAlt(

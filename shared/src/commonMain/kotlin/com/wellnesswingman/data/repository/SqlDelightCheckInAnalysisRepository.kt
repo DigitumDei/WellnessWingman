@@ -119,6 +119,9 @@ class SqlDelightCheckInAnalysisRepository(
         val parsedSlot = CheckInSlot.fromString(slot)
             ?: error("Unrecognised check-in slot '$slot' for analysisId=$analysisId")
 
+        val storedStatus = CheckInAnalysisStatus.fromString(status)
+
+        var unreadable = false
         val parsedFacets = if (facetsJson.isBlank()) {
             null
         } else {
@@ -126,8 +129,19 @@ class SqlDelightCheckInAnalysisRepository(
                 json.decodeFromString(CheckInFacets.serializer(), facetsJson)
             } catch (e: Exception) {
                 Napier.w("Failed to parse check-in facets for analysisId=$analysisId: ${e.message}")
+                unreadable = true
                 null
             }
+        }
+
+        // A completed row whose facets will not parse — an import from a newer schema, say —
+        // must not be reported as completed. The UI would read "extraction finished and found
+        // nothing" and offer no way to re-run, even though this is derived data that exists
+        // precisely to be regenerable. Surfacing it as failed puts the retry control back.
+        val effectiveStatus = if (unreadable && storedStatus == CheckInAnalysisStatus.COMPLETED) {
+            CheckInAnalysisStatus.FAILED
+        } else {
+            storedStatus
         }
 
         return CheckInAnalysis(
@@ -135,12 +149,16 @@ class SqlDelightCheckInAnalysisRepository(
             externalId = externalId,
             checkInDate = LocalDate.fromEpochDays(checkInDate.toInt()),
             slot = parsedSlot,
-            status = CheckInAnalysisStatus.fromString(status),
+            status = effectiveStatus,
             providerId = providerId,
             model = model,
             analyzedAt = Instant.fromEpochMilliseconds(analyzedAt),
             facets = parsedFacets,
-            errorMessage = errorMessage,
+            errorMessage = if (unreadable && errorMessage == null) {
+                "The stored result could not be read. Try again to regenerate it."
+            } else {
+                errorMessage
+            },
             schemaVersion = schemaVersion
         )
     }

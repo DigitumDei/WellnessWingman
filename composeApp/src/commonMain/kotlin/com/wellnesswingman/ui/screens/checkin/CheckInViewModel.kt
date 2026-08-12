@@ -265,11 +265,13 @@ class CheckInViewModel(
     fun retryAnalysis() {
         val service = checkInAnalysisService ?: return
 
-        screenModelScope.launch {
-            refreshAnalysis()
-            service.retry(_uiState.value.date, slot)
-            refreshAnalysis()
-        }
+        // Started on the service's own scope, not this one. A retry launched here would be
+        // cancelled the moment the user left the screen, mid-request, leaving the row pending
+        // with no completion event — the same trap the initial extraction avoids. The result
+        // arrives through analysisCompletions.
+        service.retryInBackground(_uiState.value.date, slot)
+
+        screenModelScope.launch { refreshAnalysis() }
     }
 
     /**
