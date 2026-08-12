@@ -13,6 +13,7 @@ import com.wellnesswingman.domain.analysis.NutritionLabelAnalyzing
 import com.wellnesswingman.domain.analysis.StaleEntryRecoveryService
 import com.wellnesswingman.domain.capture.PendingCaptureStore
 import com.wellnesswingman.domain.capture.PhotoEntryProcessor
+import com.wellnesswingman.domain.capture.TextEntryProcessor
 import com.wellnesswingman.domain.events.DefaultStatusChangeNotifier
 import com.wellnesswingman.domain.events.StatusChangeNotifier
 import com.wellnesswingman.domain.llm.LlmClientFactory
@@ -43,6 +44,15 @@ val domainModule = module {
 
     // Idempotent photo entry processing (app-scoped; survives configuration changes)
     singleOf(::PhotoEntryProcessor)
+
+    // Entries described rather than photographed (app-scoped for the same reason)
+    single {
+        TextEntryProcessor(
+            trackedEntryRepository = get(),
+            backgroundAnalysisService = get(),
+            llmClientFactory = get()
+        )
+    }
 
     // Check-ins
     singleOf(::PendingCheckInStore)

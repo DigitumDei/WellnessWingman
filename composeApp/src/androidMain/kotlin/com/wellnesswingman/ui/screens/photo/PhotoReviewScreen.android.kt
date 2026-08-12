@@ -8,6 +8,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Notes
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -34,6 +35,7 @@ import com.wellnesswingman.platform.decodeWithExifRotation
 import com.wellnesswingman.ui.components.ErrorMessage
 import com.wellnesswingman.ui.components.LoadingIndicator
 import com.wellnesswingman.ui.screens.detail.EntryDetailScreen
+import com.wellnesswingman.ui.screens.textentry.TextEntryScreen
 import io.github.aakira.napier.Napier
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -358,7 +360,10 @@ private class PhotoReviewScreen : Screen {
                     CaptureOptions(
                         onCameraClick = onCameraClick,
                         onGalleryClick = onGalleryClick,
-                        modifier = Modifier.padding(paddingValues)
+                        modifier = Modifier.padding(paddingValues),
+                        // Replace, not push: this screen's job was to choose a source, and
+                        // backing out of the description should return to the day, not here.
+                        onDescribeClick = { navigator.replace(TextEntryScreen()) }
                     )
                 }
                 WORKFLOW_REVIEW -> {
@@ -414,7 +419,10 @@ private class PhotoReviewScreen : Screen {
                     CaptureOptions(
                         onCameraClick = onCameraClick,
                         onGalleryClick = onGalleryClick,
-                        modifier = Modifier.padding(paddingValues)
+                        modifier = Modifier.padding(paddingValues),
+                        // Replace, not push: this screen's job was to choose a source, and
+                        // backing out of the description should return to the day, not here.
+                        onDescribeClick = { navigator.replace(TextEntryScreen()) }
                     )
                 }
             }
@@ -445,7 +453,8 @@ private const val WORKFLOW_ERROR = "error"
 private fun CaptureOptions(
     onCameraClick: () -> Unit,
     onGalleryClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onDescribeClick: () -> Unit = {}
 ) {
     Column(
         modifier = modifier
@@ -480,6 +489,7 @@ private fun CaptureOptions(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(120.dp)
+                .padding(bottom = 16.dp)
         ) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -492,6 +502,33 @@ private fun CaptureOptions(
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text("Choose from Gallery", style = MaterialTheme.typography.titleLarge)
+            }
+        }
+
+        // For when the thing happened but the photo did not: a meal eaten out, a run whose
+        // watch died. Deliberately last — a photo gives the analysis far more to work with.
+        OutlinedButton(
+            onClick = onDescribeClick,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(120.dp)
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Icon(
+                    Icons.AutoMirrored.Filled.Notes,
+                    contentDescription = null,
+                    modifier = Modifier.size(48.dp)
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("Describe it instead", style = MaterialTheme.typography.titleLarge)
+                Text(
+                    text = "No photo",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }

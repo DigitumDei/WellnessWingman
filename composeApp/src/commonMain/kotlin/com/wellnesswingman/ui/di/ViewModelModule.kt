@@ -12,6 +12,7 @@ import com.wellnesswingman.ui.screens.chat.HealthChatListViewModel
 import com.wellnesswingman.ui.screens.chat.HealthChatThreadViewModel
 import com.wellnesswingman.ui.screens.detail.EntryDetailViewModel
 import com.wellnesswingman.ui.screens.main.MainViewModel
+import com.wellnesswingman.ui.screens.textentry.TextEntryViewModel
 import com.wellnesswingman.ui.screens.nutrition.NutritionLabelScanViewModel
 import com.wellnesswingman.ui.screens.nutrition.NutritionalProfilesViewModel
 import com.wellnesswingman.ui.screens.nutrition.profileIdFromParameter
@@ -40,6 +41,14 @@ val viewModelModule = module {
             polarSyncOrchestrator = get(),
             dayCheckInsProvider = get(),
             checkInAnalysisService = get()
+        )
+    }
+    factory {
+        TextEntryViewModel(
+            textEntryProcessor = get(),
+            audioRecordingService = get(),
+            llmClientFactory = get(),
+            fileSystem = get()
         )
     }
     factory { params ->
