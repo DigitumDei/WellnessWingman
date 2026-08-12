@@ -22,6 +22,7 @@ data class UnifiedAnalysisResult(
      * Overall confidence in the analysis (0.0 to 1.0)
      */
     @SerialName("confidence")
+    @Serializable(with = LenientConfidenceSerializer::class)
     val confidence: Double = 0.0,
 
     /**
@@ -68,7 +69,9 @@ data class UnifiedAnalysisResult(
 data class DetectedWeight(
     @SerialName("value") val value: Double,
     @SerialName("unit") val unit: String,           // "kg" or "lbs"
-    @SerialName("confidence") val confidence: Double = 0.0
+    @SerialName("confidence")
+    @Serializable(with = LenientConfidenceSerializer::class)
+    val confidence: Double = 0.0
 )
 
 /**

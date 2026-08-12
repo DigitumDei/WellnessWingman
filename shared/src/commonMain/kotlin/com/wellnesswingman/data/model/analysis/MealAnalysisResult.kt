@@ -38,6 +38,7 @@ data class MealAnalysisResult(
      * Confidence level of the analysis (0.0 to 1.0).
      */
     @SerialName("confidence")
+    @Serializable(with = LenientConfidenceSerializer::class)
     val confidence: Double = 0.0,
 
     /**
@@ -65,12 +66,14 @@ data class FoodItem(
      * Estimated calories for this item.
      */
     @SerialName("calories")
+    @Serializable(with = LenientNullableDoubleSerializer::class)
     val calories: Double? = null,
 
     /**
      * Confidence in the detection of this food item (0.0 to 1.0).
      */
     @SerialName("confidence")
+    @Serializable(with = LenientConfidenceSerializer::class)
     val confidence: Double = 0.0,
 
     /**
@@ -86,48 +89,62 @@ data class FoodItem(
     val matchedProfileName: String? = null
 )
 
+/**
+ * Estimated nutrition.
+ *
+ * Every quantity is read leniently, because models sometimes answer with the unit attached
+ * ("300 kcal", "24g"). Strict parsing would abort the entire analysis over one such field,
+ * losing everything else it got right. See [LenientNullableDoubleSerializer].
+ */
 @Serializable
 data class NutritionEstimate(
     /**
      * Total estimated calories for the meal.
      */
     @SerialName("totalCalories")
+    @Serializable(with = LenientNullableDoubleSerializer::class)
     val totalCalories: Double? = null,
 
     /**
      * Protein in grams.
      */
     @SerialName("protein")
+    @Serializable(with = LenientNullableDoubleSerializer::class)
     val protein: Double? = null,
 
     /**
      * Carbohydrates in grams.
      */
     @SerialName("carbohydrates")
+    @Serializable(with = LenientNullableDoubleSerializer::class)
     val carbohydrates: Double? = null,
 
     /**
      * Fat in grams.
      */
     @SerialName("fat")
+    @Serializable(with = LenientNullableDoubleSerializer::class)
     val fat: Double? = null,
 
     /**
      * Fiber in grams.
      */
     @SerialName("fiber")
+    @Serializable(with = LenientNullableDoubleSerializer::class)
     val fiber: Double? = null,
 
     /**
      * Sugar in grams.
      */
     @SerialName("sugar")
+    @Serializable(with = LenientNullableDoubleSerializer::class)
     val sugar: Double? = null,
 
     /**
      * Sodium in milligrams.
      */
     @SerialName("sodium")
+    @Serializable(with = LenientNullableDoubleSerializer::class)
     val sodium: Double? = null,
 
     /**
@@ -147,8 +164,12 @@ data class NutritionEstimate(
 data class HealthInsights(
     /**
      * Overall health score (0-10, where 10 is healthiest).
+     *
+     * Read with the nullable-double serializer rather than the confidence one: this runs 0-10,
+     * so clamping it to 0-1 would silently flatten every score above 1.
      */
     @SerialName("healthScore")
+    @Serializable(with = LenientNullableDoubleSerializer::class)
     val healthScore: Double? = null,
 
     /**
