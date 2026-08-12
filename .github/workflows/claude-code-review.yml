@@ -21,7 +21,10 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: read
+      # write, not read: publishing the review needs it. With read the action fetches the diff,
+      # is denied when it tries to post, and still exits 0 — a green check with no review, which
+      # is how this went unnoticed.
+      pull-requests: write
       issues: read
       id-token: write
 
