@@ -37,6 +37,14 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x gradlew
 
+      # Replays every migration onto the stored schema snapshot and compares the result against
+      # the .sq files. The build has set verifyMigrations = true since the start, but nothing ran
+      # it here, so it protected nothing: a snapshot whose filename claimed one schema version
+      # while its contents held another survived two merges and broke the check for everyone.
+      # Runs before the tests because it is seconds long and a bad migration invalidates them.
+      - name: Verify database migrations
+        run: ./gradlew :shared:verifySqlDelightMigration
+
       - name: Run tests and generate coverage report
         run: ./gradlew :shared:desktopTest :composeApp:desktopTest :shared:koverXmlReport
 
