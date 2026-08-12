@@ -243,6 +243,194 @@ class DailySummaryServiceTest {
         assertFalse(prompt.contains("lived experience"))
     }
 
+    private fun facetAnalysis(
+        date: LocalDate,
+        slot: CheckInSlot = CheckInSlot.EVENING,
+        food: List<com.wellnesswingman.data.model.analysis.MentionedFood> = emptyList(),
+        factors: List<com.wellnesswingman.data.model.analysis.CheckInFactor> = emptyList()
+    ) = com.wellnesswingman.data.model.CheckInAnalysis(
+        checkInDate = date,
+        slot = slot,
+        status = com.wellnesswingman.data.model.analysis.CheckInAnalysisStatus.COMPLETED,
+        analyzedAt = LocalDateTime(date.year, date.monthNumber, date.dayOfMonth, 21, 45)
+            .toInstant(TimeZone.UTC),
+        facets = com.wellnesswingman.data.model.analysis.CheckInFacets(
+            mentionedFood = food,
+            factors = factors
+        )
+    )
+
+    @Test
+    fun `extracted factors reach the prompt labelled by valence and origin`() = runTest {
+        val prompts = mutableListOf<String>()
+        val date = LocalDate(2025, 3, 1)
+
+        val service = DailySummaryService(
+            trackedEntryRepository = FakeTrackedEntryRepository(listOf(makeCompletedEntry(1, EntryType.MEAL))),
+            entryAnalysisRepository = FakeEntryAnalysisRepository(),
+            dailySummaryRepository = FakeDailySummaryRepository(),
+            llmClientFactory = makeCapturingLlmClientFactory(capturedPrompts = prompts),
+            dailyTotalsCalculator = DailyTotalsCalculator(),
+            weightHistoryRepository = FakeWeightHistoryRepository(),
+            toolRegistry = makeToolRegistry(),
+            dailyCheckInRepository = FakeDailyCheckInRepository(
+                listOf(eveningCheckIn(date, "rough night, the cat brought in a rat"))
+            ),
+            polarInsightService = polarInsightService(),
+            checkInAnalysisRepository = FakeCheckInAnalysisRepository(
+                listOf(
+                    facetAnalysis(
+                        date,
+                        factors = listOf(
+                            com.wellnesswingman.data.model.analysis.CheckInFactor(
+                                description = "the cat brought in a rat at 1am",
+                                valence = com.wellnesswingman.data.model.analysis.FactorValence.BAD,
+                                origin = com.wellnesswingman.data.model.analysis.FactorOrigin.EXTERNAL
+                            )
+                        )
+                    )
+                )
+            )
+        )
+
+        service.generateSummary(date, timeZone = TimeZone.UTC)
+
+        val prompt = prompts.single()
+        // Labelled rather than merged: the origin decides what the summary should do with it.
+        assertTrue(prompt.contains("bad, external"), "Expected the factor labelled by valence and origin")
+        assertTrue(prompt.contains("the cat brought in a rat at 1am"))
+        assertTrue(
+            prompt.contains("circumstance rather than anything the user should change"),
+            "Expected the external-factor guideline"
+        )
+    }
+
+    @Test
+    fun `mentioned food reaches the prompt with its estimate`() = runTest {
+        val prompts = mutableListOf<String>()
+        val date = LocalDate(2025, 3, 1)
+
+        val service = DailySummaryService(
+            trackedEntryRepository = FakeTrackedEntryRepository(listOf(makeCompletedEntry(1, EntryType.MEAL))),
+            entryAnalysisRepository = FakeEntryAnalysisRepository(),
+            dailySummaryRepository = FakeDailySummaryRepository(),
+            llmClientFactory = makeCapturingLlmClientFactory(capturedPrompts = prompts),
+            dailyTotalsCalculator = DailyTotalsCalculator(),
+            weightHistoryRepository = FakeWeightHistoryRepository(),
+            toolRegistry = makeToolRegistry(),
+            dailyCheckInRepository = FakeDailyCheckInRepository(
+                listOf(eveningCheckIn(date, "had a slice of cheese"))
+            ),
+            polarInsightService = polarInsightService(),
+            checkInAnalysisRepository = FakeCheckInAnalysisRepository(
+                listOf(
+                    facetAnalysis(
+                        date,
+                        food = listOf(
+                            com.wellnesswingman.data.model.analysis.MentionedFood(
+                                name = "cheese",
+                                portionSize = "a slice, about 20g",
+                                nutrition = com.wellnesswingman.data.model.analysis.NutritionEstimate(
+                                    totalCalories = 80.0
+                                )
+                            ),
+                            com.wellnesswingman.data.model.analysis.MentionedFood(
+                                name = "chicken salad",
+                                nutrition = com.wellnesswingman.data.model.analysis.NutritionEstimate(
+                                    totalCalories = 450.0
+                                ),
+                                possiblyAlreadyLogged = true
+                            )
+                        )
+                    )
+                )
+            )
+        )
+
+        service.generateSummary(date, timeZone = TimeZone.UTC)
+
+        val prompt = prompts.single()
+        assertTrue(prompt.contains("mentioned food: cheese"))
+        assertTrue(prompt.contains("~80 kcal"))
+        // Said out loud so the summary does not count the duplicate a second time in its prose.
+        assertTrue(prompt.contains("already logged above; excluded from totals"))
+        assertTrue(prompt.contains("already included in the totals above"))
+    }
+
+    @Test
+    fun `the summary waits for an extraction that is still running`() = runTest {
+        val prompts = mutableListOf<String>()
+        val date = LocalDate(2025, 3, 1)
+
+        // Reports pending for the first two reads, then completed — the common case of
+        // generating a summary moments after answering a check-in.
+        val analysisRepository = FakeCheckInAnalysisRepository(
+            analyses = listOf(
+                facetAnalysis(
+                    date,
+                    food = listOf(
+                        com.wellnesswingman.data.model.analysis.MentionedFood(
+                            name = "toast",
+                            nutrition = com.wellnesswingman.data.model.analysis.NutritionEstimate(
+                                totalCalories = 180.0
+                            )
+                        )
+                    )
+                )
+            ),
+            pendingReads = 2
+        )
+
+        val service = DailySummaryService(
+            trackedEntryRepository = FakeTrackedEntryRepository(listOf(makeCompletedEntry(1, EntryType.MEAL))),
+            entryAnalysisRepository = FakeEntryAnalysisRepository(),
+            dailySummaryRepository = FakeDailySummaryRepository(),
+            llmClientFactory = makeCapturingLlmClientFactory(capturedPrompts = prompts),
+            dailyTotalsCalculator = DailyTotalsCalculator(),
+            weightHistoryRepository = FakeWeightHistoryRepository(),
+            toolRegistry = makeToolRegistry(),
+            dailyCheckInRepository = FakeDailyCheckInRepository(
+                listOf(eveningCheckIn(date, "had toast"))
+            ),
+            polarInsightService = polarInsightService(),
+            checkInAnalysisRepository = analysisRepository
+        )
+
+        service.generateSummary(date, timeZone = TimeZone.UTC)
+
+        // Without the wait the summary would persist totals missing the mentioned food, and
+        // nothing regenerates it when the extraction later lands.
+        assertTrue(analysisRepository.readsForDate > 1, "Expected the summary to poll while pending")
+        assertTrue(prompts.single().contains("mentioned food: toast"))
+    }
+
+    @Test
+    fun `a summary still generates when the analysis table cannot be read`() = runTest {
+        val prompts = mutableListOf<String>()
+        val date = LocalDate(2025, 3, 1)
+
+        val service = DailySummaryService(
+            trackedEntryRepository = FakeTrackedEntryRepository(listOf(makeCompletedEntry(1, EntryType.MEAL))),
+            entryAnalysisRepository = FakeEntryAnalysisRepository(),
+            dailySummaryRepository = FakeDailySummaryRepository(),
+            llmClientFactory = makeCapturingLlmClientFactory(capturedPrompts = prompts),
+            dailyTotalsCalculator = DailyTotalsCalculator(),
+            weightHistoryRepository = FakeWeightHistoryRepository(),
+            toolRegistry = makeToolRegistry(),
+            dailyCheckInRepository = FakeDailyCheckInRepository(
+                listOf(eveningCheckIn(date, "an ordinary day"))
+            ),
+            polarInsightService = polarInsightService(),
+            checkInAnalysisRepository = FakeCheckInAnalysisRepository(failing = true)
+        )
+
+        val result = service.generateSummary(date, timeZone = TimeZone.UTC)
+
+        // Derived data failing to load must not cost the summary itself.
+        assertIs<DailySummaryResult.Success>(result)
+        assertTrue(prompts.single().contains("an ordinary day"))
+    }
+
     @Test
     fun `check-ins do not suppress Polar sleep data`() = runTest {
         // Regression guard for the reason check-ins are not stored as tracked entries.
@@ -394,6 +582,46 @@ class DailySummaryServiceTest {
         val result = service.generateSummary(date, timeZone = TimeZone.UTC)
 
         assertIs<DailySummaryResult.Success>(result)
+    }
+
+    /**
+     * Serves check-in extractions, and can report a row as pending for a fixed number of reads
+     * so the summary's bounded wait can be exercised without real timing.
+     */
+    private class FakeCheckInAnalysisRepository(
+        private val analyses: List<com.wellnesswingman.data.model.CheckInAnalysis> = emptyList(),
+        private var pendingReads: Int = 0,
+        private val failing: Boolean = false
+    ) : com.wellnesswingman.data.repository.CheckInAnalysisRepository {
+        var readsForDate = 0
+            private set
+
+        override suspend fun getAnalysesForDate(date: LocalDate):
+            List<com.wellnesswingman.data.model.CheckInAnalysis> {
+            if (failing) error("analysis table unavailable")
+            readsForDate++
+            if (pendingReads > 0) {
+                pendingReads--
+                return analyses.map {
+                    it.copy(
+                        status = com.wellnesswingman.data.model.analysis.CheckInAnalysisStatus.PENDING,
+                        facets = null
+                    )
+                }
+            }
+            return analyses
+        }
+
+        override suspend fun getAllAnalyses() = analyses
+        override suspend fun getAnalysis(date: LocalDate, slot: CheckInSlot) =
+            analyses.firstOrNull { it.slot == slot }
+        override suspend fun getAnalysesForDateRange(startDate: LocalDate, endDate: LocalDate) =
+            analyses
+        override suspend fun getAnalysisByExternalId(externalId: String) = null
+        override suspend fun saveAnalysis(analysis: com.wellnesswingman.data.model.CheckInAnalysis) = 1L
+        override suspend fun deleteAnalysis(date: LocalDate, slot: CheckInSlot) = Unit
+        override suspend fun deleteOldAnalyses(beforeDate: LocalDate) = Unit
+        override suspend fun upsertAnalysis(analysis: com.wellnesswingman.data.model.CheckInAnalysis) = Unit
     }
 
     private class FakeDailyCheckInRepository(

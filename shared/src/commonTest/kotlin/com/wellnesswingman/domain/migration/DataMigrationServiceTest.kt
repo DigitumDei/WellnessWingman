@@ -44,6 +44,7 @@ import kotlinx.serialization.json.Json
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 // region -- Fakes --
@@ -309,6 +310,7 @@ class DataMigrationServiceTest {
         appSettingsRepo: FakeAppSettingsRepository = FakeAppSettingsRepository(),
         weightHistoryRepo: FakeWeightHistoryRepository = FakeWeightHistoryRepository(),
         dailyCheckInRepo: FakeDailyCheckInRepository = FakeDailyCheckInRepository(),
+        checkInAnalysisRepo: FakeCheckInAnalysisRepository = FakeCheckInAnalysisRepository(),
         fileSystem: FakeFileSystem = FakeFileSystem(),
         zipUtil: FakeZipUtil = FakeZipUtil()
     ): DefaultDataMigrationService = DefaultDataMigrationService(
@@ -321,8 +323,35 @@ class DataMigrationServiceTest {
         weightHistoryRepository = weightHistoryRepo,
         dailyCheckInRepository = dailyCheckInRepo,
         fileSystem = fileSystem,
-        zipUtil = zipUtil
+        zipUtil = zipUtil,
+        checkInAnalysisRepository = checkInAnalysisRepo
     )
+
+    /** Records imported analyses so the export/import round-trip can be asserted. */
+    private class FakeCheckInAnalysisRepository(
+        private val stored: MutableList<com.wellnesswingman.data.model.CheckInAnalysis> = mutableListOf()
+    ) : com.wellnesswingman.data.repository.CheckInAnalysisRepository {
+        val upserted = mutableListOf<com.wellnesswingman.data.model.CheckInAnalysis>()
+
+        fun seed(vararg analyses: com.wellnesswingman.data.model.CheckInAnalysis) {
+            stored.addAll(analyses)
+        }
+
+        override suspend fun getAllAnalyses() = stored
+        override suspend fun getAnalysis(date: LocalDate, slot: CheckInSlot) =
+            stored.firstOrNull { it.checkInDate == date && it.slot == slot }
+        override suspend fun getAnalysesForDate(date: LocalDate) =
+            stored.filter { it.checkInDate == date }
+        override suspend fun getAnalysesForDateRange(startDate: LocalDate, endDate: LocalDate) = stored
+        override suspend fun getAnalysisByExternalId(externalId: String) =
+            stored.firstOrNull { it.externalId == externalId }
+        override suspend fun saveAnalysis(analysis: com.wellnesswingman.data.model.CheckInAnalysis) = 1L
+        override suspend fun deleteAnalysis(date: LocalDate, slot: CheckInSlot) = Unit
+        override suspend fun deleteOldAnalyses(beforeDate: LocalDate) = Unit
+        override suspend fun upsertAnalysis(analysis: com.wellnesswingman.data.model.CheckInAnalysis) {
+            upserted.add(analysis)
+        }
+    }
 
     /** Records what was imported so export/import round-trips can be asserted. */
     private class FakeDailyCheckInRepository(
@@ -453,6 +482,138 @@ class DataMigrationServiceTest {
         assertEquals(1, exported.size)
         assertEquals("Evening", exported.single().slot)
         assertEquals("Walked at lunch, didn't log it", exported.single().responseText)
+    }
+
+    private fun exportAnalysis(
+        slot: String = "Evening",
+        facetsJson: String = """{"mentionedFood":[{"name":"cheese"}],"factors":[]}"""
+    ) = com.wellnesswingman.data.model.export.ExportCheckInAnalysis(
+        analysisId = 1,
+        checkInDate = "2026-08-07",
+        slot = slot,
+        status = "Completed",
+        providerId = "openai",
+        model = "gpt-4o-mini",
+        analyzedAt = "2026-08-07T21:05:00Z",
+        facetsJson = facetsJson
+    )
+
+    private fun importing(
+        exportData: ExportData,
+        analysisRepo: FakeCheckInAnalysisRepository
+    ): DefaultDataMigrationService {
+        val fileSystem = FakeFileSystem()
+        val zipUtil = FakeZipUtil()
+
+        zipUtil.onExtract = { _, destDir ->
+            fileSystem.directories.add(destDir)
+            fileSystem.files["$destDir/data.json"] =
+                Json.encodeToString(ExportData.serializer(), exportData).encodeToByteArray()
+        }
+
+        return createService(
+            checkInAnalysisRepo = analysisRepo,
+            fileSystem = fileSystem,
+            zipUtil = zipUtil
+        )
+    }
+
+    @Test
+    fun `import restores check-in analyses`() = runTest {
+        val analysisRepo = FakeCheckInAnalysisRepository()
+
+        val result = importing(
+            ExportData(
+                version = 1,
+                exportedAt = "2026-08-07T09:00:00Z",
+                checkInAnalyses = listOf(exportAnalysis())
+            ),
+            analysisRepo
+        ).importData("/path/to/import.zip")
+
+        assertEquals(1, result.checkInAnalysesImported)
+        assertEquals("cheese", analysisRepo.upserted.single().facets?.mentionedFood?.single()?.name)
+    }
+
+    @Test
+    fun `import skips an analysis whose slot cannot be read`() = runTest {
+        val analysisRepo = FakeCheckInAnalysisRepository()
+
+        val result = importing(
+            ExportData(
+                version = 1,
+                exportedAt = "2026-08-07T09:00:00Z",
+                checkInAnalyses = listOf(exportAnalysis(slot = "Afternoon"), exportAnalysis())
+            ),
+            analysisRepo
+        ).importData("/path/to/import.zip")
+
+        // An analysis with no slot has no check-in to attach to.
+        assertEquals(1, result.checkInAnalysesImported)
+        assertEquals(1, analysisRepo.upserted.size)
+    }
+
+    @Test
+    fun `import keeps an analysis whose facets no longer parse`() = runTest {
+        val analysisRepo = FakeCheckInAnalysisRepository()
+
+        val result = importing(
+            ExportData(
+                version = 1,
+                exportedAt = "2026-08-07T09:00:00Z",
+                checkInAnalyses = listOf(exportAnalysis(facetsJson = "{ not json at all"))
+            ),
+            analysisRepo
+        ).importData("/path/to/import.zip")
+
+        // The row still records that extraction was attempted; the facets can be regenerated.
+        assertEquals(1, result.checkInAnalysesImported)
+        assertNull(analysisRepo.upserted.single().facets)
+    }
+
+    @Test
+    fun `an archive with no analyses imports cleanly`() = runTest {
+        val analysisRepo = FakeCheckInAnalysisRepository()
+
+        val result = importing(
+            ExportData(version = 1, exportedAt = "2026-08-07T09:00:00Z"),
+            analysisRepo
+        ).importData("/path/to/import.zip")
+
+        // Archives written before extraction existed must still import.
+        assertEquals(0, result.checkInAnalysesImported)
+        assertTrue(analysisRepo.upserted.isEmpty())
+    }
+
+    @Test
+    fun `exported payload includes stored check-in analyses`() = runTest {
+        val analysisRepo = FakeCheckInAnalysisRepository()
+        analysisRepo.seed(
+            com.wellnesswingman.data.model.CheckInAnalysis(
+                analysisId = 1,
+                checkInDate = LocalDate(2026, 8, 7),
+                slot = CheckInSlot.EVENING,
+                status = com.wellnesswingman.data.model.analysis.CheckInAnalysisStatus.COMPLETED,
+                analyzedAt = Instant.fromEpochMilliseconds(1_785_012_345_000),
+                facets = com.wellnesswingman.data.model.analysis.CheckInFacets(
+                    mentionedFood = listOf(
+                        com.wellnesswingman.data.model.analysis.MentionedFood(name = "cheese")
+                    )
+                )
+            )
+        )
+
+        val zipUtil = FakeZipUtil()
+        createService(checkInAnalysisRepo = analysisRepo, zipUtil = zipUtil).exportData()
+
+        val payload = zipUtil.createdInMemoryEntries
+            ?.firstOrNull { it.name.endsWith("data.json") }
+            ?.data
+            ?.decodeToString()
+            ?: error("Expected the export to write a JSON payload")
+
+        assertTrue(payload.contains("CheckInAnalyses"))
+        assertTrue(payload.contains("cheese"))
     }
 
     // endregion
