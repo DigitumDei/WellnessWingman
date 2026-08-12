@@ -81,8 +81,22 @@ data class NutritionTotals(
     @SerialName("sugar")
     val sugar: Double = 0.0,
     @SerialName("sodium")
-    val sodium: Double = 0.0
-)
+    val sodium: Double = 0.0,
+
+    /**
+     * How much of [calories] came from food the user only mentioned in a check-in rather than
+     * photographed.
+     *
+     * The totals themselves are merged, because a day should reflect what was actually eaten.
+     * This keeps the softer share visible: a photo estimate has an image behind it, a text
+     * estimate has a sentence, and anything presenting these numbers can say so.
+     */
+    @SerialName("mentionedCalories")
+    val mentionedCalories: Double = 0.0
+) {
+    /** True when any of the day's calories were estimated from words rather than a photo. */
+    val hasMentionedFood: Boolean get() = mentionedCalories > 0.0
+}
 
 /**
  * Nutritional balance metrics for daily summary.

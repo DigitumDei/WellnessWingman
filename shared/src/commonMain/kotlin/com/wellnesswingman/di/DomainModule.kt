@@ -21,6 +21,7 @@ import com.wellnesswingman.domain.migration.DataMigrationService
 import com.wellnesswingman.domain.migration.DefaultDataMigrationService
 import com.wellnesswingman.domain.navigation.CalendarNavigationService
 import com.wellnesswingman.domain.navigation.HistoricalNavigationContext
+import com.wellnesswingman.domain.checkin.CheckInAnalysisService
 import com.wellnesswingman.domain.checkin.DayCheckInsProvider
 import com.wellnesswingman.domain.checkin.PendingCheckInStore
 import com.wellnesswingman.domain.oauth.PendingOAuthResultStore
@@ -45,7 +46,17 @@ val domainModule = module {
 
     // Check-ins
     singleOf(::PendingCheckInStore)
-    single { DayCheckInsProvider(get(), get()) }
+    single { DayCheckInsProvider(get(), get(), get()) }
+    // Holds its own application-level scope: extraction has to outlive the screen that
+    // triggered it, since saving a check-in is normally followed by closing that screen.
+    single {
+        CheckInAnalysisService(
+            checkInAnalysisRepository = get(),
+            dailyCheckInRepository = get(),
+            trackedEntryRepository = get(),
+            llmClientFactory = get()
+        )
+    }
 
     // OAuth
     singleOf(::PendingOAuthResultStore)
@@ -98,7 +109,8 @@ val domainModule = module {
             dailyTotalsCalculator = get(),
             dailyCheckInRepository = get(),
             weightHistoryRepository = get(),
-            polarInsightService = get()
+            polarInsightService = get(),
+            checkInAnalysisRepository = get()
         )
     }
     single {
@@ -144,7 +156,8 @@ val domainModule = module {
             weightHistoryRepository = get(),
             dailyCheckInRepository = get(),
             fileSystem = get(),
-            zipUtil = get()
+            zipUtil = get(),
+            checkInAnalysisRepository = get()
         )
     }
 

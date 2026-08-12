@@ -2,15 +2,18 @@ package com.wellnesswingman.ui.screens.calendar.day
 
 import cafe.adriel.voyager.core.model.ScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
+import com.wellnesswingman.data.model.CheckInSlot
 import com.wellnesswingman.data.model.DailySummaryResult
 import com.wellnesswingman.data.model.EntryType
 import com.wellnesswingman.data.model.NutritionTotals
 import com.wellnesswingman.data.model.ProcessingStatus
 import com.wellnesswingman.data.model.TrackedEntry
+import com.wellnesswingman.data.model.analysis.CheckInFacets
 import com.wellnesswingman.data.model.analysis.MealAnalysisResult
 import com.wellnesswingman.data.model.analysis.UnifiedAnalysisResult
 import com.wellnesswingman.data.repository.DailySummaryRepository
 import com.wellnesswingman.data.repository.EntryAnalysisRepository
+import com.wellnesswingman.domain.checkin.CheckInAnalysisService
 import com.wellnesswingman.domain.checkin.DayCheckInSlot
 import com.wellnesswingman.domain.checkin.DayCheckInsProvider
 import com.wellnesswingman.data.repository.TrackedEntryRepository
@@ -37,7 +40,12 @@ class DayDetailViewModel(
     private val dailyTotalsCalculator: DailyTotalsCalculator,
     private val polarInsightService: PolarInsightService,
     private val fileSystem: FileSystemOperations,
-    private val dayCheckInsProvider: DayCheckInsProvider
+    private val dayCheckInsProvider: DayCheckInsProvider,
+    /**
+     * Optional so this view model stays constructible without extraction wired up; absent simply
+     * means no live refresh when a background extraction finishes.
+     */
+    private val checkInAnalysisService: CheckInAnalysisService? = null
 ) : ScreenModel {
 
     private val _uiState = MutableStateFlow<DayDetailUiState>(DayDetailUiState.Loading)
@@ -54,6 +62,27 @@ class DayDetailViewModel(
     private val json = Json {
         ignoreUnknownKeys = true
         isLenient = true
+    }
+
+    // Declared after the state it touches, so nothing can observe a half-constructed model.
+    init {
+        observeCheckInAnalyses()
+    }
+
+    /**
+     * Refreshes when a background extraction lands on the day being shown.
+     *
+     * Extraction outlives the screen that started it, so without this the card would sit on
+     * "Reading your answer…" until the user navigated away and back.
+     */
+    private fun observeCheckInAnalyses() {
+        val service = checkInAnalysisService ?: return
+
+        screenModelScope.launch {
+            service.analysisCompletions.collect { date ->
+                if (date == currentDate) refreshCheckIns()
+            }
+        }
     }
 
     fun loadDay(date: LocalDate) {
@@ -90,7 +119,10 @@ class DayDetailViewModel(
                     _uiState.value = DayDetailUiState.Empty
                     _summaryCardState.value = SummaryCardState.Hidden
                 } else {
-                    val nutritionTotals = calculateNutritionTotals(filteredEntries)
+                    val nutritionTotals = calculateNutritionTotals(
+                        filteredEntries,
+                        checkInSlots.mapNotNull { it.facets }
+                    )
                     val hasCompletedMeals = filteredEntries.any {
                         it.entryType == EntryType.MEAL && it.processingStatus == ProcessingStatus.COMPLETED
                     }
@@ -144,7 +176,15 @@ class DayDetailViewModel(
 
             val slots = loadCheckInSlots(date)
             if (slots != state.checkInSlots) {
-                _uiState.value = state.copy(checkInSlots = slots)
+                // Totals are recomputed alongside the slots: mentioned food is merged into them,
+                // so a finished extraction changes the day's calories as well as its cards.
+                _uiState.value = state.copy(
+                    checkInSlots = slots,
+                    nutritionTotals = calculateNutritionTotals(
+                        state.entries,
+                        slots.mapNotNull { it.facets }
+                    )
+                )
             }
         }
     }
@@ -152,13 +192,39 @@ class DayDetailViewModel(
     private suspend fun loadCheckInSlots(date: LocalDate): List<DayCheckInSlot> =
         dayCheckInsProvider.slotsFor(date)
 
-    private suspend fun calculateNutritionTotals(entries: List<TrackedEntry>): NutritionTotals {
+    /**
+     * Runs extraction again for a check-in whose first attempt failed.
+     *
+     * Extraction otherwise only runs on save, so without this a failure — a dropped connection,
+     * a missing API key — would be permanent for an answer that is already stored.
+     */
+    fun retryCheckInAnalysis(slot: CheckInSlot) {
+        val service = checkInAnalysisService ?: return
+        val date = currentDate ?: return
+
+        screenModelScope.launch {
+            // Reflect the pending state immediately; the completion signal brings the result.
+            service.retry(date, slot)
+            refreshCheckIns()
+        }
+    }
+
+    /**
+     * @param checkInFacets food the user mentioned in a check-in but never photographed. Merged
+     *   into the totals so the day reflects what was actually eaten.
+     */
+    private suspend fun calculateNutritionTotals(
+        entries: List<TrackedEntry>,
+        checkInFacets: List<CheckInFacets>
+    ): NutritionTotals {
         try {
             val completedMeals = entries.filter {
                 it.entryType == EntryType.MEAL && it.processingStatus == ProcessingStatus.COMPLETED
             }
 
-            if (completedMeals.isEmpty()) {
+            // Not an early return: a day can have no photographed meals and still have food
+            // mentioned in a check-in, and bailing here would silently drop it.
+            if (completedMeals.isEmpty() && checkInFacets.isEmpty()) {
                 return NutritionTotals()
             }
 
@@ -187,7 +253,7 @@ class DayDetailViewModel(
                 }
             }
 
-            return dailyTotalsCalculator.calculate(mealAnalyses)
+            return dailyTotalsCalculator.calculate(mealAnalyses, checkInFacets)
         } catch (e: Exception) {
             Napier.e("Failed to calculate nutrition totals", e)
             return NutritionTotals()

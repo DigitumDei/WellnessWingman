@@ -38,7 +38,8 @@ val viewModelModule = module {
             fileSystem = get(),
             pendingCaptureStore = get(),
             polarSyncOrchestrator = get(),
-            dayCheckInsProvider = get()
+            dayCheckInsProvider = get(),
+            checkInAnalysisService = get()
         )
     }
     factory { params ->
@@ -49,7 +50,8 @@ val viewModelModule = module {
             audioRecordingService = get(),
             llmClientFactory = get(),
             fileSystem = get(),
-            conversationStarter = get()
+            conversationStarter = get(),
+            checkInAnalysisService = get()
         )
     }
     single<CheckInConversationStarter> {
@@ -105,7 +107,8 @@ val viewModelModule = module {
             dailyTotalsCalculator = get(),
             polarInsightService = get(),
             fileSystem = get(),
-            dayCheckInsProvider = get()
+            dayCheckInsProvider = get(),
+            checkInAnalysisService = get()
         )
     }
     factory { params ->

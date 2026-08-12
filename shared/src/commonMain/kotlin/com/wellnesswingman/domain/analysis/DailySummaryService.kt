@@ -14,7 +14,11 @@ import com.wellnesswingman.data.model.analysis.MealAnalysisResult
 import com.wellnesswingman.data.model.analysis.OtherAnalysisResult
 import com.wellnesswingman.data.model.analysis.SleepAnalysisResult
 import com.wellnesswingman.data.model.analysis.UnifiedAnalysisResult
+import com.wellnesswingman.data.model.CheckInAnalysis
+import com.wellnesswingman.data.model.CheckInSlot
 import com.wellnesswingman.data.model.DailyCheckIn
+import com.wellnesswingman.data.model.analysis.CheckInFacets
+import com.wellnesswingman.data.repository.CheckInAnalysisRepository
 import com.wellnesswingman.data.repository.DailyCheckInRepository
 import com.wellnesswingman.data.repository.DailySummaryRepository
 import com.wellnesswingman.data.repository.EntryAnalysisRepository
@@ -45,7 +49,13 @@ class DailySummaryService(
     private val dailyTotalsCalculator: DailyTotalsCalculator,
     private val weightHistoryRepository: WeightHistoryRepository,
     private val polarInsightService: PolarInsightService,
-    private val dailyCheckInRepository: DailyCheckInRepository
+    private val dailyCheckInRepository: DailyCheckInRepository,
+    /**
+     * Optional so a summary still generates when facet extraction is not wired up. Absent means
+     * the check-ins appear as the user's raw words alone, which is the behaviour that shipped
+     * before extraction existed.
+     */
+    private val checkInAnalysisRepository: CheckInAnalysisRepository? = null
 ) {
 
     private val json = Json {
@@ -92,6 +102,14 @@ class DailySummaryService(
             } catch (e: Exception) {
                 Napier.w("Failed to load check-ins for $date. Continuing without them.", e)
                 emptyList()
+            }
+
+            val checkInAnalyses = try {
+                checkInAnalysisRepository?.getAnalysesForDate(date)?.associateBy { it.slot }
+                    .orEmpty()
+            } catch (e: Exception) {
+                Napier.w("Failed to load check-in analyses for $date: ${e.message}")
+                emptyMap()
             }
 
             // A check-in is real content even on a day with nothing logged: "slept badly, feel
@@ -169,8 +187,12 @@ class DailySummaryService(
                 )
             }
 
-            // Calculate nutrition totals
-            val nutritionTotals = dailyTotalsCalculator.calculate(mealAnalyses)
+            // Calculate nutrition totals, including food the user only mentioned in a check-in
+            // so the summary's figures match what the day screens show.
+            val nutritionTotals = dailyTotalsCalculator.calculate(
+                mealAnalyses,
+                checkInAnalyses.values.mapNotNull { it.completedFacets }
+            )
 
             // Count entries by type
             val mealCount = completedEntries.count { it.entryType == EntryType.MEAL }
@@ -219,7 +241,7 @@ class DailySummaryService(
                     includeSleep = includePolarSleep,
                     includeExercise = includePolarExercise
                 ).orEmpty(),
-                checkInDetailLines = buildCheckInDetailLines(checkIns, timeZone)
+                checkInDetailLines = buildCheckInDetailLines(checkIns, timeZone, checkInAnalyses)
             )
 
             // Generate summary using LLM
@@ -402,18 +424,62 @@ class DailySummaryService(
      */
     private fun buildCheckInDetailLines(
         checkIns: List<DailyCheckIn>,
-        timeZone: TimeZone
+        timeZone: TimeZone,
+        analyses: Map<CheckInSlot, CheckInAnalysis> = emptyMap()
     ): List<String> {
         return checkIns
             .sortedBy { it.slot }
-            .map { checkIn ->
+            .flatMap { checkIn ->
                 val localTime = checkIn.capturedAt.toLocalDateTime(timeZone).time
                 val hour = localTime.hour.toString().padStart(2, '0')
                 val minute = localTime.minute.toString().padStart(2, '0')
 
-                "  - ${checkIn.slot.toStorageString()} ($hour:$minute): " +
+                val answer = "  - ${checkIn.slot.toStorageString()} ($hour:$minute): " +
                     "\"${sanitizeForPrompt(checkIn.responseText)}\""
+
+                // The user's words come first and stay verbatim. Extracted facets follow as
+                // clearly-labelled derived detail, so the model can lean on the structure
+                // without mistaking it for something the user actually said.
+                listOf(answer) + buildFacetLines(analyses[checkIn.slot]?.completedFacets)
             }
+    }
+
+    /**
+     * Renders extracted facets beneath their check-in.
+     *
+     * Internal and external factors are labelled rather than merged, because the distinction
+     * changes what the summary should do with them: a bad night caused by a sore stomach is worth
+     * connecting to the day's food, while one caused by a noise outside is not.
+     */
+    private fun buildFacetLines(facets: CheckInFacets?): List<String> {
+        if (facets == null || facets.isEmpty) return emptyList()
+
+        return buildList {
+            facets.factors.forEach { factor ->
+                add(
+                    "      · ${factor.valence.toStorageString().lowercase()}, " +
+                        "${factor.origin.toStorageString().lowercase()}: " +
+                        sanitizeForPrompt(factor.description)
+                )
+            }
+
+            facets.mentionedFood.forEach { food ->
+                val portion = food.portionSize?.takeIf { it.isNotBlank() }
+                    ?.let { " (${sanitizeForPrompt(it)})" }
+                    .orEmpty()
+                val calories = food.nutrition?.totalCalories
+                    ?.let { " ~${it.toInt()} kcal" }
+                    .orEmpty()
+                // Said out loud so the summary does not double-count it in its own prose.
+                val duplicate = if (food.possiblyAlreadyLogged) {
+                    " [already logged above; excluded from totals]"
+                } else ""
+
+                add(
+                    "      · mentioned food: ${sanitizeForPrompt(food.name)}$portion$calories$duplicate"
+                )
+            }
+        }
     }
 
     /**
@@ -453,7 +519,13 @@ class DailySummaryService(
                     "Treat the check-ins as the user's lived experience of the day. Reconcile " +
                         "them against the measured data and say so plainly where the two " +
                         "disagree, for example when sleep duration looks adequate but the user " +
-                        "reports sleeping badly. Do not overrule how they say they felt."
+                        "reports sleeping badly. Do not overrule how they say they felt. " +
+                        "Where a check-in lists factors, note that external ones are " +
+                        "circumstance rather than anything the user should change about " +
+                        "themselves, and do not turn them into advice; internal ones are worth " +
+                        "connecting to the rest of the day's data. Any food shown as mentioned " +
+                        "is already included in the totals above unless marked as already " +
+                        "logged, so do not add it again."
                 )
             }
             if (!userComments.isNullOrBlank()) {

@@ -27,6 +27,7 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import com.wellnesswingman.data.model.CheckInSlot
 import com.wellnesswingman.data.model.NutritionTotals
 import com.wellnesswingman.data.model.TrackedEntry
+import com.wellnesswingman.data.model.analysis.FactorValence
 import com.wellnesswingman.domain.checkin.DayCheckInSlot
 import com.wellnesswingman.domain.polar.PolarDayContext
 import com.wellnesswingman.ui.screens.checkin.CheckInScreen
@@ -88,6 +89,7 @@ data class DayDetailScreen(val date: LocalDate) : Screen {
                     isGeneratingSummary = isGeneratingSummary,
                     checkInSlots = state.checkInSlots,
                     onCheckInClick = { slot -> navigator.push(CheckInScreen(slot, date)) },
+                    onRetryCheckInAnalysis = { slot -> viewModel.retryCheckInAnalysis(slot) },
                     onEntryClick = { entry -> navigator.push(EntryDetailScreen(entry.entryId)) },
                     onGenerateSummary = { viewModel.generateDailySummary() },
                     onViewSummary = { navigator.push(DailySummaryScreen(date)) },
@@ -140,6 +142,7 @@ fun DayEntryList(
     isGeneratingSummary: Boolean,
     checkInSlots: List<DayCheckInSlot> = emptyList(),
     onCheckInClick: (CheckInSlot) -> Unit = {},
+    onRetryCheckInAnalysis: (CheckInSlot) -> Unit = {},
     onEntryClick: (TrackedEntry) -> Unit,
     onGenerateSummary: () -> Unit,
     onViewSummary: () -> Unit,
@@ -203,7 +206,8 @@ fun DayEntryList(
             items(checkInSlots, key = { "checkin_${it.slot.toStorageString()}" }) { slot ->
                 CheckInCard(
                     slot = slot,
-                    onClick = { onCheckInClick(slot.slot) }
+                    onClick = { onCheckInClick(slot.slot) },
+                    onRetryAnalysis = { onRetryCheckInAnalysis(slot.slot) }
                 )
             }
         }
@@ -353,7 +357,8 @@ internal fun daySummaryActionDescription(hasTrackedEntries: Boolean, hasPolarDat
 internal fun CheckInCard(
     slot: DayCheckInSlot,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onRetryAnalysis: () -> Unit = {}
 ) {
     val label = when (slot.slot) {
         CheckInSlot.MORNING -> "Morning"
@@ -406,6 +411,88 @@ internal fun CheckInCard(
                 } else {
                     MaterialTheme.colorScheme.onSurfaceVariant
                 }
+            )
+
+            // Derived detail sits below the user's own words, visibly secondary. What they said
+            // is the record; this is only the app's reading of it.
+            CheckInFacetsSection(slot = slot, onRetryAnalysis = onRetryAnalysis)
+        }
+    }
+}
+
+/**
+ * Shows what was extracted from a check-in, or that extraction is still running.
+ *
+ * A pending extraction says so rather than showing nothing, because an empty space is
+ * indistinguishable from "we read it and found nothing" — and the two mean very different things
+ * on a day where the user mentioned a whole meal.
+ */
+@Composable
+private fun CheckInFacetsSection(
+    slot: DayCheckInSlot,
+    onRetryAnalysis: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    if (!slot.isAnswered) return
+
+    if (slot.hasAnalysisFailed) {
+        // A stored failure would otherwise be permanent: extraction only runs on save, and the
+        // answer is already saved, so without this there is no way to ask again.
+        Text(
+            text = "Couldn't read your answer · Tap to try again",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.error,
+            modifier = modifier.clickable { onRetryAnalysis() }
+        )
+        return
+    }
+
+    if (slot.isAnalysisPending) {
+        Text(
+            text = "Reading your answer…",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = modifier
+        )
+        return
+    }
+
+    val facets = slot.facets ?: return
+    if (facets.isEmpty) return
+
+    Column(
+        modifier = modifier.padding(top = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(3.dp)
+    ) {
+        facets.factors.forEach { factor ->
+            val marker = if (factor.valence == FactorValence.GOOD) "+" else "−"
+            val origin = factor.origin.toStorageString().lowercase()
+
+            Text(
+                text = "$marker ${factor.description} ($origin)",
+                style = MaterialTheme.typography.labelSmall,
+                color = if (factor.valence == FactorValence.GOOD) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                }
+            )
+        }
+
+        facets.mentionedFood.forEach { food ->
+            // "no estimate" rather than nothing: an item shown bare looks like it was counted,
+            // and the day's total would then seem wrong for no visible reason.
+            val calories = food.nutrition?.totalCalories
+                ?.let { " ~${it.toInt()} kcal" }
+                ?: " · no estimate"
+            // Stated, not hidden: a duplicate is excluded from the day's total, and a reader
+            // who can see the item but not the reason would think the total was wrong.
+            val duplicate = if (food.possiblyAlreadyLogged) " · already logged" else ""
+
+            Text(
+                text = "🍴 ${food.name}$calories$duplicate",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }

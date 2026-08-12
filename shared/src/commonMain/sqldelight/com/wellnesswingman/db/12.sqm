@@ -1,0 +1,20 @@
+-- Migration from version 12 to version 13
+-- Adds CheckInAnalysis, holding what an LLM extracted from a check-in's free text:
+-- unphotographed food and the good and bad factors behind the day, split internal vs external.
+-- Derived data only; DailyCheckIn.responseText remains canonical.
+
+CREATE TABLE CheckInAnalysis (
+    analysisId INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    externalId TEXT,
+    checkInDate INTEGER NOT NULL,
+    slot TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'Pending',
+    providerId TEXT NOT NULL DEFAULT '',
+    model TEXT NOT NULL DEFAULT '',
+    analyzedAt INTEGER NOT NULL,
+    facetsJson TEXT NOT NULL DEFAULT '',
+    errorMessage TEXT,
+    schemaVersion TEXT NOT NULL DEFAULT '1.0'
+);
+
+CREATE UNIQUE INDEX idx_checkin_analysis_date_slot ON CheckInAnalysis(checkInDate, slot);

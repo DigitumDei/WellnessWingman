@@ -1,7 +1,9 @@
 package com.wellnesswingman.domain.checkin
 
+import com.wellnesswingman.data.model.CheckInAnalysis
 import com.wellnesswingman.data.model.CheckInSlot
 import com.wellnesswingman.data.repository.AppSettingsRepository
+import com.wellnesswingman.data.repository.CheckInAnalysisRepository
 import com.wellnesswingman.data.repository.DailyCheckInRepository
 import io.github.aakira.napier.Napier
 import kotlinx.datetime.Clock
@@ -20,6 +22,11 @@ import kotlinx.datetime.toLocalDateTime
 class DayCheckInsProvider(
     private val dailyCheckInRepository: DailyCheckInRepository,
     private val appSettingsRepository: AppSettingsRepository,
+    /**
+     * Optional so a caller without extraction wired up still gets slots. Absent simply means no
+     * facets are attached, never a missing slot.
+     */
+    private val checkInAnalysisRepository: CheckInAnalysisRepository? = null,
     private val clock: Clock = Clock.System,
     private val timeZoneProvider: () -> TimeZone = { TimeZone.currentSystemDefault() }
 ) {
@@ -50,11 +57,30 @@ class DayCheckInsProvider(
                         )
                     )
                 ),
-                checkIns = dailyCheckInRepository.getCheckInsForDate(date)
+                checkIns = dailyCheckInRepository.getCheckInsForDate(date),
+                analyses = analysesFor(date)
             )
         } catch (e: Exception) {
             Napier.w("Failed to load check-ins for $date. Continuing without them.", e)
             emptyList()
+        }
+    }
+
+    /**
+     * Extraction results keyed by slot.
+     *
+     * Failing here returns nothing rather than propagating: the answer itself is the thing worth
+     * showing, and losing the whole slot because its derived data could not be read would be a
+     * worse outcome than showing the slot without facets.
+     */
+    private suspend fun analysesFor(date: LocalDate): Map<CheckInSlot, CheckInAnalysis> {
+        val repository = checkInAnalysisRepository ?: return emptyMap()
+
+        return try {
+            repository.getAnalysesForDate(date).associateBy { it.slot }
+        } catch (e: Exception) {
+            Napier.w("Failed to load check-in analyses for $date: ${e.message}")
+            emptyMap()
         }
     }
 }

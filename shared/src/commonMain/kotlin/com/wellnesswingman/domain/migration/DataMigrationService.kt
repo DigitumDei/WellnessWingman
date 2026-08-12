@@ -10,6 +10,7 @@ import com.wellnesswingman.data.repository.DailySummaryRepository
 import com.wellnesswingman.data.repository.EntryAnalysisRepository
 import com.wellnesswingman.data.repository.NutritionalProfileRepository
 import com.wellnesswingman.data.repository.TrackedEntryRepository
+import com.wellnesswingman.data.repository.CheckInAnalysisRepository
 import com.wellnesswingman.data.repository.DailyCheckInRepository
 import com.wellnesswingman.data.repository.WeeklySummaryRepository
 import com.wellnesswingman.data.repository.WeightHistoryRepository
@@ -36,6 +37,7 @@ data class ImportResult(
     val weeklySummariesImported: Int = 0,
     val weightRecordsImported: Int = 0,
     val dailyCheckInsImported: Int = 0,
+    val checkInAnalysesImported: Int = 0,
     val errors: List<String> = emptyList()
 ) {
     val isSuccess get() = errors.isEmpty()
@@ -51,7 +53,13 @@ class DefaultDataMigrationService(
     private val weightHistoryRepository: WeightHistoryRepository,
     private val dailyCheckInRepository: DailyCheckInRepository,
     private val fileSystem: FileSystemOperations,
-    private val zipUtil: ZipOperations
+    private val zipUtil: ZipOperations,
+    /**
+     * Optional so existing callers and tests keep working. Absent means extraction results are
+     * left out of the archive — they are derived from the check-in text, which is exported, so
+     * the cost is a re-run rather than lost data.
+     */
+    private val checkInAnalysisRepository: CheckInAnalysisRepository? = null
 ) : DataMigrationService {
 
     private val json = Json {
@@ -72,6 +80,7 @@ class DefaultDataMigrationService(
         val weeklySummaries = weeklySummaryRepository.getAllSummaries()
         val weightRecords = weightHistoryRepository.getAllWeightRecords()
         val dailyCheckIns = dailyCheckInRepository.getAllCheckIns()
+        val checkInAnalyses = checkInAnalysisRepository?.getAllAnalyses().orEmpty()
 
         // Gather user profile
         val userProfile = ExportUserProfile(
@@ -113,7 +122,8 @@ class DefaultDataMigrationService(
             weeklySummaries = weeklySummaries.map { it.toExport() },
             userProfile = userProfile,
             weightRecords = weightRecords.map { it.toExport() },
-            dailyCheckIns = dailyCheckIns.map { it.toExport() }
+            dailyCheckIns = dailyCheckIns.map { it.toExport() },
+            checkInAnalyses = checkInAnalyses.map { it.toExport() }
         )
 
         // 3. Serialize to JSON
@@ -352,7 +362,24 @@ class DefaultDataMigrationService(
                 }
             }
 
-            Napier.i("Import completed: $entriesImported entries, $nutritionalProfilesImported nutritional profiles, $analysesImported analyses, $summariesImported daily summaries, $weeklySummariesImported weekly summaries, $weightRecordsImported weight records, $dailyCheckInsImported check-ins")
+            // 12. Upsert check-in analyses. Derived data, so a failure here is logged and skipped
+            // rather than failing the import: extraction can simply be re-run.
+            var checkInAnalysesImported = 0
+            for (exportAnalysis in exportData.checkInAnalyses) {
+                try {
+                    val domainAnalysis = exportAnalysis.toDomain()
+                    if (domainAnalysis == null) {
+                        Napier.w("Skipping check-in analysis ${exportAnalysis.analysisId}: unrecognised slot '${exportAnalysis.slot}'")
+                        continue
+                    }
+                    checkInAnalysisRepository?.upsertAnalysis(domainAnalysis)
+                    checkInAnalysesImported++
+                } catch (e: Exception) {
+                    Napier.w("Failed to import check-in analysis ${exportAnalysis.analysisId}", e)
+                }
+            }
+
+            Napier.i("Import completed: $entriesImported entries, $nutritionalProfilesImported nutritional profiles, $analysesImported analyses, $summariesImported daily summaries, $weeklySummariesImported weekly summaries, $weightRecordsImported weight records, $dailyCheckInsImported check-ins, $checkInAnalysesImported check-in analyses")
             return ImportResult(
                 entriesImported = entriesImported,
                 nutritionalProfilesImported = nutritionalProfilesImported,
@@ -361,6 +388,7 @@ class DefaultDataMigrationService(
                 weeklySummariesImported = weeklySummariesImported,
                 weightRecordsImported = weightRecordsImported,
                 dailyCheckInsImported = dailyCheckInsImported,
+                checkInAnalysesImported = checkInAnalysesImported,
                 errors = errors
             )
         } finally {

@@ -135,6 +135,7 @@ class MainScreen : Screen {
                     isGeneratingSummary = isGeneratingSummary,
                     checkInSlots = state.checkInSlots,
                     onCheckInClick = { slot -> navigator.push(CheckInScreen(slot)) },
+                    onRetryCheckInAnalysis = { slot -> viewModel.retryCheckInAnalysis(slot) },
                     onEntryClick = { entry -> navigator.push(EntryDetailScreen(entry.entryId)) },
                     onGenerateSummary = { viewModel.generateDailySummary() },
                     onViewSummary = { navigator.push(DailySummaryScreen(Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date)) },
@@ -158,6 +159,7 @@ fun EntryList(
     isGeneratingSummary: Boolean,
     checkInSlots: List<DayCheckInSlot> = emptyList(),
     onCheckInClick: (CheckInSlot) -> Unit = {},
+    onRetryCheckInAnalysis: (CheckInSlot) -> Unit = {},
     onEntryClick: (TrackedEntry) -> Unit,
     onGenerateSummary: () -> Unit,
     onViewSummary: () -> Unit,
@@ -213,7 +215,8 @@ fun EntryList(
             items(checkInSlots, key = { "checkin_${it.slot.toStorageString()}" }) { slot ->
                 CheckInCard(
                     slot = slot,
-                    onClick = { onCheckInClick(slot.slot) }
+                    onClick = { onCheckInClick(slot.slot) },
+                    onRetryAnalysis = { onRetryCheckInAnalysis(slot.slot) }
                 )
             }
         }

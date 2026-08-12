@@ -39,6 +39,10 @@ val dataModule = module {
         SqlDelightDailyCheckInRepository(get())
     }
 
+    single<CheckInAnalysisRepository> {
+        SqlDelightCheckInAnalysisRepository(get())
+    }
+
     single<AppSettingsRepository> {
         SettingsAppSettingsRepository(get())
     }

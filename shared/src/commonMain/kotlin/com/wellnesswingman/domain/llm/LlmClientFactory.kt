@@ -39,7 +39,7 @@ open class LlmClientFactory(
     /**
      * Creates an LLM client using the currently selected provider.
      */
-    fun createForCurrentProvider(): LlmClient {
+    open fun createForCurrentProvider(): LlmClient {
         val provider = settingsRepository.getSelectedProvider()
         return create(provider)
     }
