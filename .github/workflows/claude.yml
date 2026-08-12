@@ -20,8 +20,11 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: read
-      issues: read
+      # write, not read: replying to an @claude mention means posting a comment. Never exercised
+      # so far — every run of this workflow has been skipped — but the same gap as the review
+      # workflow had.
+      pull-requests: write
+      issues: write
       id-token: write
       actions: read # Required for Claude to read CI results on PRs
     steps:
