@@ -749,6 +749,18 @@ class ToolRegistry(
 
             val byDate = mealEntries.groupBy { it.capturedAt.toLocalDateTime(zone).date }
 
+            // Bucket keys come from meals *and* mentioned food. Deriving them from meals alone
+            // drops a day whose only food was described in a check-in — the bucket would be
+            // absent entirely rather than present with its mentioned-food totals, which is the
+            // same app-versus-chat disagreement the facet wiring exists to remove.
+            val datesWithFood = (
+                byDate.keys +
+                    facetsByDate.keys.filter { it >= window.startDate && it <= window.endDate }
+                ).toSortedSet()
+
+            fun weekStartOf(date: LocalDate): LocalDate =
+                date.minus(date.dayOfWeek.ordinal, DateTimeUnit.DAY)
+
             ToolResult(
                 toolCallId = call.id,
                 name = call.name,
@@ -756,13 +768,16 @@ class ToolRegistry(
                     put("range", rangeJson(window))
                     put("groupBy", JsonPrimitive(groupBy))
                     put("mealsCounted", JsonPrimitive(mealEntries.size))
-                    // Days with no meals are excluded from the divisor: averaging over unlogged
-                    // days would understate intake rather than describe it.
+                    // Days with no food at all are excluded from the divisor: averaging over
+                    // unlogged days would understate intake rather than describe it. A day whose
+                    // only food was described in a check-in counts — it is a logged day, and
+                    // dividing the merged total by meal-days alone would overstate the average.
                     put("daysWithMeals", JsonPrimitive(byDate.size))
+                    put("daysWithFood", JsonPrimitive(datesWithFood.size))
 
                     when (groupBy) {
-                        "day" -> put("buckets", JsonArray(window.eachDate().mapNotNull { date ->
-                            val dayEntries = byDate[date] ?: return@mapNotNull null
+                        "day" -> put("buckets", JsonArray(datesWithFood.map { date ->
+                            val dayEntries = byDate[date].orEmpty()
                             buildJsonObject {
                                 put("date", JsonPrimitive(date.toString()))
                                 put("meals", JsonPrimitive(dayEntries.size))
@@ -770,24 +785,23 @@ class ToolRegistry(
                             }
                         }))
                         "week" -> {
-                            val byWeek = mealEntries.groupBy { entry ->
-                                val date = entry.capturedAt.toLocalDateTime(zone).date
-                                date.minus(date.dayOfWeek.ordinal, DateTimeUnit.DAY)
-                            }
-                            put("buckets", JsonArray(byWeek.entries.sortedBy { it.key }.map { (weekStart, weekEntries) ->
+                            val datesByWeek = datesWithFood.groupBy(::weekStartOf)
+
+                            put("buckets", JsonArray(datesByWeek.entries.sortedBy { it.key }.map { (weekStart, weekDates) ->
+                                val weekEntries = weekDates.flatMap { byDate[it].orEmpty() }
                                 buildJsonObject {
                                     put("weekStartDate", JsonPrimitive(weekStart.toString()))
                                     put("meals", JsonPrimitive(weekEntries.size))
-                                    put("totals", nutritionTotalsJson(totalsFor(weekEntries, weekEntries.map { it.capturedAt.toLocalDateTime(zone).date }.distinct())))
+                                    put("totals", nutritionTotalsJson(totalsFor(weekEntries, weekDates)))
                                 }
                             }))
                         }
                         else -> {
                             val totals = totalsFor(mealEntries, window.eachDate().toList())
                             put("totals", nutritionTotalsJson(totals))
-                            if (byDate.isNotEmpty()) {
+                            if (datesWithFood.isNotEmpty()) {
                                 put("dailyAverage", nutritionTotalsJson(
-                                    divideTotals(totals, byDate.size)
+                                    divideTotals(totals, datesWithFood.size)
                                 ))
                             }
                         }
