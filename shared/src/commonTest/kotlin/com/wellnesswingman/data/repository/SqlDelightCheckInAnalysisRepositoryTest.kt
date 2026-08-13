@@ -211,6 +211,29 @@ class SqlDelightCheckInAnalysisRepositoryTest {
     }
 
     @Test
+    fun `a row with an unreadable slot is skipped rather than thrown`() = runTest {
+        repository.saveAnalysis(analysis(slot = CheckInSlot.MORNING))
+        repository.saveAnalysis(analysis(slot = CheckInSlot.EVENING))
+
+        // Simulates a row written by a future schema.
+        driver.execute(
+            null,
+            "UPDATE CheckInAnalysis SET slot = 'Afternoon' WHERE slot = 'Morning'",
+            0
+        )
+
+        // Throwing here was worse than it looked: getAllAnalyses() is read unguarded by
+        // DataMigrationService.exportData(), so one bad row would have aborted the user's
+        // entire data export rather than costing a single analysis.
+        val all = repository.getAllAnalyses()
+        assertEquals(1, all.size)
+        assertEquals(CheckInSlot.EVENING, all.single().slot)
+
+        assertEquals(1, repository.getAnalysesForDate(date).size)
+        assertNull(repository.getAnalysis(date, CheckInSlot.MORNING))
+    }
+
+    @Test
     fun `a missing analysis reads as null rather than throwing`() = runTest {
         assertNull(repository.getAnalysis(date, CheckInSlot.MORNING))
         assertTrue(repository.getAnalysesForDate(date).isEmpty())

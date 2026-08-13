@@ -29,7 +29,7 @@ class SqlDelightCheckInAnalysisRepository(
     }
 
     override suspend fun getAllAnalyses(): List<CheckInAnalysis> = withContext(Dispatchers.IO) {
-        queries.getAllAnalyses().executeAsList().map { it.toCheckInAnalysis() }
+        queries.getAllAnalyses().executeAsList().mapNotNull { it.toCheckInAnalysisOrNull() }
     }
 
     override suspend fun getAnalysis(date: LocalDate, slot: CheckInSlot): CheckInAnalysis? =
@@ -37,13 +37,13 @@ class SqlDelightCheckInAnalysisRepository(
             queries.getAnalysisForDateAndSlot(
                 checkInDate = date.toEpochDays().toLong(),
                 slot = slot.toStorageString()
-            ).executeAsOneOrNull()?.toCheckInAnalysis()
+            ).executeAsOneOrNull()?.toCheckInAnalysisOrNull()
         }
 
     override suspend fun getAnalysesForDate(date: LocalDate): List<CheckInAnalysis> =
         withContext(Dispatchers.IO) {
             queries.getAnalysesForDate(date.toEpochDays().toLong())
-                .executeAsList().map { it.toCheckInAnalysis() }
+                .executeAsList().mapNotNull { it.toCheckInAnalysisOrNull() }
         }
 
     override suspend fun getAnalysesForDateRange(
@@ -53,12 +53,12 @@ class SqlDelightCheckInAnalysisRepository(
         queries.getAnalysesForDateRange(
             startDate.toEpochDays().toLong(),
             endDate.toEpochDays().toLong()
-        ).executeAsList().map { it.toCheckInAnalysis() }
+        ).executeAsList().mapNotNull { it.toCheckInAnalysisOrNull() }
     }
 
     override suspend fun getAnalysisByExternalId(externalId: String): CheckInAnalysis? =
         withContext(Dispatchers.IO) {
-            queries.getAnalysisByExternalId(externalId).executeAsOneOrNull()?.toCheckInAnalysis()
+            queries.getAnalysisByExternalId(externalId).executeAsOneOrNull()?.toCheckInAnalysisOrNull()
         }
 
     override suspend fun saveAnalysis(analysis: CheckInAnalysis): Long =
@@ -110,14 +110,22 @@ class SqlDelightCheckInAnalysisRepository(
         if (this == null) "" else json.encodeToString(CheckInFacets.serializer(), this)
 
     /**
-     * Maps the SQLDelight row to the domain model.
+     * Maps the SQLDelight row to the domain model, or null when the row cannot be placed.
      *
-     * An unreadable facets blob degrades to null rather than throwing: the extraction is derived
-     * data and can be re-run, so a bad blob should not make the whole day unreadable.
+     * Nothing here throws. An unreadable facets blob degrades to null facets and a FAILED status
+     * so the extraction can be re-run; an unrecognised slot drops the row entirely, since an
+     * analysis with no slot has no check-in to belong to.
+     *
+     * The slot case used to throw, which was worse than it looked: `getAllAnalyses()` is read
+     * unguarded by `DataMigrationService.exportData()`, so a single row written by a future
+     * schema would have aborted the user's entire data export rather than costing one analysis.
      */
-    private fun com.wellnesswingman.db.CheckInAnalysis.toCheckInAnalysis(): CheckInAnalysis {
+    private fun com.wellnesswingman.db.CheckInAnalysis.toCheckInAnalysisOrNull(): CheckInAnalysis? {
         val parsedSlot = CheckInSlot.fromString(slot)
-            ?: error("Unrecognised check-in slot '$slot' for analysisId=$analysisId")
+        if (parsedSlot == null) {
+            Napier.w("Skipping check-in analysis $analysisId: unrecognised slot '$slot'")
+            return null
+        }
 
         val storedStatus = CheckInAnalysisStatus.fromString(status)
 
@@ -163,3 +171,4 @@ class SqlDelightCheckInAnalysisRepository(
         )
     }
 }
+

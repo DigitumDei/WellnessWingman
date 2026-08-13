@@ -92,10 +92,19 @@ data class NutritionTotals(
      * estimate has a sentence, and anything presenting these numbers can say so.
      */
     @SerialName("mentionedCalories")
-    val mentionedCalories: Double = 0.0
+    val mentionedCalories: Double = 0.0,
+
+    /**
+     * How many mentioned items were counted, regardless of what they contributed.
+     *
+     * Separate from [mentionedCalories] because "just black coffee and water" is real extracted
+     * data that happens to total zero. Gating the nutrition card on calories alone would hide it.
+     */
+    @SerialName("mentionedItemCount")
+    val mentionedItemCount: Int = 0
 ) {
-    /** True when any of the day's calories were estimated from words rather than a photo. */
-    val hasMentionedFood: Boolean get() = mentionedCalories > 0.0
+    /** True when the day includes food described in a check-in rather than photographed. */
+    val hasMentionedFood: Boolean get() = mentionedItemCount > 0
 }
 
 /**

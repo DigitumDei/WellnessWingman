@@ -135,6 +135,38 @@ class DailyTotalsCalculatorCheckInTest {
     }
 
     @Test
+    fun `zero-calorie mentions still count as mentioned food`() {
+        val totals = calculator.calculate(
+            listOf(meal(1840.0)),
+            listOf(
+                CheckInFacets(
+                    mentionedFood = listOf(
+                        mentioned("black coffee", 0.0),
+                        mentioned("water", 0.0)
+                    )
+                )
+            )
+        )
+
+        // "Just black coffee and water" is real extracted data. Gating the nutrition card on
+        // calories alone would hide it, so the flag tracks items rather than kilojoules.
+        assertEquals(0.0, totals.mentionedCalories)
+        assertEquals(2, totals.mentionedItemCount)
+        assertTrue(totals.hasMentionedFood)
+    }
+
+    @Test
+    fun `an already-logged item does not count toward the item count either`() {
+        val totals = calculator.calculate(
+            listOf(meal(1840.0)),
+            listOf(CheckInFacets(mentionedFood = listOf(mentioned("salad", 450.0, alreadyLogged = true))))
+        )
+
+        assertEquals(0, totals.mentionedItemCount)
+        assertFalse(totals.hasMentionedFood)
+    }
+
+    @Test
     fun `mentioned food without a nutrition estimate contributes nothing`() {
         val totals = calculator.calculate(
             listOf(meal(1840.0)),

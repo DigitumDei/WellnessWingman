@@ -229,6 +229,12 @@ private fun ExtractionSummary(
 ) {
     if (!state.hasSavedAnswer) return
 
+    // Nothing to show before extraction has ever been attempted — a check-in saved before this
+    // feature existed, or a build with extraction unwired. Rendering the card anyway leaves a
+    // permanently empty "What the app read from this" panel with no retry control, since none
+    // of the states below match a null analysis.
+    if (state.analysis == null) return
+
     Card(modifier = modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(16.dp),

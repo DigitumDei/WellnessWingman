@@ -372,7 +372,11 @@ class DefaultDataMigrationService(
                         Napier.w("Skipping check-in analysis ${exportAnalysis.analysisId}: unrecognised slot '${exportAnalysis.slot}'")
                         continue
                     }
-                    checkInAnalysisRepository?.upsertAnalysis(domainAnalysis)
+                    // Counted only when something was actually written. With no repository the
+                    // null-safe call is a no-op, and reporting an import that never happened
+                    // would be a quiet lie in the result the user is shown.
+                    val repository = checkInAnalysisRepository ?: continue
+                    repository.upsertAnalysis(domainAnalysis)
                     checkInAnalysesImported++
                 } catch (e: Exception) {
                     Napier.w("Failed to import check-in analysis ${exportAnalysis.analysisId}", e)

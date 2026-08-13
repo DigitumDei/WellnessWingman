@@ -54,9 +54,15 @@ class DailyTotalsCalculator {
         }
 
         var mentionedCalories = 0.0
+        var mentionedItemCount = 0
 
         checkInFacets.forEach { facets ->
             facets.countableFood.forEach { food ->
+                // Counted whether or not it carries numbers: "just black coffee" is real
+                // extracted data, and the nutrition card is gated on this rather than on
+                // calories so a zero-calorie mention still surfaces.
+                mentionedItemCount++
+
                 food.nutrition?.let { nutrition ->
                     val itemCalories = nutrition.totalCalories ?: 0.0
                     calories += itemCalories
@@ -79,7 +85,8 @@ class DailyTotalsCalculator {
             fiber = fiber,
             sugar = sugar,
             sodium = sodium,
-            mentionedCalories = mentionedCalories
+            mentionedCalories = mentionedCalories,
+            mentionedItemCount = mentionedItemCount
         )
     }
 }

@@ -87,6 +87,7 @@ val domainModule = module {
             dailySummaryRepository = get(),
             weeklySummaryRepository = get(),
             dailyCheckInRepository = get(),
+            checkInAnalysisRepository = get(),
             polarInsightService = get(),
             dailyTotalsCalculator = get()
         )

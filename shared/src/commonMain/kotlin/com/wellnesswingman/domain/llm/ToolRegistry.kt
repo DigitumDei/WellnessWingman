@@ -8,9 +8,11 @@ import com.wellnesswingman.data.model.llm.ToolCall
 import com.wellnesswingman.data.model.llm.ToolDefinition
 import com.wellnesswingman.data.model.llm.ToolResult
 import com.wellnesswingman.data.model.NutritionTotals
+import com.wellnesswingman.data.model.analysis.CheckInFacets
 import com.wellnesswingman.data.model.analysis.MealAnalysisResult
 import com.wellnesswingman.data.model.analysis.UnifiedAnalysisResult
 import com.wellnesswingman.data.repository.AppSettingsRepository
+import com.wellnesswingman.data.repository.CheckInAnalysisRepository
 import com.wellnesswingman.data.repository.DailyCheckInRepository
 import com.wellnesswingman.data.repository.DailySummaryRepository
 import com.wellnesswingman.data.repository.EntryAnalysisRepository
@@ -60,6 +62,12 @@ class ToolRegistry(
     private val dailySummaryRepository: DailySummaryRepository? = null,
     private val weeklySummaryRepository: WeeklySummaryRepository? = null,
     private val dailyCheckInRepository: DailyCheckInRepository? = null,
+    /**
+     * Supplies food mentioned in a check-in but never photographed, so chat-reported nutrition
+     * matches what the day screens and the generated summary show. Without it a user who logged
+     * food only by talking about it gets one answer from the app and a different one from chat.
+     */
+    private val checkInAnalysisRepository: CheckInAnalysisRepository? = null,
     private val polarInsightService: PolarInsightService? = null,
     private val dailyTotalsCalculator: DailyTotalsCalculator = DailyTotalsCalculator(),
     private val clock: Clock = Clock.System,
@@ -80,6 +88,32 @@ class ToolRegistry(
     }
 
     private fun timeZone(): TimeZone = timeZoneProvider()
+
+    /**
+     * Completed check-in facets across a range, keyed by day.
+     *
+     * Fetched once per tool call rather than per day: a six-month overview would otherwise issue
+     * one query per date. Only completed extractions count — a pending one holds no food yet,
+     * which is not the same as a day with none.
+     *
+     * Degrades to nothing on failure, so chat still answers with photographed food rather than
+     * erroring out entirely.
+     */
+    private suspend fun checkInFacetsByDate(
+        startDate: LocalDate,
+        endDate: LocalDate
+    ): Map<LocalDate, List<CheckInFacets>> {
+        val repository = checkInAnalysisRepository ?: return emptyMap()
+
+        return try {
+            repository.getAnalysesForDateRange(startDate, endDate)
+                .mapNotNull { analysis -> analysis.completedFacets?.let { analysis.checkInDate to it } }
+                .groupBy({ it.first }, { it.second })
+        } catch (e: Exception) {
+            Napier.w("Failed to load check-in facets for tool totals: ${e.message}")
+            emptyMap()
+        }
+    }
 
     private fun today(): LocalDate = clock.now().toLocalDateTime(timeZone()).date
 
@@ -347,6 +381,7 @@ class ToolRegistry(
                 ?.map { it.checkInDate }
                 ?.toSet()
                 .orEmpty()
+            val facetsByDate = checkInFacetsByDate(window.startDate, window.endDate)
 
             val entriesByDate = entries.groupBy { it.capturedAt.toLocalDateTime(zone).date }
 
@@ -360,7 +395,8 @@ class ToolRegistry(
                         val dayEntries = entriesByDate[date].orEmpty()
                         val totals = dailyTotalsCalculator.calculate(
                             dayEntries.filter { it.entryType == EntryType.MEAL }
-                                .map { mealAnalysisFrom(analyses[it.entryId]) }
+                                .map { mealAnalysisFrom(analyses[it.entryId]) },
+                            facetsByDate[date].orEmpty()
                         )
                         val sleepHours = dayEntries
                             .filter { it.entryType == EntryType.SLEEP }
@@ -695,8 +731,21 @@ class ToolRegistry(
                 .filter { it.entryType == EntryType.MEAL }
             val analyses = latestAnalysesByEntryId(mealEntries)
 
-            fun totalsFor(entries: List<TrackedEntry>): NutritionTotals =
-                dailyTotalsCalculator.calculate(entries.map { mealAnalysisFrom(analyses[it.entryId]) })
+            val facetsByDate = checkInFacetsByDate(window.startDate, window.endDate)
+
+            /**
+             * @param dates which days' mentioned food belongs in this bucket. Passed explicitly
+             *   rather than derived from [entries], because a day can have mentioned food and no
+             *   photographed meal at all — deriving the dates from meals would drop exactly the
+             *   food this fix exists to include.
+             */
+            fun totalsFor(
+                entries: List<TrackedEntry>,
+                dates: Collection<LocalDate>
+            ): NutritionTotals = dailyTotalsCalculator.calculate(
+                entries.map { mealAnalysisFrom(analyses[it.entryId]) },
+                dates.flatMap { facetsByDate[it].orEmpty() }
+            )
 
             val byDate = mealEntries.groupBy { it.capturedAt.toLocalDateTime(zone).date }
 
@@ -717,7 +766,7 @@ class ToolRegistry(
                             buildJsonObject {
                                 put("date", JsonPrimitive(date.toString()))
                                 put("meals", JsonPrimitive(dayEntries.size))
-                                put("totals", nutritionTotalsJson(totalsFor(dayEntries)))
+                                put("totals", nutritionTotalsJson(totalsFor(dayEntries, listOf(date))))
                             }
                         }))
                         "week" -> {
@@ -729,12 +778,12 @@ class ToolRegistry(
                                 buildJsonObject {
                                     put("weekStartDate", JsonPrimitive(weekStart.toString()))
                                     put("meals", JsonPrimitive(weekEntries.size))
-                                    put("totals", nutritionTotalsJson(totalsFor(weekEntries)))
+                                    put("totals", nutritionTotalsJson(totalsFor(weekEntries, weekEntries.map { it.capturedAt.toLocalDateTime(zone).date }.distinct())))
                                 }
                             }))
                         }
                         else -> {
-                            val totals = totalsFor(mealEntries)
+                            val totals = totalsFor(mealEntries, window.eachDate().toList())
                             put("totals", nutritionTotalsJson(totals))
                             if (byDate.isNotEmpty()) {
                                 put("dailyAverage", nutritionTotalsJson(

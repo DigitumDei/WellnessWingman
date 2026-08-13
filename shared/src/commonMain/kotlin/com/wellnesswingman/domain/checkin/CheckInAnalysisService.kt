@@ -215,12 +215,16 @@ class CheckInAnalysisService(
     /**
      * Whether the stored answer still matches the one being analysed.
      *
-     * A read failure counts as current: refusing to store a good extraction because the check
-     * itself failed would be the worse outcome.
+     * A missing row means the check-in was deleted while its extraction ran, so the result has
+     * nothing to attach to — storing it would leave facets and mentioned food on a day whose
+     * answer no longer exists, quietly inflating that day's calories.
+     *
+     * A read *failure* is different and counts as current: refusing to store a good extraction
+     * because the verification query itself broke would be the worse outcome.
      */
     private suspend fun isStillCurrent(checkIn: DailyCheckIn): Boolean = try {
         val stored = dailyCheckInRepository.getCheckIn(checkIn.checkInDate, checkIn.slot)
-        stored == null || stored.responseText == checkIn.responseText
+        stored != null && stored.responseText == checkIn.responseText
     } catch (e: Exception) {
         Napier.w("Could not confirm the check-in is unchanged: ${e.message}")
         true

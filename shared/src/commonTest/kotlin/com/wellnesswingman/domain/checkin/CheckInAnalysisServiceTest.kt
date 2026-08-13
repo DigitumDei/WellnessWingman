@@ -284,11 +284,16 @@ class CheckInAnalysisServiceTest {
         override suspend fun upsertAnalysis(analysis: EntryAnalysis) = Unit
     }
 
+    /**
+     * @param checkIns what the repository holds. Defaults to the check-in under analysis, since
+     *   the service verifies the answer still exists before storing a result — an empty store
+     *   means "deleted while the extraction ran", which is a deliberate discard, not the norm.
+     */
     private fun service(
         analysisRepository: FakeCheckInAnalysisRepository,
         client: LlmClient,
         entries: List<TrackedEntry> = emptyList(),
-        checkIns: MutableList<DailyCheckIn> = mutableListOf(),
+        checkIns: MutableList<DailyCheckIn> = mutableListOf(checkIn),
         entryAnalyses: Map<Long, String> = emptyMap()
     ) = CheckInAnalysisService(
         checkInAnalysisRepository = analysisRepository,
@@ -578,6 +583,20 @@ class CheckInAnalysisServiceTest {
 
         // Storage is keyed on (date, slot), so whichever call finished last would otherwise win
         // and the older answer's facets could replace the newer ones.
+        assertNotEquals(CheckInAnalysisStatus.COMPLETED, result.status)
+        assertTrue(repository.saved.none { it.status == CheckInAnalysisStatus.COMPLETED })
+    }
+
+    @Test
+    fun `an extraction for a deleted check-in is discarded`() = runTest {
+        val repository = FakeCheckInAnalysisRepository()
+
+        // Nothing stored: the check-in was deleted while its extraction ran.
+        val result = service(repository, FakeLlmClient(fullResponse), checkIns = mutableListOf())
+            .analyze(checkIn)
+
+        // Storing would leave facets and mentioned food on a day whose answer no longer exists,
+        // quietly inflating that day's calories.
         assertNotEquals(CheckInAnalysisStatus.COMPLETED, result.status)
         assertTrue(repository.saved.none { it.status == CheckInAnalysisStatus.COMPLETED })
     }
