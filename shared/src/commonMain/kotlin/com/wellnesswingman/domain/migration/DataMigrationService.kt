@@ -90,7 +90,8 @@ class DefaultDataMigrationService(
             currentWeight = appSettingsRepository.getCurrentWeight(),
             weightUnit = appSettingsRepository.getWeightUnit(),
             dateOfBirth = appSettingsRepository.getDateOfBirth(),
-            activityLevel = appSettingsRepository.getActivityLevel()
+            activityLevel = appSettingsRepository.getActivityLevel(),
+            goalsAndPreferences = appSettingsRepository.getGoalsAndPreferences()
         )
 
         Napier.i("Exporting ${entries.size} entries, ${nutritionalProfiles.size} nutritional profiles, ${analyses.size} analyses, ${summaries.size} daily summaries, ${weeklySummaries.size} weekly summaries, ${weightRecords.size} weight records, user profile")
@@ -324,6 +325,7 @@ class DefaultDataMigrationService(
                     appSettingsRepository.setWeightUnit(profile.weightUnit)
                     profile.dateOfBirth?.let { appSettingsRepository.setDateOfBirth(it) }
                     profile.activityLevel?.let { appSettingsRepository.setActivityLevel(it) }
+                    profile.goalsAndPreferences?.let { appSettingsRepository.setGoalsAndPreferences(it) }
                     Napier.i("Imported user profile")
                 } catch (e: Exception) {
                     Napier.w("Failed to import user profile", e)

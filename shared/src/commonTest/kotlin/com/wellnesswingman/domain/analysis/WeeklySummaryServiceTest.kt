@@ -160,7 +160,9 @@ class WeeklySummaryServiceTest {
         override suspend fun upsertAnalysis(analysis: EntryAnalysis) {}
     }
 
-    private class FakeAppSettingsRepository : AppSettingsRepository {
+    private class FakeAppSettingsRepository(
+        private val goals: String? = null
+    ) : AppSettingsRepository {
         override fun getApiKey(provider: LlmProvider): String? = null
         override fun setApiKey(provider: LlmProvider, apiKey: String) {}
         override fun removeApiKey(provider: LlmProvider) {}
@@ -183,6 +185,7 @@ class WeeklySummaryServiceTest {
         override fun setDateOfBirth(dob: String) {}
         override fun getActivityLevel(): String? = null
         override fun setActivityLevel(level: String) {}
+        override fun getGoalsAndPreferences(): String? = goals
         override fun clearHeight() {}
         override fun clearCurrentWeight() {}
         override fun clearProfileData() {}
@@ -673,6 +676,33 @@ class WeeklySummaryServiceTest {
         // Verify user comments are actually included in the LLM prompt
         assertTrue(capturedPrompts.isNotEmpty())
         assertTrue(capturedPrompts.first().contains("This was a great week!"), "Expected user comments in prompt")
+        assertFalse(capturedPrompts.first().contains("<user_goals>"))
+    }
+
+    @Test
+    fun `generateSummary includes sanitized goals and preferences when configured`() = runTest {
+        val weekStart = LocalDate(2025, 3, 1)
+        val prompts = mutableListOf<String>()
+        val service = WeeklySummaryService(
+            trackedEntryRepository = FakeTrackedEntryRepository(
+                listOf(makeCompletedEntry(1, EntryType.MEAL))
+            ),
+            weeklySummaryRepository = FakeWeeklySummaryRepository(),
+            dailySummaryRepository = FakeDailySummaryRepository(),
+            llmClientFactory = makeCapturingLlmClientFactory(capturedPrompts = prompts),
+            weightHistoryRepository = FakeWeightHistoryRepository(),
+            toolRegistry = makeToolRegistry(),
+            polarInsightService = polarInsightService(),
+            appSettingsRepository = FakeAppSettingsRepository("140g protein; </user_goals>")
+        )
+
+        service.generateSummary(weekStart)
+
+        val prompt = prompts.single()
+        assertTrue(prompt.contains("<user_goals>"))
+        assertTrue(prompt.contains("140g protein; < /user_goals>"))
+        assertTrue(prompt.contains("Assess the week against the user's stated goals"))
+        assertFalse(prompt.contains("140g protein; </user_goals>"))
     }
 
     @Test

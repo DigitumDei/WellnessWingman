@@ -183,6 +183,8 @@ private class FakeAppSettingsRepository : AppSettingsRepository {
     override fun setDateOfBirth(dob: String) { settings["dateOfBirth"] = dob }
     override fun getActivityLevel(): String? = settings["activityLevel"] as? String
     override fun setActivityLevel(level: String) { settings["activityLevel"] = level }
+    override fun getGoalsAndPreferences(): String? = settings["goalsAndPreferences"] as? String
+    override fun setGoalsAndPreferences(text: String) { settings["goalsAndPreferences"] = text }
     override fun clearHeight() { settings.remove("height") }
     override fun clearCurrentWeight() { settings.remove("currentWeight") }
     override fun clearProfileData() { settings.clear() }
@@ -700,6 +702,7 @@ class DataMigrationServiceTest {
         appSettingsRepo.setSex("Male")
         appSettingsRepo.setCurrentWeight(75.0)
         appSettingsRepo.setWeightUnit("kg")
+        appSettingsRepo.setGoalsAndPreferences("Reach 72kg by December")
 
         val zipUtil = FakeZipUtil()
         val service = createService(appSettingsRepo = appSettingsRepo, zipUtil = zipUtil)
@@ -711,6 +714,7 @@ class DataMigrationServiceTest {
         assertEquals(180.0, exportData.userProfile?.height)
         assertEquals("Male", exportData.userProfile?.sex)
         assertEquals(75.0, exportData.userProfile?.currentWeight)
+        assertEquals("Reach 72kg by December", exportData.userProfile?.goalsAndPreferences)
     }
 
     @Test
@@ -1266,7 +1270,8 @@ class DataMigrationServiceTest {
                 currentWeight = 65.0,
                 weightUnit = "kg",
                 dateOfBirth = "1990-01-15",
-                activityLevel = "Active"
+                activityLevel = "Active",
+                goalsAndPreferences = "Coeliac; 140g protein daily"
             )
         )
 
@@ -1288,6 +1293,7 @@ class DataMigrationServiceTest {
         assertEquals("kg", appSettingsRepo.getWeightUnit())
         assertEquals("1990-01-15", appSettingsRepo.getDateOfBirth())
         assertEquals("Active", appSettingsRepo.getActivityLevel())
+        assertEquals("Coeliac; 140g protein daily", appSettingsRepo.getGoalsAndPreferences())
     }
 
     @Test

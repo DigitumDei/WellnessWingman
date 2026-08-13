@@ -18,6 +18,7 @@ import cafe.adriel.voyager.koin.getScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import com.wellnesswingman.ui.screens.weighthistory.WeightHistoryScreen
+import com.wellnesswingman.data.repository.MAX_GOALS_AND_PREFERENCES_LENGTH
 
 class UserProfileSettingsScreen : Screen {
     @Composable
@@ -136,6 +137,18 @@ class UserProfileSettingsScreen : Screen {
                 ActivityLevelDropdown(
                     value = uiState.activityLevel,
                     onValueChange = { viewModel.updateActivityLevel(it) }
+                )
+
+                // Goals and preferences
+                OutlinedTextField(
+                    value = uiState.goalsAndPreferences,
+                    onValueChange = { viewModel.updateGoalsAndPreferences(it) },
+                    label = { Text("Goals and preferences") },
+                    placeholder = { Text("e.g. Trying to reach 82kg by December; coeliac; 140g protein daily") },
+                    supportingText = { Text("${uiState.goalsAndPreferences.length}/$MAX_GOALS_AND_PREFERENCES_LENGTH") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 4,
+                    maxLines = 8
                 )
 
                 // View Weight History button
