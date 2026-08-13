@@ -9,9 +9,11 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class SleepAnalysisResult(
     @SerialName("durationHours")
+    @Serializable(with = LenientNullableDoubleSerializer::class)
     val durationHours: Double? = null,
 
     @SerialName("sleepScore")
+    @Serializable(with = LenientNullableDoubleSerializer::class)
     val sleepScore: Double? = null,
 
     @SerialName("qualitySummary")

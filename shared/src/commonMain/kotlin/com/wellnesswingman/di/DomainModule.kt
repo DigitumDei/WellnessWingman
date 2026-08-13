@@ -13,6 +13,7 @@ import com.wellnesswingman.domain.analysis.NutritionLabelAnalyzing
 import com.wellnesswingman.domain.analysis.StaleEntryRecoveryService
 import com.wellnesswingman.domain.capture.PendingCaptureStore
 import com.wellnesswingman.domain.capture.PhotoEntryProcessor
+import com.wellnesswingman.domain.capture.TextEntryProcessor
 import com.wellnesswingman.domain.events.DefaultStatusChangeNotifier
 import com.wellnesswingman.domain.events.StatusChangeNotifier
 import com.wellnesswingman.domain.llm.LlmClientFactory
@@ -21,6 +22,7 @@ import com.wellnesswingman.domain.migration.DataMigrationService
 import com.wellnesswingman.domain.migration.DefaultDataMigrationService
 import com.wellnesswingman.domain.navigation.CalendarNavigationService
 import com.wellnesswingman.domain.navigation.HistoricalNavigationContext
+import com.wellnesswingman.domain.checkin.CheckInAnalysisService
 import com.wellnesswingman.domain.checkin.DayCheckInsProvider
 import com.wellnesswingman.domain.checkin.PendingCheckInStore
 import com.wellnesswingman.domain.oauth.PendingOAuthResultStore
@@ -43,9 +45,29 @@ val domainModule = module {
     // Idempotent photo entry processing (app-scoped; survives configuration changes)
     singleOf(::PhotoEntryProcessor)
 
+    // Entries described rather than photographed (app-scoped for the same reason)
+    single {
+        TextEntryProcessor(
+            trackedEntryRepository = get(),
+            backgroundAnalysisService = get(),
+            llmClientFactory = get()
+        )
+    }
+
     // Check-ins
     singleOf(::PendingCheckInStore)
-    single { DayCheckInsProvider(get(), get()) }
+    single { DayCheckInsProvider(get(), get(), get()) }
+    // Holds its own application-level scope: extraction has to outlive the screen that
+    // triggered it, since saving a check-in is normally followed by closing that screen.
+    single {
+        CheckInAnalysisService(
+            checkInAnalysisRepository = get(),
+            dailyCheckInRepository = get(),
+            trackedEntryRepository = get(),
+            llmClientFactory = get(),
+            entryAnalysisRepository = get()
+        )
+    }
 
     // OAuth
     singleOf(::PendingOAuthResultStore)
@@ -65,6 +87,7 @@ val domainModule = module {
             dailySummaryRepository = get(),
             weeklySummaryRepository = get(),
             dailyCheckInRepository = get(),
+            checkInAnalysisRepository = get(),
             polarInsightService = get(),
             dailyTotalsCalculator = get()
         )
@@ -98,7 +121,8 @@ val domainModule = module {
             dailyTotalsCalculator = get(),
             dailyCheckInRepository = get(),
             weightHistoryRepository = get(),
-            polarInsightService = get()
+            polarInsightService = get(),
+            checkInAnalysisRepository = get()
         )
     }
     single {
@@ -144,7 +168,8 @@ val domainModule = module {
             weightHistoryRepository = get(),
             dailyCheckInRepository = get(),
             fileSystem = get(),
-            zipUtil = get()
+            zipUtil = get(),
+            checkInAnalysisRepository = get()
         )
     }
 

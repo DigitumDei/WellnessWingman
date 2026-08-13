@@ -49,6 +49,7 @@ import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.minus
 import kotlinx.datetime.toInstant
+import kotlinx.datetime.atTime
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
@@ -116,7 +117,8 @@ class ToolRegistryTest {
     private fun rangedRegistry(
         entries: List<TrackedEntry> = emptyList(),
         analyses: Map<Long, EntryAnalysis> = emptyMap(),
-        dailySummaries: List<DailySummary> = emptyList()
+        dailySummaries: List<DailySummary> = emptyList(),
+        checkInAnalyses: List<com.wellnesswingman.data.model.CheckInAnalysis> = emptyList()
     ) = ToolRegistry(
         trackedEntryRepository = FakeRangedTrackedEntryRepository(entries),
         entryAnalysisRepository = FakeEntryAnalysisRepository(analyses),
@@ -124,8 +126,52 @@ class ToolRegistryTest {
         appSettingsRepository = FakeAppSettingsRepository(),
         nutritionalProfileRepository = FakeNutritionalProfileRepository(),
         dailySummaryRepository = FakeDailySummaryRepository(dailySummaries),
+        checkInAnalysisRepository = FakeCheckInAnalysisRepositoryForTools(checkInAnalyses),
         clock = fixedClock,
         timeZoneProvider = { TimeZone.UTC }
+    )
+
+    /** Serves completed extractions by date range, matching how the registry reads them. */
+    private class FakeCheckInAnalysisRepositoryForTools(
+        private val analyses: List<com.wellnesswingman.data.model.CheckInAnalysis>
+    ) : com.wellnesswingman.data.repository.CheckInAnalysisRepository {
+        override suspend fun getAnalysesForDateRange(
+            startDate: LocalDate,
+            endDate: LocalDate
+        ) = analyses.filter { it.checkInDate >= startDate && it.checkInDate <= endDate }
+
+        override suspend fun getAllAnalyses() = analyses
+        override suspend fun getAnalysis(date: LocalDate, slot: CheckInSlot) =
+            analyses.firstOrNull { it.checkInDate == date && it.slot == slot }
+        override suspend fun getAnalysesForDate(date: LocalDate) =
+            analyses.filter { it.checkInDate == date }
+        override suspend fun getAnalysisByExternalId(externalId: String) = null
+        override suspend fun saveAnalysis(analysis: com.wellnesswingman.data.model.CheckInAnalysis) = 1L
+        override suspend fun deleteAnalysis(date: LocalDate, slot: CheckInSlot) = Unit
+        override suspend fun deleteOldAnalyses(beforeDate: LocalDate) = Unit
+        override suspend fun upsertAnalysis(analysis: com.wellnesswingman.data.model.CheckInAnalysis) = Unit
+    }
+
+    /** A completed extraction on [date] mentioning one item worth [calories]. */
+    private fun mentionedFoodAnalysis(
+        date: LocalDate,
+        name: String = "two beers",
+        calories: Double = 300.0
+    ) = com.wellnesswingman.data.model.CheckInAnalysis(
+        checkInDate = date,
+        slot = CheckInSlot.EVENING,
+        status = com.wellnesswingman.data.model.analysis.CheckInAnalysisStatus.COMPLETED,
+        analyzedAt = date.atTime(21, 0).toInstant(TimeZone.UTC),
+        facets = com.wellnesswingman.data.model.analysis.CheckInFacets(
+            mentionedFood = listOf(
+                com.wellnesswingman.data.model.analysis.MentionedFood(
+                    name = name,
+                    nutrition = com.wellnesswingman.data.model.analysis.NutritionEstimate(
+                        totalCalories = calories
+                    )
+                )
+            )
+        )
     )
 
     private suspend fun ToolRegistry.call(
@@ -135,6 +181,120 @@ class ToolRegistryTest {
         val result = execute(ToolCall(id = "call-1", name = name, arguments = arguments))
         assertFalse(result.isError, "Tool $name errored: ${result.content}")
         return assertIs<JsonObject>(result.content)
+    }
+
+    @Test
+    fun `nutrition totals include food only mentioned in a check-in`() = runTest {
+        val registry = rangedRegistry(
+            checkInAnalyses = listOf(mentionedFoodAnalysis(LocalDate(2026, 7, 22)))
+        )
+
+        val content = registry.call("get_nutrition_totals", buildJsonObject {
+            put("startDate", JsonPrimitive("2026-07-20"))
+            put("endDate", JsonPrimitive("2026-07-26"))
+        })
+
+        // Chat must agree with the Day screen for a user who logged food only by describing it.
+        val totals = assertIs<JsonObject>(content["totals"])
+        assertEquals(300.0, totals["calories"]?.jsonPrimitive?.double)
+    }
+
+    @Test
+    fun `a day whose only food was mentioned still gets a day bucket`() = runTest {
+        val registry = rangedRegistry(
+            checkInAnalyses = listOf(mentionedFoodAnalysis(LocalDate(2026, 7, 22)))
+        )
+
+        val content = registry.call("get_nutrition_totals", buildJsonObject {
+            put("startDate", JsonPrimitive("2026-07-20"))
+            put("endDate", JsonPrimitive("2026-07-26"))
+            put("groupBy", JsonPrimitive("day"))
+        })
+
+        // Deriving buckets from photographed meals alone dropped the day entirely — absent
+        // rather than present with zero, so the food was invisible in this view while showing
+        // correctly in the ungrouped total and on the Day screen.
+        val buckets = assertIs<JsonArray>(content["buckets"])
+        val day = buckets.map { assertIs<JsonObject>(it) }
+            .single { it["date"]?.jsonPrimitive?.content == "2026-07-22" }
+
+        assertEquals(0, day["meals"]?.jsonPrimitive?.int)
+        assertEquals(300.0, assertIs<JsonObject>(day["totals"])["calories"]?.jsonPrimitive?.double)
+    }
+
+    @Test
+    fun `a week whose only food was mentioned still gets a week bucket`() = runTest {
+        val registry = rangedRegistry(
+            checkInAnalyses = listOf(mentionedFoodAnalysis(LocalDate(2026, 7, 22)))
+        )
+
+        val content = registry.call("get_nutrition_totals", buildJsonObject {
+            put("startDate", JsonPrimitive("2026-07-20"))
+            put("endDate", JsonPrimitive("2026-07-26"))
+            put("groupBy", JsonPrimitive("week"))
+        })
+
+        val buckets = assertIs<JsonArray>(content["buckets"])
+        assertEquals(1, buckets.size)
+        assertEquals(
+            300.0,
+            assertIs<JsonObject>(assertIs<JsonObject>(buckets.single())["totals"])["calories"]
+                ?.jsonPrimitive?.double
+        )
+    }
+
+    @Test
+    fun `a mentioned-only day counts toward the daily average divisor`() = runTest {
+        val registry = rangedRegistry(
+            checkInAnalyses = listOf(
+                mentionedFoodAnalysis(LocalDate(2026, 7, 21), calories = 200.0),
+                mentionedFoodAnalysis(LocalDate(2026, 7, 22), calories = 400.0)
+            )
+        )
+
+        val content = registry.call("get_nutrition_totals", buildJsonObject {
+            put("startDate", JsonPrimitive("2026-07-20"))
+            put("endDate", JsonPrimitive("2026-07-26"))
+        })
+
+        // Dividing a merged total by meal-days alone would overstate the average, since these
+        // days have food but no photographed meal.
+        assertEquals(2, content["daysWithFood"]?.jsonPrimitive?.int)
+        val average = assertIs<JsonObject>(content["dailyAverage"])
+        assertEquals(300.0, average["calories"]?.jsonPrimitive?.double)
+    }
+
+    @Test
+    fun `food already logged as a photographed meal is not counted twice by chat`() = runTest {
+        val (entries, analyses) = sixWeeksOfMeals()
+        val duplicate = com.wellnesswingman.data.model.CheckInAnalysis(
+            checkInDate = LocalDate(2026, 7, 22),
+            slot = CheckInSlot.EVENING,
+            status = com.wellnesswingman.data.model.analysis.CheckInAnalysisStatus.COMPLETED,
+            analyzedAt = LocalDate(2026, 7, 22).atTime(21, 0).toInstant(TimeZone.UTC),
+            facets = com.wellnesswingman.data.model.analysis.CheckInFacets(
+                mentionedFood = listOf(
+                    com.wellnesswingman.data.model.analysis.MentionedFood(
+                        name = "that meal again",
+                        nutrition = com.wellnesswingman.data.model.analysis.NutritionEstimate(
+                            totalCalories = 500.0
+                        ),
+                        possiblyAlreadyLogged = true
+                    )
+                )
+            )
+        )
+
+        val content = rangedRegistry(entries, analyses, checkInAnalyses = listOf(duplicate))
+            .call("get_nutrition_totals", buildJsonObject {
+                put("startDate", JsonPrimitive("2026-07-22"))
+                put("endDate", JsonPrimitive("2026-07-22"))
+                put("groupBy", JsonPrimitive("day"))
+            })
+
+        val day = assertIs<JsonArray>(content["buckets"]).map { assertIs<JsonObject>(it) }.single()
+        // The photographed meal alone: the flagged duplicate must not be added on top.
+        assertEquals(500.0, assertIs<JsonObject>(day["totals"])["calories"]?.jsonPrimitive?.double)
     }
 
     @Test

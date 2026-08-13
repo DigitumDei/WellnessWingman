@@ -18,6 +18,8 @@ import cafe.adriel.voyager.koin.getScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import com.wellnesswingman.data.model.CheckInSlot
+import com.wellnesswingman.data.model.analysis.CheckInFacets
+import com.wellnesswingman.data.model.analysis.FactorValence
 import com.wellnesswingman.ui.components.LoadingIndicator
 import com.wellnesswingman.util.DateTimeUtil
 import kotlinx.datetime.LocalDate
@@ -201,7 +203,119 @@ data class CheckInScreen(
                         color = MaterialTheme.colorScheme.error
                     )
                 }
+
+                ExtractionSummary(
+                    state = uiState,
+                    onRetry = viewModel::retryAnalysis
+                )
             }
+        }
+    }
+}
+
+/**
+ * Shows what the app read out of the answer, read-only.
+ *
+ * Deliberately not editable. The user's own words are the record; this is the app's reading of
+ * them, and offering an edit box would imply the derived version is the thing that matters — the
+ * opposite of what check-ins are for. Correcting it means editing the answer and saving again,
+ * which re-runs extraction.
+ */
+@Composable
+private fun ExtractionSummary(
+    state: CheckInUiState,
+    onRetry: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    if (!state.hasSavedAnswer) return
+
+    // Nothing to show before extraction has ever been attempted — a check-in saved before this
+    // feature existed, or a build with extraction unwired. Rendering the card anyway leaves a
+    // permanently empty "What the app read from this" panel with no retry control, since none
+    // of the states below match a null analysis.
+    if (state.analysis == null) return
+
+    Card(modifier = modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = "What the app read from this",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold
+            )
+
+            when {
+                state.isAnalysisPending -> Text(
+                    text = "Reading your answer…",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                state.hasAnalysisFailed -> {
+                    Text(
+                        text = state.analysis?.errorMessage
+                            ?: "Your answer is saved, but it could not be read.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                    TextButton(onClick = onRetry) {
+                        Text("Try again")
+                    }
+                }
+
+                state.analysisFoundNothing -> Text(
+                    text = "Nothing to pull out of this one — that is a perfectly normal day.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                else -> ExtractionDetail(facets = state.facets ?: return@Column)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ExtractionDetail(facets: CheckInFacets) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        facets.factors.forEach { factor ->
+            val marker = if (factor.valence == FactorValence.GOOD) "+" else "−"
+
+            Text(
+                text = "$marker ${factor.description} (${factor.origin.toStorageString().lowercase()})",
+                style = MaterialTheme.typography.bodySmall,
+                color = if (factor.valence == FactorValence.GOOD) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                }
+            )
+        }
+
+        facets.mentionedFood.forEach { food ->
+            val portion = food.portionSize?.takeIf { it.isNotBlank() }?.let { " ($it)" }.orEmpty()
+            // Said out loud when absent: an item with no number looks like it was counted, and
+            // the day's calories would then seem wrong for no visible reason.
+            val calories = food.nutrition?.totalCalories
+                ?.let { " — ~${it.toInt()} kcal" }
+                ?: " — no calorie estimate"
+            val duplicate = if (food.possiblyAlreadyLogged) " · already logged elsewhere" else ""
+
+            Text(
+                text = "🍴 ${food.name}$portion$calories$duplicate",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        if (facets.countableFood.isNotEmpty()) {
+            Text(
+                text = "Counted towards today's totals.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }

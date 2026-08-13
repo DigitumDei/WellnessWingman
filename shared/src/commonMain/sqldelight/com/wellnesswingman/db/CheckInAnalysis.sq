@@ -1,0 +1,110 @@
+-- CheckInAnalysis table schema
+--
+-- Holds what an LLM extracted from a check-in's free text: food the user mentioned but never
+-- photographed, and the good and bad factors behind how the day felt, split by whether they
+-- came from inside the body or from the world around it.
+--
+-- The user's own words in DailyCheckIn.responseText stay canonical. Everything here is derived
+-- and disposable: it can be deleted and regenerated without losing anything the user said.
+--
+-- Keyed on (checkInDate, slot) rather than checkInId on purpose. DailyCheckIn is written with
+-- INSERT OR REPLACE, which deletes the old row and inserts a new one with a fresh rowid, so a
+-- checkInId reference would dangle every time an answer is revised.
+
+CREATE TABLE CheckInAnalysis (
+    analysisId INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    externalId TEXT,
+    -- Epoch days, matching DailyCheckIn.checkInDate.
+    checkInDate INTEGER NOT NULL,
+    -- 'Morning' or 'Evening'.
+    slot TEXT NOT NULL,
+    -- 'Pending', 'Completed' or 'Failed'. Extraction runs in the background after saving, so
+    -- the UI needs to tell "not finished yet" apart from "finished and found nothing".
+    status TEXT NOT NULL DEFAULT 'Pending',
+    providerId TEXT NOT NULL DEFAULT '',
+    model TEXT NOT NULL DEFAULT '',
+    -- Epoch millis of the extraction attempt.
+    analyzedAt INTEGER NOT NULL,
+    -- Serialized CheckInFacets. Empty until the attempt completes.
+    facetsJson TEXT NOT NULL DEFAULT '',
+    -- Why extraction failed, shown so a retry is an informed choice rather than a guess.
+    errorMessage TEXT,
+    schemaVersion TEXT NOT NULL DEFAULT '1.0'
+);
+
+-- One analysis per check-in; re-answering or re-running replaces it.
+CREATE UNIQUE INDEX idx_checkin_analysis_date_slot ON CheckInAnalysis(checkInDate, slot);
+
+-- Queries
+
+-- Get every analysis, most recent day first (used by export)
+getAllAnalyses:
+SELECT * FROM CheckInAnalysis
+ORDER BY checkInDate DESC, slot ASC;
+
+-- Get the analysis for a single check-in
+getAnalysisForDateAndSlot:
+SELECT * FROM CheckInAnalysis
+WHERE checkInDate = ? AND slot = ?;
+
+-- Get every analysis for a day, so a day screen can total mentioned food in one read
+getAnalysesForDate:
+SELECT * FROM CheckInAnalysis
+WHERE checkInDate = ?
+ORDER BY slot ASC;
+
+-- Get analyses across a date range
+getAnalysesForDateRange:
+SELECT * FROM CheckInAnalysis
+WHERE checkInDate >= ? AND checkInDate <= ?
+ORDER BY checkInDate DESC, slot ASC;
+
+-- Get analysis by external ID
+getAnalysisByExternalId:
+SELECT * FROM CheckInAnalysis
+WHERE externalId = ?;
+
+-- Insert or replace the analysis for a check-in
+upsertAnalysisForDateAndSlot:
+INSERT OR REPLACE INTO CheckInAnalysis(
+    externalId,
+    checkInDate,
+    slot,
+    status,
+    providerId,
+    model,
+    analyzedAt,
+    facetsJson,
+    errorMessage,
+    schemaVersion
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+-- Delete the analysis for a check-in
+deleteAnalysisForDateAndSlot:
+DELETE FROM CheckInAnalysis
+WHERE checkInDate = ? AND slot = ?;
+
+-- Delete analyses older than the specified day
+deleteOldAnalyses:
+DELETE FROM CheckInAnalysis
+WHERE checkInDate < ?;
+
+-- Upsert by primary key (for import)
+upsertAnalysis:
+INSERT OR REPLACE INTO CheckInAnalysis(
+    analysisId,
+    externalId,
+    checkInDate,
+    slot,
+    status,
+    providerId,
+    model,
+    analyzedAt,
+    facetsJson,
+    errorMessage,
+    schemaVersion
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+-- Get last inserted row ID
+lastInsertRowId:
+SELECT last_insert_rowid();

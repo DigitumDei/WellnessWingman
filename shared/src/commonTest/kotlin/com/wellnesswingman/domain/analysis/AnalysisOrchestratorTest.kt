@@ -31,8 +31,10 @@ import kotlinx.datetime.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class AnalysisOrchestratorTest {
@@ -123,6 +125,127 @@ class AnalysisOrchestratorTest {
         assertTrue(toolResult.content.toString().contains("currentWeight"))
         assertEquals(1, entryAnalysisRepository.inserted.size)
         assertEquals(success.analysis, entryAnalysisRepository.inserted.first())
+    }
+
+    /**
+     * Builds an orchestrator whose LLM calls record the prompt they were given, so what the model
+     * is actually told about the presence of an image can be asserted on.
+     */
+    private class PromptCapturingClient : LlmClient {
+        var imagePrompt: String? = null
+        var textPrompt: String? = null
+
+        override val providerId: String = "gemini"
+
+        private val response = LlmAnalysisResult(
+            content = """{"schemaVersion":"1.0","entryType":"Meal","confidence":0.5}""",
+            diagnostics = LlmDiagnostics(model = "test")
+        )
+
+        override suspend fun analyzeImage(
+            imageBytes: ByteArray,
+            prompt: String,
+            jsonSchema: String?,
+            tools: List<com.wellnesswingman.data.model.llm.ToolDefinition>,
+            toolExecutor: ToolExecutor?
+        ): LlmAnalysisResult {
+            imagePrompt = prompt
+            return response
+        }
+
+        override suspend fun transcribeAudio(audioBytes: ByteArray, mimeType: String) = ""
+
+        override suspend fun generateCompletion(
+            prompt: String,
+            jsonSchema: String?,
+            tools: List<com.wellnesswingman.data.model.llm.ToolDefinition>,
+            toolExecutor: ToolExecutor?
+        ): LlmAnalysisResult {
+            textPrompt = prompt
+            return response
+        }
+
+        override suspend fun generateChatResponse(
+            messages: List<com.wellnesswingman.data.model.llm.LlmChatMessage>,
+            systemInstruction: String?,
+            jsonSchema: String?,
+            tools: List<com.wellnesswingman.data.model.llm.ToolDefinition>,
+            toolExecutor: ToolExecutor?,
+            onToolRoundCompleted: (() -> Unit)?
+        ) = response
+    }
+
+    private fun orchestratorWith(
+        client: LlmClient,
+        fileSystem: FileSystem
+    ): AnalysisOrchestrator {
+        val trackedEntryRepository = FakeTrackedEntryRepository()
+        val entryAnalysisRepository = FakeEntryAnalysisRepository()
+        val llmClientFactory = mockk<LlmClientFactory>()
+
+        every { llmClientFactory.hasCurrentApiKey() } returns true
+        every { llmClientFactory.createForCurrentProvider() } returns client
+
+        return AnalysisOrchestrator(
+            trackedEntryRepository = trackedEntryRepository,
+            entryAnalysisRepository = entryAnalysisRepository,
+            llmClientFactory = llmClientFactory,
+            toolRegistry = ToolRegistry(
+                trackedEntryRepository = trackedEntryRepository,
+                entryAnalysisRepository = entryAnalysisRepository,
+                weightHistoryRepository = FakeWeightHistoryRepository(),
+                appSettingsRepository = FakeAppSettingsRepository(),
+                nutritionalProfileRepository = FakeNutritionalProfileRepository()
+            ),
+            fileSystem = fileSystem,
+            appSettingsRepository = FakeAppSettingsRepository()
+        )
+    }
+
+    @Test
+    fun `an entry with no photo tells the model there is no image`() = runTest {
+        val client = PromptCapturingClient()
+        val fileSystem = mockk<FileSystem>()
+        every { fileSystem.exists(any()) } returns false
+
+        orchestratorWith(client, fileSystem).processEntry(
+            TrackedEntry(
+                entryId = 11L,
+                entryType = EntryType.UNKNOWN,
+                capturedAt = Clock.System.now(),
+                processingStatus = ProcessingStatus.PENDING,
+                userNotes = "two slices of pizza and a beer",
+                blobPath = null
+            )
+        )
+
+        // The system prompt claims vision. Handed no image and no correction, the model is being
+        // invited to describe something it cannot see.
+        val prompt = assertNotNull(client.textPrompt)
+        assertTrue(prompt.contains("NO IMAGE IS ATTACHED"))
+        assertTrue(prompt.contains("two slices of pizza and a beer"))
+        assertNull(client.imagePrompt)
+    }
+
+    @Test
+    fun `an entry with a photo is not told there is no image`() = runTest {
+        val client = PromptCapturingClient()
+        val fileSystem = mockk<FileSystem>()
+        every { fileSystem.exists(any()) } returns true
+        coEvery { fileSystem.readBytes(any()) } returns byteArrayOf(1, 2, 3)
+
+        orchestratorWith(client, fileSystem).processEntry(
+            TrackedEntry(
+                entryId = 12L,
+                entryType = EntryType.UNKNOWN,
+                capturedAt = Clock.System.now(),
+                processingStatus = ProcessingStatus.PENDING,
+                blobPath = "/photos/12.jpg"
+            )
+        )
+
+        val prompt = assertNotNull(client.imagePrompt)
+        assertFalse(prompt.contains("NO IMAGE IS ATTACHED"))
     }
 
     @Test

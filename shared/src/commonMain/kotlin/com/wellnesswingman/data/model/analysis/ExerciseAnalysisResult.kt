@@ -27,36 +27,44 @@ data class ExerciseAnalysisResult(
 @Serializable
 data class ExerciseMetrics(
     @SerialName("distance")
+    @Serializable(with = LenientNullableDoubleSerializer::class)
     val distance: Double? = null,
 
     @SerialName("distanceUnit")
     val distanceUnit: String? = null,
 
     @SerialName("durationMinutes")
+    @Serializable(with = LenientNullableDoubleSerializer::class)
     val durationMinutes: Double? = null,
 
     @SerialName("averagePace")
     val averagePace: String? = null,
 
     @SerialName("averageSpeed")
+    @Serializable(with = LenientNullableDoubleSerializer::class)
     val averageSpeed: Double? = null,
 
     @SerialName("speedUnit")
     val speedUnit: String? = null,
 
     @SerialName("calories")
+    @Serializable(with = LenientNullableDoubleSerializer::class)
     val calories: Double? = null,
 
     @SerialName("averageHeartRate")
+    @Serializable(with = LenientNullableDoubleSerializer::class)
     val averageHeartRate: Double? = null,
 
     @SerialName("maxHeartRate")
+    @Serializable(with = LenientNullableDoubleSerializer::class)
     val maxHeartRate: Double? = null,
 
     @SerialName("steps")
+    @Serializable(with = LenientNullableDoubleSerializer::class)
     val steps: Double? = null,
 
     @SerialName("elevationGain")
+    @Serializable(with = LenientNullableDoubleSerializer::class)
     val elevationGain: Double? = null,
 
     @SerialName("elevationUnit")

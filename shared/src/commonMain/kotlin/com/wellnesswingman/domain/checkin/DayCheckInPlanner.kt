@@ -1,7 +1,9 @@
 package com.wellnesswingman.domain.checkin
 
+import com.wellnesswingman.data.model.CheckInAnalysis
 import com.wellnesswingman.data.model.CheckInSlot
 import com.wellnesswingman.data.model.DailyCheckIn
+import com.wellnesswingman.data.model.analysis.CheckInFacets
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalTime
 import kotlinx.datetime.daysUntil
@@ -12,12 +14,27 @@ data class DayCheckInSlot(
     /** The stored answer, when the user has already checked in. */
     val checkIn: DailyCheckIn?,
     /** True when this blank slot is for a past day rather than today. */
-    val isBackfill: Boolean = false
+    val isBackfill: Boolean = false,
+    /**
+     * What was extracted from the answer, when extraction has been attempted.
+     *
+     * Carried alongside the answer so both day screens read it from the same place; a screen
+     * fetching it separately is how the two drift apart.
+     */
+    val analysis: CheckInAnalysis? = null
 ) {
     val isAnswered: Boolean get() = checkIn != null
 
     /** A blank slot is an invitation to check in; an answered one is a record. */
     val isPrompt: Boolean get() = checkIn == null
+
+    /** Facets only once extraction finished — pending is not the same as "found nothing". */
+    val facets: CheckInFacets? get() = analysis?.completedFacets
+
+    /** True while extraction is still running, so the UI can say so rather than show a blank. */
+    val isAnalysisPending: Boolean get() = analysis?.isPending == true
+
+    val hasAnalysisFailed: Boolean get() = analysis?.hasFailed == true
 }
 
 /** Whether a slot is on, and when it is scheduled. */
@@ -53,19 +70,26 @@ object DayCheckInPlanner {
     /** How many days back a missed check-in can still be answered. */
     const val BACKFILL_DAYS = 7
 
+    /**
+     * @param analyses what was extracted from each answer, keyed by slot. Defaulted because a
+     *   blank slot has nothing to analyse and callers that do not show facets need not supply it.
+     */
     fun plan(
         date: LocalDate,
         today: LocalDate,
         now: LocalTime,
         settings: Map<CheckInSlot, CheckInSlotSetting>,
-        checkIns: List<DailyCheckIn>
+        checkIns: List<DailyCheckIn>,
+        analyses: Map<CheckInSlot, CheckInAnalysis> = emptyMap()
     ): List<DayCheckInSlot> {
         val answered = checkIns.associateBy { it.slot }
 
         // Morning before evening, regardless of when they were answered.
         return listOf(CheckInSlot.MORNING, CheckInSlot.EVENING).mapNotNull { slot ->
             val existing = answered[slot]
-            if (existing != null) return@mapNotNull DayCheckInSlot(slot, existing)
+            if (existing != null) {
+                return@mapNotNull DayCheckInSlot(slot, existing, analysis = analyses[slot])
+            }
 
             if (!isBackfillable(date, today)) return@mapNotNull null
 

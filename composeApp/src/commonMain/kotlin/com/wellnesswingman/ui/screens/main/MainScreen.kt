@@ -135,6 +135,7 @@ class MainScreen : Screen {
                     isGeneratingSummary = isGeneratingSummary,
                     checkInSlots = state.checkInSlots,
                     onCheckInClick = { slot -> navigator.push(CheckInScreen(slot)) },
+                    onRetryCheckInAnalysis = { slot -> viewModel.retryCheckInAnalysis(slot) },
                     onEntryClick = { entry -> navigator.push(EntryDetailScreen(entry.entryId)) },
                     onGenerateSummary = { viewModel.generateDailySummary() },
                     onViewSummary = { navigator.push(DailySummaryScreen(Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date)) },
@@ -158,6 +159,7 @@ fun EntryList(
     isGeneratingSummary: Boolean,
     checkInSlots: List<DayCheckInSlot> = emptyList(),
     onCheckInClick: (CheckInSlot) -> Unit = {},
+    onRetryCheckInAnalysis: (CheckInSlot) -> Unit = {},
     onEntryClick: (TrackedEntry) -> Unit,
     onGenerateSummary: () -> Unit,
     onViewSummary: () -> Unit,
@@ -171,7 +173,10 @@ fun EntryList(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         when {
-            hasCompletedMeals -> item(key = "nutrition_summary") {
+            // Mentioned food counts as a reason to show the card. Without it a day whose only
+            // food came from a check-in computes real totals and then hides them, so the
+            // calories exist in the summary and the database but nowhere the user can see.
+            hasCompletedMeals || nutritionTotals.hasMentionedFood -> item(key = "nutrition_summary") {
                 DailyNutritionCard(
                     nutritionTotals = nutritionTotals,
                     summaryCardState = summaryCardState,
@@ -213,7 +218,8 @@ fun EntryList(
             items(checkInSlots, key = { "checkin_${it.slot.toStorageString()}" }) { slot ->
                 CheckInCard(
                     slot = slot,
-                    onClick = { onCheckInClick(slot.slot) }
+                    onClick = { onCheckInClick(slot.slot) },
+                    onRetryAnalysis = { onRetryCheckInAnalysis(slot.slot) }
                 )
             }
         }
@@ -223,7 +229,11 @@ fun EntryList(
                 Text(
                     text = "Entries",
                     style = MaterialTheme.typography.titleLarge,
-                    modifier = Modifier.padding(top = if (hasCompletedMeals || polarContext.hasData) 8.dp else 0.dp)
+                    modifier = Modifier.padding(
+                        top = if (hasCompletedMeals || nutritionTotals.hasMentionedFood ||
+                            polarContext.hasData
+                        ) 8.dp else 0.dp
+                    )
                 )
             }
         }

@@ -4,8 +4,12 @@ import cafe.adriel.voyager.core.model.ScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import com.wellnesswingman.data.model.CheckInInputSource
 import com.wellnesswingman.data.model.CheckInSlot
+import com.wellnesswingman.data.model.CheckInAnalysis
 import com.wellnesswingman.data.model.DailyCheckIn
+import com.wellnesswingman.data.model.analysis.CheckInAnalysisStatus
+import com.wellnesswingman.data.model.analysis.CheckInFacets
 import com.wellnesswingman.data.repository.DailyCheckInRepository
+import com.wellnesswingman.domain.checkin.CheckInAnalysisService
 import com.wellnesswingman.domain.llm.LlmClientFactory
 import com.wellnesswingman.platform.AudioRecordingService
 import com.wellnesswingman.platform.FileSystem
@@ -36,8 +40,25 @@ data class CheckInUiState(
     /** Set once a chat thread exists for this check-in, so re-opening returns to it. */
     val conversationExternalId: String? = null,
     /** True when answering for a past day, which the screen says out loud. */
-    val isBackfill: Boolean = false
+    val isBackfill: Boolean = false,
+    /**
+     * What the app read out of the answer, once extraction has been attempted.
+     *
+     * Shown read-only: it is the app's reading of what the user wrote, not a second thing for
+     * them to maintain. Editing it would imply the extraction is the record, when the words are.
+     */
+    val analysis: CheckInAnalysis? = null
 ) {
+    val facets: CheckInFacets? get() = analysis?.completedFacets
+
+    val isAnalysisPending: Boolean get() = analysis?.isPending == true
+
+    val hasAnalysisFailed: Boolean get() = analysis?.hasFailed == true
+
+    /** True once extraction finished and found nothing worth listing. */
+    val analysisFoundNothing: Boolean
+        get() = analysis?.status == CheckInAnalysisStatus.COMPLETED && facets?.isEmpty != false
+
     /** The prompt shown above the input, and the reason this feature exists. */
     val questions: List<String>
         get() = when (slot) {
@@ -75,7 +96,12 @@ class CheckInViewModel(
     private val audioRecordingService: AudioRecordingService,
     private val llmClientFactory: LlmClientFactory,
     private val fileSystem: FileSystem,
-    private val conversationStarter: CheckInConversationStarter
+    private val conversationStarter: CheckInConversationStarter,
+    /**
+     * Optional so existing tests can construct this view model without stubbing extraction.
+     * Absent means the answer is still saved; only the derived facets are skipped.
+     */
+    private val checkInAnalysisService: CheckInAnalysisService? = null
 ) : ScreenModel {
 
     private val _uiState = MutableStateFlow(CheckInUiState(slot = slot))
@@ -99,6 +125,31 @@ class CheckInViewModel(
 
     init {
         load()
+        observeAnalysis()
+    }
+
+    /**
+     * Keeps the extraction summary current while the screen is open.
+     *
+     * Extraction is started by saving and runs on the service's own scope, so the result arrives
+     * after this screen has already rendered. Without this the summary would stay on "reading"
+     * until the screen was reopened.
+     */
+    private fun observeAnalysis() {
+        val service = checkInAnalysisService ?: return
+
+        screenModelScope.launch {
+            service.analysisCompletions.collect { date ->
+                if (date == _uiState.value.date) refreshAnalysis()
+            }
+        }
+    }
+
+    private suspend fun refreshAnalysis() {
+        val service = checkInAnalysisService ?: return
+        _uiState.value = _uiState.value.copy(
+            analysis = service.analysisFor(_uiState.value.date, slot)
+        )
     }
 
     private fun load() {
@@ -113,7 +164,8 @@ class CheckInViewModel(
                     hasSavedAnswer = existing != null,
                     // Re-opening a check-in returns to its thread rather than starting another.
                     conversationExternalId = existing?.conversationExternalId,
-                    isBackfill = date != today()
+                    isBackfill = date != today(),
+                    analysis = checkInAnalysisService?.analysisFor(date, slot)
                 )
             } catch (e: Exception) {
                 Napier.e("Failed to load ${slot.toStorageString()} check-in", e)
@@ -183,6 +235,16 @@ class CheckInViewModel(
                 isSaving = false,
                 hasSavedAnswer = true
             )
+
+            // Extraction runs on the service's own scope, not this screen model's. Saving is
+            // normally followed by the screen closing, which would cancel anything launched here
+            // before the network call had a chance to finish.
+            checkInAnalysisService?.analyzeInBackground(checkIn)
+
+            // Picks up the pending row the service just wrote, so a screen that stays open says
+            // "reading your answer" instead of continuing to show the previous extraction.
+            refreshAnalysis()
+
             checkIn
         } catch (e: Exception) {
             Napier.e("Failed to save ${slot.toStorageString()} check-in", e)
@@ -192,6 +254,24 @@ class CheckInViewModel(
             )
             null
         }
+    }
+
+    /**
+     * Runs extraction again after a failure.
+     *
+     * Extraction otherwise only runs on save, so without this a dropped connection would leave
+     * the summary permanently empty for an answer that is already stored.
+     */
+    fun retryAnalysis() {
+        val service = checkInAnalysisService ?: return
+
+        // Started on the service's own scope, not this one. A retry launched here would be
+        // cancelled the moment the user left the screen, mid-request, leaving the row pending
+        // with no completion event — the same trap the initial extraction avoids. The result
+        // arrives through analysisCompletions.
+        service.retryInBackground(_uiState.value.date, slot)
+
+        screenModelScope.launch { refreshAnalysis() }
     }
 
     /**

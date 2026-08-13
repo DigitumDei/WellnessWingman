@@ -33,6 +33,7 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import com.wellnesswingman.ui.components.ErrorMessage
 import com.wellnesswingman.ui.components.LoadingIndicator
 import com.wellnesswingman.ui.screens.detail.EntryDetailScreen
+import com.wellnesswingman.ui.screens.textentry.TextEntryScreen
 
 actual fun createPhotoReviewScreen(): Screen = DesktopPhotoReviewScreen()
 
@@ -55,7 +56,10 @@ private class DesktopPhotoReviewScreen : Screen {
                 is PhotoReviewUiState.Cancelled -> DesktopCaptureOptions(
                     onCameraClick = viewModel::captureFromCamera,
                     onGalleryClick = viewModel::pickFromGallery,
-                    modifier = Modifier.padding(paddingValues)
+                    modifier = Modifier.padding(paddingValues),
+                    // Replace, not push: this screen's job was to choose a source, and backing
+                    // out of the description should return to the day, not here.
+                    onDescribeClick = { navigator.replace(TextEntryScreen()) }
                 )
 
                 is PhotoReviewUiState.Capturing,
@@ -114,7 +118,8 @@ private class DesktopPhotoReviewScreen : Screen {
 private fun DesktopCaptureOptions(
     onCameraClick: () -> Unit,
     onGalleryClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onDescribeClick: () -> Unit = {}
 ) {
     Column(
         modifier = modifier
@@ -123,7 +128,7 @@ private fun DesktopCaptureOptions(
         verticalArrangement = Arrangement.Center
     ) {
         Text(
-            text = "Choose an image source",
+            text = "How do you want to add this?",
             style = MaterialTheme.typography.titleLarge
         )
         Spacer(modifier = Modifier.height(16.dp))
@@ -139,6 +144,14 @@ private fun DesktopCaptureOptions(
             modifier = Modifier.fillMaxWidth()
         ) {
             Text("Choose from Gallery")
+        }
+        Spacer(modifier = Modifier.height(12.dp))
+        // For when the thing happened but the photo did not.
+        OutlinedButton(
+            onClick = onDescribeClick,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Describe it instead (no photo)")
         }
     }
 }

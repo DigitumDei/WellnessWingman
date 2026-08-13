@@ -191,6 +191,20 @@ class AnalysisOrchestrator(
 
         val profileContext = buildProfileContext()?.let { "$it\n\n" } ?: ""
 
+        // Said explicitly rather than left to inference. Without it the model is told it has
+        // vision and given no image, which invites it to describe one it cannot see or to hedge
+        // about a missing attachment instead of working from the words it was given.
+        val sourceContext = if (entry.blobPath == null) {
+            """
+            NO IMAGE IS ATTACHED. This entry was written or dictated by the user, because the
+            thing happened but no photo was taken. Work entirely from their description.
+            Estimate quantities and nutrition from the words alone, and lower your confidence
+            accordingly — a rough figure honestly marked is useful, a confident invented one is
+            not. Do not ask for a photo and do not refer to seeing anything.
+
+            """.trimIndent() + "\n"
+        } else ""
+
         return """
 You are a health and wellness analysis assistant with vision capabilities. Analyze the provided content (image and/or text) and determine the type of health-related entry, then provide detailed analysis.
 
@@ -205,7 +219,7 @@ First, determine what type of entry this is:
 
 IMPORTANT: You MUST return a valid JSON object with the following structure. Only populate the analysis field that matches the detected entry type.
 
-$profileContext$userContext
+$sourceContext$profileContext$userContext
 
 REQUIRED JSON RESPONSE FORMAT:
 {

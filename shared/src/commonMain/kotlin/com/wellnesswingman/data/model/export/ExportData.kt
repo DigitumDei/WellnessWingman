@@ -1,8 +1,12 @@
 package com.wellnesswingman.data.model.export
 
+import com.wellnesswingman.data.model.CheckInAnalysis
 import com.wellnesswingman.data.model.CheckInInputSource
 import com.wellnesswingman.data.model.CheckInSlot
 import com.wellnesswingman.data.model.DailyCheckIn
+import com.wellnesswingman.data.model.analysis.CheckInAnalysisStatus
+import com.wellnesswingman.data.model.analysis.CheckInFacets
+import kotlinx.serialization.json.Json
 import com.wellnesswingman.data.model.DailySummary
 import com.wellnesswingman.data.model.EntryAnalysis
 import com.wellnesswingman.data.model.EntryType
@@ -155,7 +159,28 @@ data class ExportData(
     @SerialName("WeeklySummaries") val weeklySummaries: List<ExportWeeklySummary> = emptyList(),
     @SerialName("UserProfile") val userProfile: ExportUserProfile? = null,
     @SerialName("WeightRecords") val weightRecords: List<ExportWeightRecord> = emptyList(),
-    @SerialName("DailyCheckIns") val dailyCheckIns: List<ExportDailyCheckIn> = emptyList()
+    @SerialName("DailyCheckIns") val dailyCheckIns: List<ExportDailyCheckIn> = emptyList(),
+    @SerialName("CheckInAnalyses") val checkInAnalyses: List<ExportCheckInAnalysis> = emptyList()
+)
+
+/**
+ * Extraction results travel with the export so a restored install does not have to pay to
+ * re-derive them. The facets blob is carried verbatim: it is regenerable, so a version this
+ * build cannot read is a reason to re-run extraction, not to fail the import.
+ */
+@Serializable
+data class ExportCheckInAnalysis(
+    @SerialName("AnalysisId") val analysisId: Long,
+    @SerialName("ExternalId") val externalId: String? = null,
+    @SerialName("CheckInDate") val checkInDate: String, // ISO 8601 date
+    @SerialName("Slot") val slot: String,               // "Morning" | "Evening"
+    @SerialName("Status") val status: String,           // "Pending" | "Completed" | "Failed"
+    @SerialName("ProviderId") val providerId: String = "",
+    @SerialName("Model") val model: String = "",
+    @SerialName("AnalyzedAt") val analyzedAt: String,   // ISO 8601
+    @SerialName("FacetsJson") val facetsJson: String = "",
+    @SerialName("ErrorMessage") val errorMessage: String? = null,
+    @SerialName("SchemaVersion") val schemaVersion: String = "1.0"
 )
 
 @Serializable
@@ -438,6 +463,69 @@ fun DailyCheckIn.toExport(): ExportDailyCheckIn = ExportDailyCheckIn(
     inputSource = inputSource.toStorageString(),
     conversationExternalId = conversationExternalId
 )
+
+/**
+ * Used only for the facets blob carried inside an export row. Lenient on read so an export
+ * written by a newer build still imports; the facets are regenerable either way.
+ */
+private val exportJson = Json {
+    ignoreUnknownKeys = true
+    isLenient = true
+    encodeDefaults = true
+}
+
+fun CheckInAnalysis.toExport(): ExportCheckInAnalysis = ExportCheckInAnalysis(
+    analysisId = analysisId,
+    externalId = externalId,
+    checkInDate = checkInDate.toString(),
+    slot = slot.toStorageString(),
+    status = status.toStorageString(),
+    providerId = providerId,
+    model = model,
+    analyzedAt = analyzedAt.toString(),
+    facetsJson = facets?.let { exportJson.encodeToString(CheckInFacets.serializer(), it) }.orEmpty(),
+    errorMessage = errorMessage,
+    schemaVersion = schemaVersion
+)
+
+/**
+ * Returns null when the slot cannot be read, matching the check-in rule: an analysis with no slot
+ * has no check-in to attach to.
+ *
+ * An unreadable facets blob degrades to null rather than dropping the row, because the row still
+ * records that extraction was attempted and how it went.
+ */
+fun ExportCheckInAnalysis.toDomain(): CheckInAnalysis? {
+    val parsedSlot = CheckInSlot.fromString(slot) ?: return null
+
+    val date = try {
+        LocalDate.parse(checkInDate.substringBefore('T'))
+    } catch (_: Exception) {
+        parseCSharpInstant(checkInDate).toLocalDateTime(TimeZone.UTC).date
+    }
+
+    val parsedFacets = if (facetsJson.isBlank()) {
+        null
+    } else {
+        runCatching { exportJson.decodeFromString(CheckInFacets.serializer(), facetsJson) }
+            .getOrNull()
+    }
+
+    return CheckInAnalysis(
+        analysisId = analysisId,
+        externalId = externalId,
+        checkInDate = date,
+        slot = parsedSlot,
+        status = CheckInAnalysisStatus.fromString(status),
+        providerId = providerId,
+        model = model,
+        analyzedAt = runCatching { parseCSharpInstant(analyzedAt) }.getOrNull()
+            ?: date.atStartOfDayIn(TimeZone.UTC),
+        facets = parsedFacets,
+        errorMessage = errorMessage,
+        schemaVersion = schemaVersion
+    )
+}
 
 /**
  * Returns null when the slot cannot be read. A check-in with no slot has nowhere to belong, and

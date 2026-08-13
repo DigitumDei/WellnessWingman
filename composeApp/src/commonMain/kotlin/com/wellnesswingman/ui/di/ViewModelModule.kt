@@ -12,6 +12,7 @@ import com.wellnesswingman.ui.screens.chat.HealthChatListViewModel
 import com.wellnesswingman.ui.screens.chat.HealthChatThreadViewModel
 import com.wellnesswingman.ui.screens.detail.EntryDetailViewModel
 import com.wellnesswingman.ui.screens.main.MainViewModel
+import com.wellnesswingman.ui.screens.textentry.TextEntryViewModel
 import com.wellnesswingman.ui.screens.nutrition.NutritionLabelScanViewModel
 import com.wellnesswingman.ui.screens.nutrition.NutritionalProfilesViewModel
 import com.wellnesswingman.ui.screens.nutrition.profileIdFromParameter
@@ -38,7 +39,16 @@ val viewModelModule = module {
             fileSystem = get(),
             pendingCaptureStore = get(),
             polarSyncOrchestrator = get(),
-            dayCheckInsProvider = get()
+            dayCheckInsProvider = get(),
+            checkInAnalysisService = get()
+        )
+    }
+    factory {
+        TextEntryViewModel(
+            textEntryProcessor = get(),
+            audioRecordingService = get(),
+            llmClientFactory = get(),
+            fileSystem = get()
         )
     }
     factory { params ->
@@ -49,7 +59,8 @@ val viewModelModule = module {
             audioRecordingService = get(),
             llmClientFactory = get(),
             fileSystem = get(),
-            conversationStarter = get()
+            conversationStarter = get(),
+            checkInAnalysisService = get()
         )
     }
     single<CheckInConversationStarter> {
@@ -105,7 +116,8 @@ val viewModelModule = module {
             dailyTotalsCalculator = get(),
             polarInsightService = get(),
             fileSystem = get(),
-            dayCheckInsProvider = get()
+            dayCheckInsProvider = get(),
+            checkInAnalysisService = get()
         )
     }
     factory { params ->
