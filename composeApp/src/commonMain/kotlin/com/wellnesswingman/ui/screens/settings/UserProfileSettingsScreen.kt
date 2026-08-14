@@ -19,6 +19,7 @@ import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import com.wellnesswingman.ui.screens.weighthistory.WeightHistoryScreen
 import com.wellnesswingman.data.repository.MAX_GOALS_AND_PREFERENCES_LENGTH
+import com.wellnesswingman.ui.screens.detail.VoiceRecordingButton
 
 class UserProfileSettingsScreen : Screen {
     @Composable
@@ -26,6 +27,8 @@ class UserProfileSettingsScreen : Screen {
         val navigator = LocalNavigator.currentOrThrow
         val viewModel = getScreenModel<SettingsViewModel>()
         val uiState by viewModel.uiState.collectAsState()
+        val goalsCommentsState by viewModel.goalsCommentsState.collectAsState()
+        val goalsVoiceBusy = goalsCommentsState.isRecording || goalsCommentsState.isTranscribing
 
         val snackbarHostState = remember { SnackbarHostState() }
         LaunchedEffect(uiState.saveSuccess) {
@@ -148,8 +151,26 @@ class UserProfileSettingsScreen : Screen {
                     supportingText = { Text("${uiState.goalsAndPreferences.length}/$MAX_GOALS_AND_PREFERENCES_LENGTH") },
                     modifier = Modifier.fillMaxWidth(),
                     minLines = 4,
-                    maxLines = 8
+                    maxLines = 8,
+                    enabled = !goalsVoiceBusy
                 )
+
+                VoiceRecordingButton(
+                    onToggleRecording = viewModel::toggleGoalsRecording,
+                    isRecording = goalsCommentsState.isRecording,
+                    isTranscribing = goalsCommentsState.isTranscribing,
+                    recordingDurationSeconds = goalsCommentsState.recordingDurationSeconds,
+                    enabled = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                goalsCommentsState.transcriptionError?.let { error ->
+                    Text(
+                        text = error,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
 
                 // View Weight History button
                 OutlinedButton(
@@ -166,7 +187,8 @@ class UserProfileSettingsScreen : Screen {
                 // Save Button
                 Button(
                     onClick = { viewModel.saveProfileSettings() },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !goalsVoiceBusy
                 ) {
                     Text("Save Profile")
                 }

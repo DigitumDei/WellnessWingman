@@ -40,7 +40,8 @@ class UserCommentsManager(
     private val llmClientFactory: LlmClientFactory,
     private val fileSystem: FileSystem,
     private val scope: CoroutineScope,
-    private val audioFilePrefix: String = "comment"
+    private val audioFilePrefix: String = "comment",
+    private val maxTextLength: Int? = null
 ) {
     private val _commentsState = MutableStateFlow(CommentsState())
     val commentsState: StateFlow<CommentsState> = _commentsState.asStateFlow()
@@ -51,7 +52,7 @@ class UserCommentsManager(
      * Loads existing comments into state, marking them as saved.
      */
     fun loadComments(savedText: String?) {
-        val text = savedText ?: ""
+        val text = limitCommentText(savedText ?: "", maxTextLength)
         _commentsState.value = CommentsState(text = text, savedText = text)
     }
 
@@ -59,7 +60,7 @@ class UserCommentsManager(
      * Updates the comment text (unsaved).
      */
     fun updateText(text: String) {
-        _commentsState.update { it.copy(text = text) }
+        _commentsState.update { it.copy(text = limitCommentText(text, maxTextLength)) }
     }
 
     /**
@@ -143,7 +144,7 @@ class UserCommentsManager(
             _commentsState.update { state ->
                 val newText = if (state.text.isBlank()) transcription
                 else "${state.text}\n$transcription"
-                state.copy(text = newText, isTranscribing = false)
+                state.copy(text = limitCommentText(newText, maxTextLength), isTranscribing = false)
             }
 
             fileSystem.delete(audioPath)
@@ -155,3 +156,6 @@ class UserCommentsManager(
         }
     }
 }
+
+internal fun limitCommentText(text: String, maxTextLength: Int?): String =
+    maxTextLength?.let(text::take) ?: text
