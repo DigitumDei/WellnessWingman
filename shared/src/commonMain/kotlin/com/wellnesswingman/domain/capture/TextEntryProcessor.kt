@@ -11,10 +11,12 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 
 /**
@@ -101,6 +103,8 @@ class TextEntryProcessor(
         text: String,
         deferred: CompletableDeferred<TextEntryProcessorResult>
     ) {
+        var result: TextEntryProcessorResult? = null
+        var failure: Exception? = null
         try {
             val entry = TrackedEntry(
                 // The analysis decides what this actually is, exactly as it does for a photo.
@@ -124,21 +128,32 @@ class TextEntryProcessor(
                 backgroundAnalysisService.queueEntry(entryId, text)
             }
 
-            deferred.complete(TextEntryProcessorResult(entryId, apiKeyMissing))
+            result = TextEntryProcessorResult(entryId, apiKeyMissing)
         } catch (e: Exception) {
-            if (e is CancellationException) {
-                deferred.cancel(e)
-                throw e
-            }
-            Napier.e("Failed to create a text entry", e)
-            deferred.completeExceptionally(e)
+            failure = e
         } finally {
-            inFlightMutex.withLock {
-                if (inFlightKey == text) {
-                    inFlightKey = null
-                    inFlight = null
+            // Clear the guard before completing the deferred. Otherwise an awaiting caller can
+            // resume first and a genuinely sequential identical save can still see stale state.
+            withContext(NonCancellable) {
+                inFlightMutex.withLock {
+                    if (inFlightKey == text && inFlight === deferred) {
+                        inFlightKey = null
+                        inFlight = null
+                    }
                 }
             }
         }
+
+        failure?.let { error ->
+            if (error is CancellationException) {
+                deferred.cancel(error)
+                throw error
+            }
+            Napier.e("Failed to create a text entry", error)
+            deferred.completeExceptionally(error)
+            return
+        }
+
+        deferred.complete(checkNotNull(result))
     }
 }
