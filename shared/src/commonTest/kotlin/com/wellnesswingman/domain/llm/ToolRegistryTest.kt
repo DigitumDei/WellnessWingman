@@ -1146,7 +1146,7 @@ class ToolRegistryTest {
             trackedEntryRepository = FakeTrackedEntryRepository(),
             entryAnalysisRepository = FakeEntryAnalysisRepository(),
             weightHistoryRepository = FakeWeightHistoryRepository(),
-            appSettingsRepository = FakeAppSettingsRepository(),
+            appSettingsRepository = FakeAppSettingsRepository(goals = "coeliac; 140g protein"),
             nutritionalProfileRepository = FakeNutritionalProfileRepository()
         )
 
@@ -1157,6 +1157,7 @@ class ToolRegistryTest {
         assertEquals("male", payload["sex"]?.toString()?.trim('"'))
         assertEquals("1990-01-01", payload["dateOfBirth"]?.toString()?.trim('"'))
         assertEquals("moderate", payload["activityLevel"]?.toString()?.trim('"'))
+        assertEquals("coeliac; 140g protein", payload["goalsAndPreferences"]?.toString()?.trim('"'))
     }
 
     @Test
@@ -1660,7 +1661,8 @@ class ToolRegistryTest {
     }
 
     private class FakeAppSettingsRepository(
-        private val polarConnected: Boolean = false
+        private val polarConnected: Boolean = false,
+        private val goals: String? = null
     ) : AppSettingsRepository {
         override fun getApiKey(provider: LlmProvider): String? = null
         override fun setApiKey(provider: LlmProvider, apiKey: String) {}
@@ -1684,6 +1686,7 @@ class ToolRegistryTest {
         override fun setDateOfBirth(dob: String) {}
         override fun getActivityLevel(): String? = "moderate"
         override fun setActivityLevel(level: String) {}
+        override fun getGoalsAndPreferences(): String? = goals
         override fun clearHeight() {}
         override fun clearCurrentWeight() {}
         override fun clearProfileData() {}

@@ -32,6 +32,7 @@ class SettingsAppSettingsRepository(
         private const val KEY_PROFILE_WEIGHT_UNIT = "profile_weight_unit"
         private const val KEY_PROFILE_DOB = "profile_dob"
         private const val KEY_PROFILE_ACTIVITY_LEVEL = "profile_activity_level"
+        private const val KEY_PROFILE_GOALS_AND_PREFERENCES = "profile_goals_and_preferences"
 
         private const val KEY_IMAGE_RETENTION_DAYS = "image_retention_days"
 
@@ -158,6 +159,20 @@ class SettingsAppSettingsRepository(
         settings[KEY_PROFILE_ACTIVITY_LEVEL] = level
     }
 
+    override fun getGoalsAndPreferences(): String? {
+        return settings.getStringOrNull(KEY_PROFILE_GOALS_AND_PREFERENCES)
+            ?.takeIf { it.isNotBlank() }
+    }
+
+    override fun setGoalsAndPreferences(text: String) {
+        val value = text.trim().take(MAX_GOALS_AND_PREFERENCES_LENGTH)
+        if (value.isBlank()) {
+            settings.remove(KEY_PROFILE_GOALS_AND_PREFERENCES)
+        } else {
+            settings[KEY_PROFILE_GOALS_AND_PREFERENCES] = value
+        }
+    }
+
     override fun clearHeight() {
         settings.remove(KEY_PROFILE_HEIGHT)
     }
@@ -174,6 +189,7 @@ class SettingsAppSettingsRepository(
         settings.remove(KEY_PROFILE_WEIGHT_UNIT)
         settings.remove(KEY_PROFILE_DOB)
         settings.remove(KEY_PROFILE_ACTIVITY_LEVEL)
+        settings.remove(KEY_PROFILE_GOALS_AND_PREFERENCES)
     }
 
     override fun getImageRetentionThresholdDays(): Int {

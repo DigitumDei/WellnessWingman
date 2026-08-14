@@ -122,7 +122,8 @@ val domainModule = module {
             dailyCheckInRepository = get(),
             weightHistoryRepository = get(),
             polarInsightService = get(),
-            checkInAnalysisRepository = get()
+            checkInAnalysisRepository = get(),
+            appSettingsRepository = get()
         )
     }
     single {
@@ -133,7 +134,8 @@ val domainModule = module {
             llmClientFactory = get(),
             toolRegistry = get(),
             weightHistoryRepository = get(),
-            polarInsightService = get()
+            polarInsightService = get(),
+            appSettingsRepository = get()
         )
     }
 

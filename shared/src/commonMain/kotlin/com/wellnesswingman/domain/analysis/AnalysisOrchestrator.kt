@@ -164,6 +164,7 @@ class AnalysisOrchestrator(
         val weightUnit = appSettingsRepository.getWeightUnit()
         val dob = appSettingsRepository.getDateOfBirth()
         val activityLevel = appSettingsRepository.getActivityLevel()
+        val goals = appSettingsRepository.getGoalsAndPreferences()?.takeIf { it.isNotBlank() }
 
         val parts = mutableListOf<String>()
         if (!sex.isNullOrBlank()) parts.add(sex)
@@ -172,8 +173,15 @@ class AnalysisOrchestrator(
         if (weight != null) parts.add("${weight.formatDecimal(1)}$weightUnit")
         if (!activityLevel.isNullOrBlank()) parts.add(activityLevel)
 
-        if (parts.isEmpty()) return null
-        return "User profile: ${parts.joinToString(", ")}"
+        val profileFacts = parts.takeIf { it.isNotEmpty() }
+            ?.let { "User profile: ${it.joinToString(", ")}" }
+        val goalsBlock = buildUserGoalsBlock(goals)?.let {
+            "$it\nUse these goals and preferences to personalize relevant meal and exercise findings."
+        }
+
+        return listOfNotNull(profileFacts, goalsBlock)
+            .takeIf { it.isNotEmpty() }
+            ?.joinToString("\n\n")
     }
 
     /**

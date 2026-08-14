@@ -9,6 +9,8 @@ enum class LlmProvider {
     OPENROUTER
 }
 
+const val MAX_GOALS_AND_PREFERENCES_LENGTH = 2_000
+
 /**
  * Repository interface for app settings and secure storage.
  */
@@ -37,6 +39,9 @@ interface AppSettingsRepository {
     fun setDateOfBirth(dob: String)
     fun getActivityLevel(): String?
     fun setActivityLevel(level: String)
+    /** User-authored goals and preferences used to personalize analysis prompts. */
+    fun getGoalsAndPreferences(): String? = null
+    fun setGoalsAndPreferences(text: String) = Unit
     fun clearHeight()
     fun clearCurrentWeight()
     fun clearProfileData()

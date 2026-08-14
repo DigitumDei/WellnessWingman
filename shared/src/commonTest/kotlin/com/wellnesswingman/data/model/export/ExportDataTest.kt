@@ -429,6 +429,24 @@ class ExportDataTest {
     }
 
     @Test
+    fun `older user profile export without goals remains compatible`() {
+        val encoded = """
+            {
+              "Height": 175.0,
+              "HeightUnit": "cm",
+              "Sex": "Female",
+              "CurrentWeight": 65.0,
+              "WeightUnit": "kg",
+              "DateOfBirth": "1990-01-15",
+              "ActivityLevel": "Active"
+            }
+        """.trimIndent()
+
+        val exported = json.decodeFromString<ExportUserProfile>(encoded)
+        assertNull(exported.goalsAndPreferences)
+    }
+
+    @Test
     fun `WeightRecord toExport and back preserves data`() {
         val now = Instant.parse("2026-02-11T08:00:00Z")
         val record = WeightRecord(

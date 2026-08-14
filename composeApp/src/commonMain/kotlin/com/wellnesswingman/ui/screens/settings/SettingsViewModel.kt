@@ -7,6 +7,7 @@ import com.wellnesswingman.data.model.WeightSource
 import com.wellnesswingman.data.repository.AppSettingsRepository
 import com.wellnesswingman.data.repository.LlmProvider
 import com.wellnesswingman.data.repository.WeightHistoryRepository
+import com.wellnesswingman.data.repository.MAX_GOALS_AND_PREFERENCES_LENGTH
 import com.wellnesswingman.domain.migration.DataMigrationService
 import com.wellnesswingman.platform.DiagnosticShare
 import com.wellnesswingman.platform.ShareUtil
@@ -51,6 +52,7 @@ class SettingsViewModel(
                 val weightUnit = appSettingsRepository.getWeightUnit()
                 val dateOfBirth = appSettingsRepository.getDateOfBirth() ?: ""
                 val activityLevel = appSettingsRepository.getActivityLevel() ?: ""
+                val goalsAndPreferences = appSettingsRepository.getGoalsAndPreferences() ?: ""
 
                 _uiState.value = SettingsUiState(
                     selectedProvider = selectedProvider,
@@ -66,7 +68,8 @@ class SettingsViewModel(
                     currentWeight = currentWeight,
                     weightUnit = weightUnit,
                     dateOfBirth = dateOfBirth,
-                    activityLevel = activityLevel
+                    activityLevel = activityLevel,
+                    goalsAndPreferences = goalsAndPreferences
                 )
             } catch (e: Exception) {
                 Napier.e("Failed to load settings", e)
@@ -132,6 +135,12 @@ class SettingsViewModel(
 
     fun updateActivityLevel(level: String) {
         _uiState.value = _uiState.value.copy(activityLevel = level)
+    }
+
+    fun updateGoalsAndPreferences(text: String) {
+        _uiState.value = _uiState.value.copy(
+            goalsAndPreferences = text.take(MAX_GOALS_AND_PREFERENCES_LENGTH)
+        )
     }
 
     fun saveSettings() {
@@ -248,6 +257,8 @@ class SettingsViewModel(
         } else {
             appSettingsRepository.setActivityLevel("")
         }
+
+        appSettingsRepository.setGoalsAndPreferences(state.goalsAndPreferences)
     }
 
     fun clearSaveSuccess() {
@@ -346,5 +357,6 @@ data class SettingsUiState(
     val currentWeight: String = "",
     val weightUnit: String = "kg",
     val dateOfBirth: String = "",
-    val activityLevel: String = ""
+    val activityLevel: String = "",
+    val goalsAndPreferences: String = ""
 )

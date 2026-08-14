@@ -166,7 +166,7 @@ class ToolRegistry(
         register(
             definition = ToolDefinition(
                 name = "get_user_profile",
-                description = "Get the user's saved profile and preference data for analysis context.",
+                description = "Get the user's saved profile, goals, and preference data for analysis context. Call this when personalizing advice.",
                 parametersSchema = emptyObjectSchema()
             )
         ) { call ->
@@ -181,6 +181,7 @@ class ToolRegistry(
                     putNullable("currentWeight", appSettingsRepository.getCurrentWeight()?.let(::JsonPrimitive))
                     put("weightUnit", JsonPrimitive(appSettingsRepository.getWeightUnit()))
                     putNullable("activityLevel", appSettingsRepository.getActivityLevel())
+                    putNullable("goalsAndPreferences", appSettingsRepository.getGoalsAndPreferences())
                 }
             )
         }

@@ -266,7 +266,8 @@ data class ExportUserProfile(
     @SerialName("CurrentWeight") val currentWeight: Double? = null,
     @SerialName("WeightUnit") val weightUnit: String = "kg",
     @SerialName("DateOfBirth") val dateOfBirth: String? = null,
-    @SerialName("ActivityLevel") val activityLevel: String? = null
+    @SerialName("ActivityLevel") val activityLevel: String? = null,
+    @SerialName("GoalsAndPreferences") val goalsAndPreferences: String? = null
 )
 
 @Serializable

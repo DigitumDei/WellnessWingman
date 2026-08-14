@@ -40,14 +40,26 @@ import kotlin.test.assertTrue
 class AnalysisOrchestratorTest {
 
     @Test
+    fun `app settings default goals methods remain safe for older implementations`() {
+        val repository = FakeAppSettingsRepository(useDefaultGoalMethods = true)
+
+        assertNull(repository.getGoalsAndPreferences())
+        repository.setGoalsAndPreferences("ignored")
+    }
+
+    @Test
     fun `processEntry passes tool definitions and executor to llm client`() = runTest {
         val trackedEntryRepository = FakeTrackedEntryRepository()
         val entryAnalysisRepository = FakeEntryAnalysisRepository()
+        val appSettingsRepository = FakeAppSettingsRepository(
+            goals = "coeliac; 140g protein",
+            includeStructuredProfile = false
+        )
         val toolRegistry = ToolRegistry(
             trackedEntryRepository = trackedEntryRepository,
             entryAnalysisRepository = entryAnalysisRepository,
             weightHistoryRepository = FakeWeightHistoryRepository(),
-            appSettingsRepository = FakeAppSettingsRepository(),
+            appSettingsRepository = appSettingsRepository,
             nutritionalProfileRepository = FakeNutritionalProfileRepository()
         )
         val llmClient = mockk<LlmClient>()
@@ -98,7 +110,7 @@ class AnalysisOrchestratorTest {
             llmClientFactory = llmClientFactory,
             toolRegistry = toolRegistry,
             fileSystem = fileSystem,
-            appSettingsRepository = FakeAppSettingsRepository()
+            appSettingsRepository = appSettingsRepository
         )
 
         val entry = TrackedEntry(
@@ -118,6 +130,9 @@ class AnalysisOrchestratorTest {
         assertNotNull(capturedExecutor)
         assertTrue(capturedPrompt.contains("use that stored household-measure-to-gram conversion"))
         assertTrue(capturedPrompt.contains("Do not guess the gram weight"))
+        assertTrue(capturedPrompt.contains("<user_goals>"))
+        assertTrue(capturedPrompt.contains("coeliac; 140g protein"))
+        assertFalse(capturedPrompt.contains("User profile:"))
 
         val toolResult = capturedExecutor!!.invoke(
             com.wellnesswingman.data.model.llm.ToolCall(name = "get_user_profile")
@@ -177,7 +192,8 @@ class AnalysisOrchestratorTest {
 
     private fun orchestratorWith(
         client: LlmClient,
-        fileSystem: FileSystem
+        fileSystem: FileSystem,
+        appSettingsRepository: AppSettingsRepository = FakeAppSettingsRepository()
     ): AnalysisOrchestrator {
         val trackedEntryRepository = FakeTrackedEntryRepository()
         val entryAnalysisRepository = FakeEntryAnalysisRepository()
@@ -194,12 +210,39 @@ class AnalysisOrchestratorTest {
                 trackedEntryRepository = trackedEntryRepository,
                 entryAnalysisRepository = entryAnalysisRepository,
                 weightHistoryRepository = FakeWeightHistoryRepository(),
-                appSettingsRepository = FakeAppSettingsRepository(),
+                appSettingsRepository = appSettingsRepository,
                 nutritionalProfileRepository = FakeNutritionalProfileRepository()
             ),
             fileSystem = fileSystem,
-            appSettingsRepository = FakeAppSettingsRepository()
+            appSettingsRepository = appSettingsRepository
         )
+    }
+
+    @Test
+    fun `blank goals are omitted from the entry prompt`() = runTest {
+        val client = PromptCapturingClient()
+        val fileSystem = mockk<FileSystem>()
+        every { fileSystem.exists(any()) } returns false
+
+        orchestratorWith(
+            client = client,
+            fileSystem = fileSystem,
+            appSettingsRepository = FakeAppSettingsRepository(
+                goals = "  \n",
+                includeStructuredProfile = false
+            )
+        ).processEntry(
+            TrackedEntry(
+                entryId = 13L,
+                entryType = EntryType.UNKNOWN,
+                capturedAt = Clock.System.now(),
+                processingStatus = ProcessingStatus.PENDING
+            )
+        )
+
+        val prompt = assertNotNull(client.textPrompt)
+        assertFalse(prompt.contains("<user_goals>"))
+        assertFalse(prompt.contains("Use these goals and preferences"))
     }
 
     @Test
@@ -441,7 +484,11 @@ class AnalysisOrchestratorTest {
         override suspend fun upsert(profile: NutritionalProfile) {}
     }
 
-    private class FakeAppSettingsRepository : AppSettingsRepository {
+    private class FakeAppSettingsRepository(
+        private val goals: String? = null,
+        private val includeStructuredProfile: Boolean = true,
+        private val useDefaultGoalMethods: Boolean = false
+    ) : AppSettingsRepository {
         override fun getApiKey(provider: LlmProvider): String? = null
         override fun setApiKey(provider: LlmProvider, apiKey: String) {}
         override fun removeApiKey(provider: LlmProvider) {}
@@ -450,20 +497,25 @@ class AnalysisOrchestratorTest {
         override fun getModel(provider: LlmProvider): String? = null
         override fun setModel(provider: LlmProvider, model: String) {}
         override fun clear() {}
-        override fun getHeight(): Double? = 180.0
+        override fun getHeight(): Double? = 180.0.takeIf { includeStructuredProfile }
         override fun setHeight(height: Double) {}
         override fun getHeightUnit(): String = "cm"
         override fun setHeightUnit(unit: String) {}
-        override fun getSex(): String? = "male"
+        override fun getSex(): String? = "male".takeIf { includeStructuredProfile }
         override fun setSex(sex: String) {}
-        override fun getCurrentWeight(): Double? = 80.0
+        override fun getCurrentWeight(): Double? = 80.0.takeIf { includeStructuredProfile }
         override fun setCurrentWeight(weight: Double) {}
         override fun getWeightUnit(): String = "kg"
         override fun setWeightUnit(unit: String) {}
-        override fun getDateOfBirth(): String? = "1990-01-01"
+        override fun getDateOfBirth(): String? = "1990-01-01".takeIf { includeStructuredProfile }
         override fun setDateOfBirth(dob: String) {}
-        override fun getActivityLevel(): String? = "moderate"
+        override fun getActivityLevel(): String? = "moderate".takeIf { includeStructuredProfile }
         override fun setActivityLevel(level: String) {}
+        override fun getGoalsAndPreferences(): String? = if (useDefaultGoalMethods) {
+            super<AppSettingsRepository>.getGoalsAndPreferences()
+        } else {
+            goals
+        }
         override fun clearHeight() {}
         override fun clearCurrentWeight() {}
         override fun clearProfileData() {}
