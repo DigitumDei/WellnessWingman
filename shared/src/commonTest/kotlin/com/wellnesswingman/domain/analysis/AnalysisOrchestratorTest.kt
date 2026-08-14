@@ -192,7 +192,8 @@ class AnalysisOrchestratorTest {
 
     private fun orchestratorWith(
         client: LlmClient,
-        fileSystem: FileSystem
+        fileSystem: FileSystem,
+        appSettingsRepository: AppSettingsRepository = FakeAppSettingsRepository()
     ): AnalysisOrchestrator {
         val trackedEntryRepository = FakeTrackedEntryRepository()
         val entryAnalysisRepository = FakeEntryAnalysisRepository()
@@ -209,12 +210,39 @@ class AnalysisOrchestratorTest {
                 trackedEntryRepository = trackedEntryRepository,
                 entryAnalysisRepository = entryAnalysisRepository,
                 weightHistoryRepository = FakeWeightHistoryRepository(),
-                appSettingsRepository = FakeAppSettingsRepository(),
+                appSettingsRepository = appSettingsRepository,
                 nutritionalProfileRepository = FakeNutritionalProfileRepository()
             ),
             fileSystem = fileSystem,
-            appSettingsRepository = FakeAppSettingsRepository()
+            appSettingsRepository = appSettingsRepository
         )
+    }
+
+    @Test
+    fun `blank goals are omitted from the entry prompt`() = runTest {
+        val client = PromptCapturingClient()
+        val fileSystem = mockk<FileSystem>()
+        every { fileSystem.exists(any()) } returns false
+
+        orchestratorWith(
+            client = client,
+            fileSystem = fileSystem,
+            appSettingsRepository = FakeAppSettingsRepository(
+                goals = "  \n",
+                includeStructuredProfile = false
+            )
+        ).processEntry(
+            TrackedEntry(
+                entryId = 13L,
+                entryType = EntryType.UNKNOWN,
+                capturedAt = Clock.System.now(),
+                processingStatus = ProcessingStatus.PENDING
+            )
+        )
+
+        val prompt = assertNotNull(client.textPrompt)
+        assertFalse(prompt.contains("<user_goals>"))
+        assertFalse(prompt.contains("Use these goals and preferences"))
     }
 
     @Test

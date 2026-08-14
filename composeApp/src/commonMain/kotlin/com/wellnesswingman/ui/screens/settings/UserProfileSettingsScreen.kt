@@ -145,7 +145,7 @@ class UserProfileSettingsScreen : Screen {
                     onValueChange = { viewModel.updateGoalsAndPreferences(it) },
                     label = { Text("Goals and preferences") },
                     placeholder = { Text("e.g. Trying to reach 82kg by December; coeliac; 140g protein daily") },
-                    supportingText = { Text("${uiState.goalsAndPreferences.trim().length}/$MAX_GOALS_AND_PREFERENCES_LENGTH") },
+                    supportingText = { Text("${uiState.goalsAndPreferences.length}/$MAX_GOALS_AND_PREFERENCES_LENGTH") },
                     modifier = Modifier.fillMaxWidth(),
                     minLines = 4,
                     maxLines = 8
