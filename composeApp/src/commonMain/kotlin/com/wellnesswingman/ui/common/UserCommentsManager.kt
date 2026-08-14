@@ -138,7 +138,9 @@ class UserCommentsManager(
                 return
             }
 
-            service.startListening()
+            service.startListening { result ->
+                scope.launch { handleOnDeviceCompletion(result) }
+            }
             _commentsState.update {
                 it.copy(
                     isRecording = true,
@@ -184,6 +186,27 @@ class UserCommentsManager(
 
         try {
             val transcription = service.stopListening()
+                ?: throw IllegalStateException("No speech was recognized")
+            applyTranscription(transcription)
+        } catch (e: Exception) {
+            Napier.e("Failed to transcribe on-device audio", e)
+            _commentsState.update {
+                it.copy(
+                    isTranscribing = false,
+                    transcriptionError = "Transcription failed: ${e.message ?: "Unknown error"}"
+                )
+            }
+        }
+    }
+
+    private suspend fun handleOnDeviceCompletion(result: Result<String?>) {
+        recordingJob?.cancel()
+        _commentsState.update {
+            it.copy(isRecording = false, recordingDurationSeconds = 0, isTranscribing = true)
+        }
+
+        try {
+            val transcription = result.getOrThrow()
                 ?: throw IllegalStateException("No speech was recognized")
             applyTranscription(transcription)
         } catch (e: Exception) {

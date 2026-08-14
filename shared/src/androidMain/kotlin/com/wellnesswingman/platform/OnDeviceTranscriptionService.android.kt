@@ -27,13 +27,15 @@ class AndroidOnDeviceTranscriptionService(
     private val mainHandler = Handler(Looper.getMainLooper())
     private var recognizer: SpeechRecognizer? = null
     private var result: CompletableDeferred<String?>? = null
+    private var onAutoComplete: ((Result<String?>) -> Unit)? = null
+    private var stopRequested = false
     private var listening = false
 
     override suspend fun checkPermission(): Boolean = withContext(Dispatchers.Main.immediate) {
         context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
     }
 
-    override suspend fun startListening() = withContext(Dispatchers.Main.immediate) {
+    override suspend fun startListening(onAutoComplete: (Result<String?>) -> Unit) = withContext(Dispatchers.Main.immediate) {
         if (listening) return@withContext
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
             throw IllegalStateException("On-device speech recognition requires Android 12 or later")
@@ -47,6 +49,8 @@ class AndroidOnDeviceTranscriptionService(
 
         val newRecognizer = SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
         result = CompletableDeferred()
+        this@AndroidOnDeviceTranscriptionService.onAutoComplete = onAutoComplete
+        stopRequested = false
         newRecognizer.setRecognitionListener(listener)
         newRecognizer.startListening(recognitionIntent())
         recognizer = newRecognizer
@@ -55,19 +59,29 @@ class AndroidOnDeviceTranscriptionService(
 
     override suspend fun stopListening(): String? {
         val pendingResult = withContext(Dispatchers.Main.immediate) {
-            if (!listening) {
-                null
-            } else {
-                recognizer?.stopListening()
-                result
+            result?.also {
+                if (listening) {
+                    stopRequested = true
+                    recognizer?.stopListening()
+                }
             }
         } ?: return null
 
-        return withTimeoutOrNull(10_000) { pendingResult.await() }
-            ?: run {
-                cancel()
-                throw IllegalStateException("On-device speech recognition timed out")
+        return try {
+            withTimeoutOrNull(10_000) { pendingResult.await() }
+                ?: run {
+                    cancel()
+                    throw IllegalStateException("On-device speech recognition timed out")
+                }
+        } finally {
+            withContext(Dispatchers.Main.immediate) {
+                if (result === pendingResult) {
+                    result = null
+                    onAutoComplete = null
+                    stopRequested = false
+                }
             }
+        }
     }
 
     override fun cancel() {
@@ -85,15 +99,24 @@ class AndroidOnDeviceTranscriptionService(
         listening = false
         result?.cancel()
         result = null
+        onAutoComplete = null
+        stopRequested = false
     }
 
     private fun complete(text: String?) {
         val pendingResult = result
+        val callback = onAutoComplete
+        val shouldNotify = !stopRequested
         recognizer?.destroy()
         recognizer = null
         listening = false
-        result = null
         pendingResult?.complete(text)
+        if (shouldNotify) {
+            result = null
+            onAutoComplete = null
+            stopRequested = false
+            callback?.invoke(Result.success(text))
+        }
     }
 
     private val listener = object : RecognitionListener {
@@ -114,13 +137,19 @@ class AndroidOnDeviceTranscriptionService(
 
         override fun onError(error: Int) {
             val pendingResult = result
+            val callback = onAutoComplete
+            val shouldNotify = !stopRequested
+            val exception = IllegalStateException("On-device speech recognition failed (error $error)")
             recognizer?.destroy()
             recognizer = null
             listening = false
-            result = null
-            pendingResult?.completeExceptionally(
-                IllegalStateException("On-device speech recognition failed (error $error)")
-            )
+            pendingResult?.completeExceptionally(exception)
+            if (shouldNotify) {
+                result = null
+                onAutoComplete = null
+                stopRequested = false
+                callback?.invoke(Result.failure(exception))
+            }
         }
     }
 

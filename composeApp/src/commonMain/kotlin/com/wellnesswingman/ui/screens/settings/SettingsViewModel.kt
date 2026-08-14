@@ -170,10 +170,16 @@ class SettingsViewModel(
     }
 
     fun updateGoalsAndPreferences(text: String) {
+        updateGoalsAndPreferencesInternal(text)
+    }
+
+    private fun updateGoalsAndPreferencesInternal(text: String): GoalsTextUpdate {
+        val update = limitGoalsAndPreferencesText(text)
         goalsManager.updateText(text)
         _uiState.value = _uiState.value.copy(
-            goalsAndPreferences = text.take(MAX_GOALS_AND_PREFERENCES_LENGTH)
+            goalsAndPreferences = update.text
         )
+        return update
     }
 
     fun toggleGoalsRecording() {
@@ -198,8 +204,15 @@ class SettingsViewModel(
                 if (clarifiedText.isBlank()) {
                     throw IllegalStateException("The AI returned an empty clarification")
                 }
-                updateGoalsAndPreferences(clarifiedText)
-                _uiState.value = _uiState.value.copy(isClarifyingGoals = false)
+                val update = updateGoalsAndPreferencesInternal(clarifiedText)
+                _uiState.value = _uiState.value.copy(
+                    isClarifyingGoals = false,
+                    error = if (update.wasTruncated) {
+                        "Clarified goals were truncated at the $MAX_GOALS_AND_PREFERENCES_LENGTH-character limit"
+                    } else {
+                        null
+                    }
+                )
             } catch (e: Exception) {
                 Napier.e("Failed to clarify goals and preferences", e)
                 _uiState.value = _uiState.value.copy(
@@ -445,4 +458,17 @@ internal fun buildGoalsClarificationPrompt(goals: String): String {
         $safeGoals
         </user_goals>
     """.trimIndent()
+}
+
+internal data class GoalsTextUpdate(
+    val text: String,
+    val wasTruncated: Boolean
+)
+
+internal fun limitGoalsAndPreferencesText(text: String): GoalsTextUpdate {
+    val limitedText = text.take(MAX_GOALS_AND_PREFERENCES_LENGTH)
+    return GoalsTextUpdate(
+        text = limitedText,
+        wasTruncated = limitedText.length < text.length
+    )
 }

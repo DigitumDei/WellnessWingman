@@ -6,7 +6,7 @@ package com.wellnesswingman.platform
 interface OnDeviceTranscriptionService {
     suspend fun checkPermission(): Boolean
 
-    suspend fun startListening()
+    suspend fun startListening(onAutoComplete: (Result<String?>) -> Unit)
 
     suspend fun stopListening(): String?
 

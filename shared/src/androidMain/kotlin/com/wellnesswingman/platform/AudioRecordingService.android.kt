@@ -6,7 +6,10 @@ import android.content.pm.PackageManager
 import android.media.MediaRecorder
 import android.os.Build
 import io.github.aakira.napier.Napier
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
@@ -14,6 +17,7 @@ actual class AudioRecordingService(private val context: Context) {
     private var recorder: MediaRecorder? = null
     private var currentOutputPath: String? = null
     private var isCurrentlyRecording = false
+    private val cleanupScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     actual suspend fun checkPermission(): Boolean = withContext(Dispatchers.IO) {
         context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
@@ -144,22 +148,23 @@ actual class AudioRecordingService(private val context: Context) {
     actual fun isRecording(): Boolean = isCurrentlyRecording
 
     actual fun cancelRecording() {
-        if (!isCurrentlyRecording && recorder == null) return
-
+        val recorderToCancel = recorder
         val outputPath = currentOutputPath
-        try {
-            recorder?.stop()
-        } catch (e: Exception) {
-            Napier.w("Error cancelling MediaRecorder", e)
-        } finally {
-            recorder?.release()
-            recorder = null
-            isCurrentlyRecording = false
-            currentOutputPath = null
-        }
+        if (!isCurrentlyRecording && recorderToCancel == null) return
 
-        if (outputPath != null) {
-            File(outputPath).delete()
+        recorder = null
+        isCurrentlyRecording = false
+        currentOutputPath = null
+        cleanupScope.launch {
+            try {
+                recorderToCancel?.stop()
+            } catch (e: Exception) {
+                Napier.w("Error cancelling MediaRecorder", e)
+            } finally {
+                recorderToCancel?.release()
+            }
+
+            outputPath?.let { File(it).delete() }
         }
     }
 }
