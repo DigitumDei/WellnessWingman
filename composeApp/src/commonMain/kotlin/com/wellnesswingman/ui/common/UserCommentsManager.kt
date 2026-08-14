@@ -82,16 +82,21 @@ class UserCommentsManager(
      * Toggles audio recording on/off.
      */
     fun toggleRecording() {
+        val wasRecording = _commentsState.value.isRecording
         scope.launch {
+            // Natural end-of-speech can update state between the tap and this coroutine running.
+            // In that case the user's original action is already complete, so do nothing.
+            if (_commentsState.value.isRecording != wasRecording) return@launch
+
             if (onDeviceTranscriptionService != null) {
-                if (_commentsState.value.isRecording) {
+                if (wasRecording) {
                     stopOnDeviceRecording()
                 } else if (hasTextCapacity()) {
                     startOnDeviceRecording()
                 } else {
                     _commentsState.update { it.copy(transcriptionError = textCapacityReachedError()) }
                 }
-            } else if (_commentsState.value.isRecording) {
+            } else if (wasRecording) {
                 stopRecording()
             } else {
                 startRecording()
@@ -104,8 +109,13 @@ class UserCommentsManager(
      */
     fun dispose() {
         recordingJob?.cancel()
-        onDeviceTranscriptionService?.cancel()
-        audioRecordingService.cancelRecording()
+        if (!_commentsState.value.isRecording) return
+
+        if (onDeviceTranscriptionService != null) {
+            onDeviceTranscriptionService.cancel()
+        } else {
+            audioRecordingService.cancelRecording()
+        }
     }
 
     private suspend fun startRecording() {
@@ -238,12 +248,16 @@ class UserCommentsManager(
             val transcription = llmClient.transcribeAudio(audioBytes)
 
             applyTranscription(transcription)
-
-            fileSystem.delete(audioPath)
         } catch (e: Exception) {
             Napier.e("Failed to transcribe audio", e)
             _commentsState.update {
                 it.copy(isTranscribing = false, transcriptionError = "Transcription failed: ${e.message ?: "Unknown error"}")
+            }
+        } finally {
+            try {
+                fileSystem.delete(audioPath)
+            } catch (e: Exception) {
+                Napier.w("Failed to delete temporary audio file", e)
             }
         }
     }

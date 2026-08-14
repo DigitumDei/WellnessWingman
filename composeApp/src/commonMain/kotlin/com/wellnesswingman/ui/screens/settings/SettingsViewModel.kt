@@ -17,6 +17,7 @@ import com.wellnesswingman.platform.OnDeviceTranscriptionService
 import com.wellnesswingman.platform.ShareUtil
 import com.wellnesswingman.ui.common.CommentsState
 import com.wellnesswingman.ui.common.UserCommentsManager
+import com.wellnesswingman.ui.common.limitCommentText
 import io.github.aakira.napier.Napier
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -466,7 +467,7 @@ internal data class GoalsTextUpdate(
 )
 
 internal fun limitGoalsAndPreferencesText(text: String): GoalsTextUpdate {
-    val limitedText = text.take(MAX_GOALS_AND_PREFERENCES_LENGTH)
+    val limitedText = limitCommentText(text, MAX_GOALS_AND_PREFERENCES_LENGTH)
     return GoalsTextUpdate(
         text = limitedText,
         wasTruncated = limitedText.length < text.length

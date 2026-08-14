@@ -14,9 +14,14 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 actual class AudioRecordingService(private val context: Context) {
+    @Volatile
     private var recorder: MediaRecorder? = null
+    @Volatile
     private var currentOutputPath: String? = null
+    @Volatile
     private var isCurrentlyRecording = false
+    @Volatile
+    private var cancellationInProgress = false
     private val cleanupScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     actual suspend fun checkPermission(): Boolean = withContext(Dispatchers.IO) {
@@ -148,23 +153,34 @@ actual class AudioRecordingService(private val context: Context) {
     actual fun isRecording(): Boolean = isCurrentlyRecording
 
     actual fun cancelRecording() {
+        if (cancellationInProgress) return
+
         val recorderToCancel = recorder
         val outputPath = currentOutputPath
         if (!isCurrentlyRecording && recorderToCancel == null) return
 
-        recorder = null
-        isCurrentlyRecording = false
-        currentOutputPath = null
+        cancellationInProgress = true
         cleanupScope.launch {
             try {
                 recorderToCancel?.stop()
             } catch (e: Exception) {
                 Napier.w("Error cancelling MediaRecorder", e)
             } finally {
-                recorderToCancel?.release()
+                try {
+                    recorderToCancel?.release()
+                } catch (e: Exception) {
+                    Napier.w("Error releasing cancelled MediaRecorder", e)
+                }
+                recorder = null
+                isCurrentlyRecording = false
+                currentOutputPath = null
             }
 
-            outputPath?.let { File(it).delete() }
+            try {
+                outputPath?.let { File(it).delete() }
+            } finally {
+                cancellationInProgress = false
+            }
         }
     }
 }
