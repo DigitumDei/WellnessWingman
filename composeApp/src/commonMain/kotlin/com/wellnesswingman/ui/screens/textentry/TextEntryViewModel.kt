@@ -38,7 +38,8 @@ class TextEntryViewModel(
     private val textEntryProcessor: TextEntryProcessor,
     audioRecordingService: AudioRecordingService,
     llmClientFactory: LlmClientFactory,
-    fileSystem: FileSystem
+    fileSystem: FileSystem,
+    initialText: String = ""
 ) : ScreenModel {
 
     private val _uiState = MutableStateFlow(TextEntryUiState())
@@ -55,7 +56,7 @@ class TextEntryViewModel(
     val commentsState: StateFlow<CommentsState> = commentsManager.commentsState
 
     init {
-        commentsManager.loadComments(null)
+        commentsManager.loadComments(initialText)
     }
 
     fun updateText(text: String) {

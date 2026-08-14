@@ -43,12 +43,13 @@ val viewModelModule = module {
             checkInAnalysisService = get()
         )
     }
-    factory {
+    factory { params ->
         TextEntryViewModel(
             textEntryProcessor = get(),
             audioRecordingService = get(),
             llmClientFactory = get(),
-            fileSystem = get()
+            fileSystem = get(),
+            initialText = params.getOrNull<String>().orEmpty()
         )
     }
     factory { params ->

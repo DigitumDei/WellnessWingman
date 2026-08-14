@@ -6,6 +6,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -33,16 +35,19 @@ import com.wellnesswingman.domain.capture.CaptureSource
 import com.wellnesswingman.domain.capture.PendingCapture
 import com.wellnesswingman.domain.capture.PendingCaptureStore
 import com.wellnesswingman.domain.capture.PhotoEntryProcessor
+import com.wellnesswingman.data.model.TrackedEntry
 import com.wellnesswingman.platform.decodeWithExifRotation
 import com.wellnesswingman.ui.components.ErrorMessage
 import com.wellnesswingman.ui.components.LoadingIndicator
 import com.wellnesswingman.ui.screens.detail.EntryDetailScreen
 import com.wellnesswingman.ui.screens.textentry.TextEntryScreen
+import com.wellnesswingman.util.DateTimeUtil
 import io.github.aakira.napier.Napier
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.datetime.TimeZone
 import org.koin.compose.koinInject
 import java.io.File
 
@@ -87,6 +92,10 @@ private class PhotoReviewScreen : Screen {
         var resultEntryId by rememberSaveable { mutableStateOf(0L) }
         var apiKeyMissing by rememberSaveable { mutableStateOf(false) }
         var errorMessage by rememberSaveable { mutableStateOf("") }
+        var showPreviousEntries by remember { mutableStateOf(false) }
+        var isCopyingPrevious by remember { mutableStateOf(false) }
+        var previousCopyError by remember { mutableStateOf("") }
+        val previousEntriesState by viewModel.previousEntriesState.collectAsState()
 
         // Recomputed (not persisted) — loaded from the persisted file path.
         var imageBytes by remember { mutableStateOf<ByteArray?>(null) }
@@ -345,6 +354,54 @@ private class PhotoReviewScreen : Screen {
             workflowPhase = WORKFLOW_REVIEW
         }
 
+        val onCopyPreviousClick: () -> Unit = {
+            previousCopyError = ""
+            showPreviousEntries = true
+            viewModel.loadPreviousEntries()
+        }
+
+        val onPreviousEntrySelected: (TrackedEntry) -> Unit = { entry ->
+            val sourcePath = entry.blobPath
+            if (sourcePath == null) {
+                // Text-only entries still benefit from copying their description, but have no
+                // image to put into the photo review flow.
+                showPreviousEntries = false
+                navigator.replace(TextEntryScreen(entry.userNotes.orEmpty()))
+            } else if (!isCopyingPrevious) {
+                isCopyingPrevious = true
+                coroutineScope.launch {
+                    try {
+                        val pendingDir = pendingCaptureStore.getPendingPhotosDirectory()
+                        val copiedPath = "$pendingDir/copy_${System.currentTimeMillis()}.jpg"
+                        if (!viewModel.copyPreviousPhoto(entry, copiedPath)) {
+                            previousCopyError = "That previous photo is no longer available."
+                        } else {
+                            pendingCaptureStore.save(
+                                PendingCapture(
+                                    photoFilePath = copiedPath,
+                                    capturedAtMillis = System.currentTimeMillis(),
+                                    notes = entry.userNotes.orEmpty(),
+                                    source = CaptureSource.COPY
+                                )
+                            )
+                            photoFilePath = copiedPath
+                            notes = entry.userNotes.orEmpty()
+                            resultEntryId = 0L
+                            apiKeyMissing = false
+                            errorMessage = ""
+                            workflowPhase = WORKFLOW_REVIEW
+                        }
+                    } catch (e: Exception) {
+                        Napier.e("Failed to copy a previous entry", e)
+                        previousCopyError = e.message ?: "Could not copy that previous entry."
+                    } finally {
+                        isCopyingPrevious = false
+                        showPreviousEntries = false
+                    }
+                }
+            }
+        }
+
         Scaffold(
             topBar = {
                 TopAppBar(
@@ -362,6 +419,7 @@ private class PhotoReviewScreen : Screen {
                     CaptureOptions(
                         onCameraClick = onCameraClick,
                         onGalleryClick = onGalleryClick,
+                        onCopyPreviousClick = onCopyPreviousClick,
                         modifier = Modifier.padding(paddingValues),
                         // Replace, not push: this screen's job was to choose a source, and
                         // backing out of the description should return to the day, not here.
@@ -421,6 +479,7 @@ private class PhotoReviewScreen : Screen {
                     CaptureOptions(
                         onCameraClick = onCameraClick,
                         onGalleryClick = onGalleryClick,
+                        onCopyPreviousClick = onCopyPreviousClick,
                         modifier = Modifier.padding(paddingValues),
                         // Replace, not push: this screen's job was to choose a source, and
                         // backing out of the description should return to the day, not here.
@@ -442,6 +501,28 @@ private class PhotoReviewScreen : Screen {
                 }
             )
         }
+
+        if (showPreviousEntries) {
+            PreviousEntriesDialog(
+                state = previousEntriesState,
+                isCopying = isCopyingPrevious,
+                onDismiss = { showPreviousEntries = false },
+                onSelect = onPreviousEntrySelected
+            )
+        }
+
+        if (previousCopyError.isNotEmpty()) {
+            AlertDialog(
+                onDismissRequest = { previousCopyError = "" },
+                title = { Text("Could not copy entry") },
+                text = { Text(previousCopyError) },
+                confirmButton = {
+                    TextButton(onClick = { previousCopyError = "" }) {
+                        Text("OK")
+                    }
+                }
+            )
+        }
     }
 }
 
@@ -455,6 +536,7 @@ private const val WORKFLOW_ERROR = "error"
 private fun CaptureOptions(
     onCameraClick: () -> Unit,
     onGalleryClick: () -> Unit,
+    onCopyPreviousClick: () -> Unit,
     modifier: Modifier = Modifier,
     onDescribeClick: () -> Unit = {}
 ) {
@@ -511,6 +593,32 @@ private fun CaptureOptions(
             }
         }
 
+        OutlinedButton(
+            onClick = onCopyPreviousClick,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(120.dp)
+                .padding(bottom = 16.dp)
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Icon(
+                    Icons.Default.ContentCopy,
+                    contentDescription = null,
+                    modifier = Modifier.size(48.dp)
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("Copy from previous", style = MaterialTheme.typography.titleLarge)
+                Text(
+                    text = "Use one of your last ${PhotoReviewViewModel.DEFAULT_PREVIOUS_ENTRY_LIMIT} entries",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
         // For when the thing happened but the photo did not: a meal eaten out, a run whose
         // watch died. Deliberately last — a photo gives the analysis far more to work with.
         OutlinedButton(
@@ -538,6 +646,81 @@ private fun CaptureOptions(
             }
         }
     }
+}
+
+@Composable
+private fun PreviousEntriesDialog(
+    state: PreviousEntriesState,
+    isCopying: Boolean,
+    onDismiss: () -> Unit,
+    onSelect: (TrackedEntry) -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = { if (!state.isLoading && !isCopying) onDismiss() },
+        title = { Text("Copy from previous") },
+        text = {
+            when {
+                state.isLoading || isCopying -> {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(32.dp))
+                    }
+                }
+                state.error != null -> Text(
+                    text = state.error,
+                    color = MaterialTheme.colorScheme.error
+                )
+                state.entries.isEmpty() -> Text("No previous entries found.")
+                else -> LazyColumn(
+                    modifier = Modifier.heightIn(max = 420.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    items(state.entries, key = { it.entryId }) { entry ->
+                        val hasPhoto = entry.blobPath != null
+                        val hasText = !entry.userNotes.isNullOrBlank()
+                        TextButton(
+                            onClick = { onSelect(entry) },
+                            enabled = hasPhoto || hasText,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalAlignment = Alignment.Start
+                            ) {
+                                Text(
+                                    text = DateTimeUtil.formatDateTime(
+                                        entry.capturedAt,
+                                        TimeZone.currentSystemDefault()
+                                    ),
+                                    style = MaterialTheme.typography.titleSmall
+                                )
+                                Text(
+                                    text = entry.userNotes?.take(90)
+                                        ?.ifBlank { "No notes" }
+                                        ?: "No notes",
+                                    maxLines = 2,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    text = if (hasPhoto) "Photo + notes" else "Text only",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss, enabled = !state.isLoading && !isCopying) {
+                Text("Cancel")
+            }
+        }
+    )
 }
 
 @Composable

@@ -24,6 +24,12 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 
+data class PreviousEntriesState(
+    val isLoading: Boolean = false,
+    val entries: List<TrackedEntry> = emptyList(),
+    val error: String? = null
+)
+
 class PhotoReviewViewModel(
     private val cameraService: CameraCaptureService,
     private val photoResizer: PhotoResizer,
@@ -33,6 +39,19 @@ class PhotoReviewViewModel(
     private val fileSystem: FileSystem,
     private val llmClientFactory: LlmClientFactory
 ) : ScreenModel {
+
+    companion object {
+        const val DEFAULT_PREVIOUS_ENTRY_LIMIT = 10
+
+        fun getPreviewPath(blobPath: String): String {
+            val lastDot = blobPath.lastIndexOf('.')
+            return if (lastDot > 0) {
+                "${blobPath.substring(0, lastDot)}_preview${blobPath.substring(lastDot)}"
+            } else {
+                "${blobPath}_preview"
+            }
+        }
+    }
 
     private val _uiState = MutableStateFlow<PhotoReviewUiState>(PhotoReviewUiState.Initial)
     val uiState: StateFlow<PhotoReviewUiState> = _uiState.asStateFlow()
@@ -52,8 +71,12 @@ class PhotoReviewViewModel(
     private val _transcriptionError = MutableStateFlow<String?>(null)
     val transcriptionError: StateFlow<String?> = _transcriptionError.asStateFlow()
 
+    private val _previousEntriesState = MutableStateFlow(PreviousEntriesState())
+    val previousEntriesState: StateFlow<PreviousEntriesState> = _previousEntriesState.asStateFlow()
+
     private var recordingJob: Job? = null
     private var currentAudioPath: String? = null
+    private var copiedReviewPath: String? = null
 
     fun captureFromCamera() {
         screenModelScope.launch {
@@ -106,6 +129,78 @@ class PhotoReviewViewModel(
                 Napier.e("Failed to pick photo", e)
                 _uiState.value = PhotoReviewUiState.Error(e.message ?: "Unknown error")
             }
+        }
+    }
+
+    /** Loads the most recent entries for the add-entry copy picker. */
+    fun loadPreviousEntries(limit: Int = DEFAULT_PREVIOUS_ENTRY_LIMIT) {
+        screenModelScope.launch {
+            _previousEntriesState.value = PreviousEntriesState(isLoading = true)
+            try {
+                _previousEntriesState.value = PreviousEntriesState(
+                    entries = trackedEntryRepository.getRecentEntries(limit)
+                )
+            } catch (e: Exception) {
+                Napier.e("Failed to load previous entries", e)
+                _previousEntriesState.value = PreviousEntriesState(
+                    error = e.message ?: "Could not load previous entries"
+                )
+            }
+        }
+    }
+
+    /**
+     * Copies a previous entry's original photo into a new pending-file path.
+     * The caller then submits that path through the normal photo processor, which creates a
+     * separate blob and entry with the current capture time.
+     */
+    suspend fun copyPreviousPhoto(entry: TrackedEntry, destinationPath: String): Boolean {
+        val sourcePath = entry.blobPath ?: return false
+        return try {
+            if (!fileSystem.exists(sourcePath)) return false
+            fileSystem.copyFile(sourcePath, destinationPath)
+            if (fileSystem.exists(destinationPath)) {
+                true
+            } else {
+                fileSystem.delete(destinationPath)
+                false
+            }
+        } catch (e: Exception) {
+            Napier.e("Failed to copy previous entry photo", e)
+            runCatching { fileSystem.delete(destinationPath) }
+            false
+        }
+    }
+
+    /**
+     * Prepares a copied photo for the non-Android review flow, which does not have the durable
+     * pending-capture wrapper used by Android. The copied path is still a new blob path, so
+     * confirming creates a separate entry rather than pointing at the original photo.
+     */
+    suspend fun preparePreviousEntry(entry: TrackedEntry): Boolean {
+        val sourcePath = entry.blobPath ?: return false
+        return try {
+            if (!fileSystem.exists(sourcePath)) return false
+            val bytes = photoResizer.resize(
+                photoBytes = fileSystem.readBytes(sourcePath),
+                maxWidth = 16_384,
+                maxHeight = 16_384,
+                quality = 95
+            )
+            val photosDir = "${fileSystem.getAppDataDirectory()}/photos"
+            fileSystem.createDirectory(photosDir)
+            val destinationPath = "$photosDir/copy_${Clock.System.now().toEpochMilliseconds()}.jpg"
+            fileSystem.writeBytes(destinationPath, bytes)
+            copiedReviewPath = destinationPath
+            _uiState.value = PhotoReviewUiState.Review(
+                blobPath = destinationPath,
+                photoBytes = bytes,
+                initialNotes = entry.userNotes.orEmpty()
+            )
+            true
+        } catch (e: Exception) {
+            Napier.e("Failed to prepare a previous entry", e)
+            false
         }
     }
 
@@ -219,6 +314,7 @@ class PhotoReviewViewModel(
                     backgroundAnalysisService.queueEntry(entryId, userNotes)
                     _uiState.value = PhotoReviewUiState.Success(entryId)
                 }
+                copiedReviewPath = null
             } catch (e: Exception) {
                 Napier.e("Failed to create entry", e)
                 _uiState.value = PhotoReviewUiState.Error(e.message ?: "Unknown error")
@@ -227,11 +323,22 @@ class PhotoReviewViewModel(
     }
 
     fun retry() {
+        deleteCopiedReviewPhoto()
         _uiState.value = PhotoReviewUiState.Initial
     }
 
     fun cancel() {
+        deleteCopiedReviewPhoto()
         _uiState.value = PhotoReviewUiState.Cancelled
+    }
+
+    private fun deleteCopiedReviewPhoto() {
+        val path = copiedReviewPath ?: return
+        copiedReviewPath = null
+        screenModelScope.launch {
+            runCatching { fileSystem.delete(path) }
+            runCatching { fileSystem.delete(getPreviewPath(path)) }
+        }
     }
 
     /**
@@ -300,23 +407,17 @@ class PhotoReviewViewModel(
         }
     }
 
-    companion object {
-        fun getPreviewPath(blobPath: String): String {
-            val lastDot = blobPath.lastIndexOf('.')
-            return if (lastDot > 0) {
-                "${blobPath.substring(0, lastDot)}_preview${blobPath.substring(lastDot)}"
-            } else {
-                "${blobPath}_preview"
-            }
-        }
-    }
 }
 
 sealed class PhotoReviewUiState {
     object Initial : PhotoReviewUiState()
     object Capturing : PhotoReviewUiState()
     object Picking : PhotoReviewUiState()
-    data class Review(val blobPath: String, val photoBytes: ByteArray) : PhotoReviewUiState()
+    data class Review(
+        val blobPath: String,
+        val photoBytes: ByteArray,
+        val initialNotes: String = ""
+    ) : PhotoReviewUiState()
     object Processing : PhotoReviewUiState()
     data class Success(val entryId: Long, val apiKeyMissing: Boolean = false) : PhotoReviewUiState()
     data class Error(val message: String) : PhotoReviewUiState()

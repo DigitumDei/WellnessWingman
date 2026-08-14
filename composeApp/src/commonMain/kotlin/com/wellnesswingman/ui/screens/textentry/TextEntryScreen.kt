@@ -27,14 +27,16 @@ import com.wellnesswingman.ui.screens.detail.VoiceRecordingButton
  * The description goes to the same analysis that reads photos, which decides for itself whether
  * it is a meal, exercise or something else.
  */
-class TextEntryScreen : Screen {
+class TextEntryScreen(private val initialText: String = "") : Screen {
 
-    override val key: ScreenKey get() = "TextEntryScreen"
+    override val key: ScreenKey get() = "TextEntryScreen:${initialText.hashCode()}"
 
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
-        val viewModel = getScreenModel<TextEntryViewModel>()
+        val viewModel = getScreenModel<TextEntryViewModel> {
+            org.koin.core.parameter.parametersOf(initialText)
+        }
         val uiState by viewModel.uiState.collectAsState()
         val commentsState by viewModel.commentsState.collectAsState()
 

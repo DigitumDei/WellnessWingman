@@ -146,7 +146,8 @@ class TextEntryViewModelTest {
     private fun viewModel(
         scope: CoroutineScope,
         repository: FakeTrackedEntryRepository = FakeTrackedEntryRepository(),
-        hasApiKey: Boolean = true
+        hasApiKey: Boolean = true,
+        initialText: String = ""
     ): TextEntryViewModel {
         val factory = FakeLlmClientFactory(hasApiKey)
         return TextEntryViewModel(
@@ -160,8 +161,17 @@ class TextEntryViewModelTest {
             // the check-in tests do. Nothing in these tests records audio.
             audioRecordingService = AudioRecordingService(),
             llmClientFactory = factory,
-            fileSystem = FileSystem()
+            fileSystem = FileSystem(),
+            initialText = initialText
         )
+    }
+
+    @Test
+    fun `copying a text-only entry starts with its existing description`() = runTest {
+        val subject = viewModel(this, initialText = "leftover pasta with salad")
+
+        assertEquals("leftover pasta with salad", subject.commentsState.value.text)
+        assertEquals("leftover pasta with salad", subject.commentsState.value.savedText)
     }
 
     @Test
