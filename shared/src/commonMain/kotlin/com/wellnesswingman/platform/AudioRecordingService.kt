@@ -18,4 +18,5 @@ expect class AudioRecordingService {
     suspend fun startRecording(outputFilePath: String): Boolean
     suspend fun stopRecording(): AudioRecordingResult
     fun isRecording(): Boolean
+    fun cancelRecording()
 }

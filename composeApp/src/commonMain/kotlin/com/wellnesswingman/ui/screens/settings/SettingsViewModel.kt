@@ -13,6 +13,7 @@ import com.wellnesswingman.domain.llm.LlmClientFactory
 import com.wellnesswingman.platform.DiagnosticShare
 import com.wellnesswingman.platform.AudioRecordingService
 import com.wellnesswingman.platform.FileSystem
+import com.wellnesswingman.platform.OnDeviceTranscriptionService
 import com.wellnesswingman.platform.ShareUtil
 import com.wellnesswingman.ui.common.CommentsState
 import com.wellnesswingman.ui.common.UserCommentsManager
@@ -32,6 +33,7 @@ class SettingsViewModel(
     private val weightHistoryRepository: WeightHistoryRepository,
     audioRecordingService: AudioRecordingService,
     private val llmClientFactory: LlmClientFactory,
+    onDeviceTranscriptionService: OnDeviceTranscriptionService,
     fileSystem: FileSystem
 ) : ScreenModel {
 
@@ -44,7 +46,8 @@ class SettingsViewModel(
         fileSystem = fileSystem,
         scope = screenModelScope,
         audioFilePrefix = "goals",
-        maxTextLength = MAX_GOALS_AND_PREFERENCES_LENGTH
+        maxTextLength = MAX_GOALS_AND_PREFERENCES_LENGTH,
+        onDeviceTranscriptionService = onDeviceTranscriptionService
     )
 
     val goalsCommentsState: StateFlow<CommentsState> = goalsManager.commentsState
@@ -175,6 +178,10 @@ class SettingsViewModel(
 
     fun toggleGoalsRecording() {
         goalsManager.toggleRecording()
+    }
+
+    override fun onDispose() {
+        goalsManager.dispose()
     }
 
     fun clarifyGoalsAndPreferences() {

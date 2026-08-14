@@ -142,4 +142,24 @@ actual class AudioRecordingService(private val context: Context) {
     }
 
     actual fun isRecording(): Boolean = isCurrentlyRecording
+
+    actual fun cancelRecording() {
+        if (!isCurrentlyRecording && recorder == null) return
+
+        val outputPath = currentOutputPath
+        try {
+            recorder?.stop()
+        } catch (e: Exception) {
+            Napier.w("Error cancelling MediaRecorder", e)
+        } finally {
+            recorder?.release()
+            recorder = null
+            isCurrentlyRecording = false
+            currentOutputPath = null
+        }
+
+        if (outputPath != null) {
+            File(outputPath).delete()
+        }
+    }
 }

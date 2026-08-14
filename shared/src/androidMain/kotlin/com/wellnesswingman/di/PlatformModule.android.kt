@@ -16,6 +16,8 @@ import com.wellnesswingman.platform.DiagnosticLogger
 import com.wellnesswingman.platform.DiagnosticShare
 import com.wellnesswingman.platform.FileSystem
 import com.wellnesswingman.platform.FileSystemOperations
+import com.wellnesswingman.platform.AndroidOnDeviceTranscriptionService
+import com.wellnesswingman.platform.OnDeviceTranscriptionService
 import com.wellnesswingman.platform.PhotoResizer
 import com.wellnesswingman.platform.ShareUtil
 import com.wellnesswingman.platform.ZipOperations
@@ -47,6 +49,7 @@ val platformModule = module {
     single { FileSystem(get<Context>()) } bind FileSystemOperations::class
     single { CameraCaptureService(get<Context>()) } bind CameraCaptureOperations::class
     single { AudioRecordingService(get<Context>()) }
+    single<OnDeviceTranscriptionService> { AndroidOnDeviceTranscriptionService(get<Context>()) }
     single { PhotoResizer() }
     single { DiagnosticLogger(get<Context>()) }
     single { DiagnosticShare(get<Context>(), get()) }

@@ -30,6 +30,7 @@ class UserProfileSettingsScreen : Screen {
         val goalsCommentsState by viewModel.goalsCommentsState.collectAsState()
         val goalsVoiceBusy = goalsCommentsState.isRecording || goalsCommentsState.isTranscribing
         val goalsBusy = goalsVoiceBusy || uiState.isClarifyingGoals
+        val goalsHasCapacity = uiState.goalsAndPreferences.length < MAX_GOALS_AND_PREFERENCES_LENGTH
 
         val snackbarHostState = remember { SnackbarHostState() }
         LaunchedEffect(uiState.saveSuccess) {
@@ -162,7 +163,8 @@ class UserProfileSettingsScreen : Screen {
                     isTranscribing = goalsCommentsState.isTranscribing,
                     recordingDurationSeconds = goalsCommentsState.recordingDurationSeconds,
                     // Keep the stop action available while clarification disables new recordings.
-                    enabled = !uiState.isClarifyingGoals || goalsCommentsState.isRecording,
+                    enabled = (goalsHasCapacity && !uiState.isClarifyingGoals) ||
+                        goalsCommentsState.isRecording,
                     modifier = Modifier.fillMaxWidth()
                 )
 
