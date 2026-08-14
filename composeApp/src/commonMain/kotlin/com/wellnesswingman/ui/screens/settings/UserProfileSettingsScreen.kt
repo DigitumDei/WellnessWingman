@@ -29,6 +29,7 @@ class UserProfileSettingsScreen : Screen {
         val uiState by viewModel.uiState.collectAsState()
         val goalsCommentsState by viewModel.goalsCommentsState.collectAsState()
         val goalsVoiceBusy = goalsCommentsState.isRecording || goalsCommentsState.isTranscribing
+        val goalsBusy = goalsVoiceBusy || uiState.isClarifyingGoals
 
         val snackbarHostState = remember { SnackbarHostState() }
         LaunchedEffect(uiState.saveSuccess) {
@@ -152,7 +153,7 @@ class UserProfileSettingsScreen : Screen {
                     modifier = Modifier.fillMaxWidth(),
                     minLines = 4,
                     maxLines = 8,
-                    enabled = !goalsVoiceBusy
+                    enabled = !goalsBusy
                 )
 
                 VoiceRecordingButton(
@@ -160,7 +161,8 @@ class UserProfileSettingsScreen : Screen {
                     isRecording = goalsCommentsState.isRecording,
                     isTranscribing = goalsCommentsState.isTranscribing,
                     recordingDurationSeconds = goalsCommentsState.recordingDurationSeconds,
-                    enabled = true,
+                    // Keep the stop action available while clarification disables new recordings.
+                    enabled = !uiState.isClarifyingGoals || goalsCommentsState.isRecording,
                     modifier = Modifier.fillMaxWidth()
                 )
 
@@ -170,6 +172,20 @@ class UserProfileSettingsScreen : Screen {
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error
                     )
+                }
+
+                OutlinedButton(
+                    onClick = viewModel::clarifyGoalsAndPreferences,
+                    enabled = uiState.goalsAndPreferences.isNotBlank() && !goalsBusy,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    if (uiState.isClarifyingGoals) {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Clarifying…")
+                    } else {
+                        Text("Clarify with AI")
+                    }
                 }
 
                 // View Weight History button
@@ -188,7 +204,7 @@ class UserProfileSettingsScreen : Screen {
                 Button(
                     onClick = { viewModel.saveProfileSettings() },
                     modifier = Modifier.fillMaxWidth(),
-                    enabled = !goalsVoiceBusy
+                    enabled = !goalsBusy
                 ) {
                     Text("Save Profile")
                 }
