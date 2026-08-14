@@ -163,8 +163,10 @@ class UserProfileSettingsScreen : Screen {
                     isTranscribing = goalsCommentsState.isTranscribing,
                     recordingDurationSeconds = goalsCommentsState.recordingDurationSeconds,
                     // Keep the stop action available while clarification disables new recordings.
-                    enabled = (goalsHasCapacity && !uiState.isClarifyingGoals) ||
-                        goalsCommentsState.isRecording,
+                    enabled = goalsCommentsState.isRecording ||
+                        (goalsHasCapacity &&
+                            !goalsCommentsState.isTranscribing &&
+                            !uiState.isClarifyingGoals),
                     modifier = Modifier.fillMaxWidth()
                 )
 

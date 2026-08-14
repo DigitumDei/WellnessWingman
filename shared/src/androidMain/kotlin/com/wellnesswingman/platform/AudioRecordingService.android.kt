@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.media.MediaRecorder
 import android.os.Build
 import io.github.aakira.napier.Napier
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -21,7 +22,7 @@ actual class AudioRecordingService(private val context: Context) {
     @Volatile
     private var isCurrentlyRecording = false
     @Volatile
-    private var cancellationInProgress = false
+    private var cancellationCompletion: CompletableDeferred<Unit>? = null
     private val cleanupScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     actual suspend fun checkPermission(): Boolean = withContext(Dispatchers.IO) {
@@ -36,6 +37,7 @@ actual class AudioRecordingService(private val context: Context) {
 
     actual suspend fun startRecording(outputFilePath: String): Boolean = withContext(Dispatchers.IO) {
         try {
+            cancellationCompletion?.await()
             if (isCurrentlyRecording) {
                 Napier.w("Recording already in progress")
                 return@withContext false
@@ -153,13 +155,14 @@ actual class AudioRecordingService(private val context: Context) {
     actual fun isRecording(): Boolean = isCurrentlyRecording
 
     actual fun cancelRecording() {
-        if (cancellationInProgress) return
+        if (cancellationCompletion != null) return
 
         val recorderToCancel = recorder
         val outputPath = currentOutputPath
         if (!isCurrentlyRecording && recorderToCancel == null) return
 
-        cancellationInProgress = true
+        val completion = CompletableDeferred<Unit>()
+        cancellationCompletion = completion
         cleanupScope.launch {
             try {
                 recorderToCancel?.stop()
@@ -171,15 +174,20 @@ actual class AudioRecordingService(private val context: Context) {
                 } catch (e: Exception) {
                     Napier.w("Error releasing cancelled MediaRecorder", e)
                 }
-                recorder = null
-                isCurrentlyRecording = false
-                currentOutputPath = null
+                if (recorder === recorderToCancel) {
+                    recorder = null
+                    isCurrentlyRecording = false
+                    currentOutputPath = null
+                }
             }
 
             try {
                 outputPath?.let { File(it).delete() }
             } finally {
-                cancellationInProgress = false
+                if (cancellationCompletion === completion) {
+                    cancellationCompletion = null
+                }
+                completion.complete(Unit)
             }
         }
     }

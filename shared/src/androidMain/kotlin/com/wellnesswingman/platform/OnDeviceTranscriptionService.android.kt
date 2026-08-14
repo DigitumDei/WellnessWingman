@@ -36,7 +36,9 @@ class AndroidOnDeviceTranscriptionService(
     }
 
     override suspend fun startListening(onAutoComplete: (Result<String?>) -> Unit) = withContext(Dispatchers.Main.immediate) {
-        if (listening) return@withContext
+        if (listening) {
+            throw IllegalStateException("On-device speech recognition is already active")
+        }
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
             throw IllegalStateException("On-device speech recognition requires Android 12 or later")
         }
@@ -48,13 +50,24 @@ class AndroidOnDeviceTranscriptionService(
         }
 
         val newRecognizer = SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
-        result = CompletableDeferred()
+        val newResult = CompletableDeferred<String?>()
+        result = newResult
         this@AndroidOnDeviceTranscriptionService.onAutoComplete = onAutoComplete
         stopRequested = false
-        newRecognizer.setRecognitionListener(listener)
-        newRecognizer.startListening(recognitionIntent())
         recognizer = newRecognizer
         listening = true
+        try {
+            newRecognizer.setRecognitionListener(listener)
+            newRecognizer.startListening(recognitionIntent())
+        } catch (e: Exception) {
+            newRecognizer.destroy()
+            if (recognizer === newRecognizer) recognizer = null
+            if (result === newResult) result = null
+            this@AndroidOnDeviceTranscriptionService.onAutoComplete = null
+            stopRequested = false
+            listening = false
+            throw e
+        }
     }
 
     override suspend fun stopListening(): String? {
@@ -112,7 +125,6 @@ class AndroidOnDeviceTranscriptionService(
         listening = false
         pendingResult?.complete(text)
         if (shouldNotify) {
-            result = null
             onAutoComplete = null
             stopRequested = false
             callback?.invoke(Result.success(text))
@@ -145,7 +157,6 @@ class AndroidOnDeviceTranscriptionService(
             listening = false
             pendingResult?.completeExceptionally(exception)
             if (shouldNotify) {
-                result = null
                 onAutoComplete = null
                 stopRequested = false
                 callback?.invoke(Result.failure(exception))

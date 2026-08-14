@@ -49,6 +49,7 @@ class UserCommentsManager(
     val commentsState: StateFlow<CommentsState> = _commentsState.asStateFlow()
 
     private var recordingJob: Job? = null
+    private var onDeviceCompletionClaimed = false
 
     /**
      * Loads existing comments into state, marking them as saved.
@@ -109,7 +110,8 @@ class UserCommentsManager(
      */
     fun dispose() {
         recordingJob?.cancel()
-        if (!_commentsState.value.isRecording) return
+        val state = _commentsState.value
+        if (!state.isRecording && !state.isTranscribing) return
 
         if (onDeviceTranscriptionService != null) {
             onDeviceTranscriptionService.cancel()
@@ -132,6 +134,10 @@ class UserCommentsManager(
             if (audioRecordingService.startRecording(audioPath)) {
                 _commentsState.update { it.copy(isRecording = true, recordingDurationSeconds = 0, transcriptionError = null) }
                 startDurationTimer()
+            } else {
+                _commentsState.update {
+                    it.copy(transcriptionError = "Could not start recording because the microphone is busy")
+                }
             }
         } catch (e: Exception) {
             Napier.e("Failed to start recording", e)
@@ -148,8 +154,11 @@ class UserCommentsManager(
                 return
             }
 
+            onDeviceCompletionClaimed = false
             service.startListening { result ->
-                scope.launch { handleOnDeviceCompletion(result) }
+                if (beginOnDeviceCompletion()) {
+                    scope.launch { completeOnDeviceRecording(result) }
+                }
             }
             _commentsState.update {
                 it.copy(
@@ -189,32 +198,21 @@ class UserCommentsManager(
 
     private suspend fun stopOnDeviceRecording() {
         val service = onDeviceTranscriptionService ?: return
-        recordingJob?.cancel()
-        _commentsState.update {
-            it.copy(isRecording = false, recordingDurationSeconds = 0, isTranscribing = true)
-        }
-
-        try {
-            val transcription = service.stopListening()
-                ?: throw IllegalStateException("No speech was recognized")
-            applyTranscription(transcription)
-        } catch (e: Exception) {
-            Napier.e("Failed to transcribe on-device audio", e)
-            _commentsState.update {
-                it.copy(
-                    isTranscribing = false,
-                    transcriptionError = "Transcription failed: ${e.message ?: "Unknown error"}"
-                )
-            }
-        }
+        if (!beginOnDeviceCompletion()) return
+        completeOnDeviceRecording(runCatching { service.stopListening() })
     }
 
-    private suspend fun handleOnDeviceCompletion(result: Result<String?>) {
+    private fun beginOnDeviceCompletion(): Boolean {
+        if (onDeviceCompletionClaimed) return false
+        onDeviceCompletionClaimed = true
         recordingJob?.cancel()
         _commentsState.update {
             it.copy(isRecording = false, recordingDurationSeconds = 0, isTranscribing = true)
         }
+        return true
+    }
 
+    private fun completeOnDeviceRecording(result: Result<String?>) {
         try {
             val transcription = result.getOrThrow()
                 ?: throw IllegalStateException("No speech was recognized")
@@ -227,6 +225,8 @@ class UserCommentsManager(
                     transcriptionError = "Transcription failed: ${e.message ?: "Unknown error"}"
                 )
             }
+        } finally {
+            onDeviceCompletionClaimed = false
         }
     }
 
