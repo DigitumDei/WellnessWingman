@@ -40,6 +40,14 @@ import kotlin.test.assertTrue
 class AnalysisOrchestratorTest {
 
     @Test
+    fun `app settings default goals methods remain safe for older implementations`() {
+        val repository = FakeAppSettingsRepository(useDefaultGoalMethods = true)
+
+        assertNull(repository.getGoalsAndPreferences())
+        repository.setGoalsAndPreferences("ignored")
+    }
+
+    @Test
     fun `processEntry passes tool definitions and executor to llm client`() = runTest {
         val trackedEntryRepository = FakeTrackedEntryRepository()
         val entryAnalysisRepository = FakeEntryAnalysisRepository()
@@ -450,7 +458,8 @@ class AnalysisOrchestratorTest {
 
     private class FakeAppSettingsRepository(
         private val goals: String? = null,
-        private val includeStructuredProfile: Boolean = true
+        private val includeStructuredProfile: Boolean = true,
+        private val useDefaultGoalMethods: Boolean = false
     ) : AppSettingsRepository {
         override fun getApiKey(provider: LlmProvider): String? = null
         override fun setApiKey(provider: LlmProvider, apiKey: String) {}
@@ -474,7 +483,11 @@ class AnalysisOrchestratorTest {
         override fun setDateOfBirth(dob: String) {}
         override fun getActivityLevel(): String? = "moderate".takeIf { includeStructuredProfile }
         override fun setActivityLevel(level: String) {}
-        override fun getGoalsAndPreferences(): String? = goals
+        override fun getGoalsAndPreferences(): String? = if (useDefaultGoalMethods) {
+            super<AppSettingsRepository>.getGoalsAndPreferences()
+        } else {
+            goals
+        }
         override fun clearHeight() {}
         override fun clearCurrentWeight() {}
         override fun clearProfileData() {}

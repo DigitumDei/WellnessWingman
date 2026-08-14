@@ -165,7 +165,6 @@ class AnalysisOrchestrator(
         val dob = appSettingsRepository.getDateOfBirth()
         val activityLevel = appSettingsRepository.getActivityLevel()
         val goals = appSettingsRepository.getGoalsAndPreferences()
-            ?.takeIf { it.isNotBlank() }
 
         val parts = mutableListOf<String>()
         if (!sex.isNullOrBlank()) parts.add(sex)
@@ -314,9 +313,6 @@ GUIDELINES:
 ONLY return the JSON object, no other text.
         """.trimIndent()
     }
-
-    /** Prevent user-authored text from closing the prompt's XML-like data blocks. */
-    private fun sanitizeForPrompt(text: String): String = text.replace("</", "< /")
 
     /**
      * Normalizes entry type string to EntryType enum.

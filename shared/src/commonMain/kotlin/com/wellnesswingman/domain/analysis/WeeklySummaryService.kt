@@ -272,13 +272,13 @@ class WeeklySummaryService(
         otherCount: Int,
         totalEntries: Int,
         dailySummaries: List<DailySummary>,
+        userGoals: String?,
         dailyPayloads: List<DailySummaryPayload> = emptyList(),
         weightChange: WeightChangeSummary? = null,
         userComments: String? = null,
         polarContexts: List<PolarDayContext> = emptyList(),
         trackedSleepDates: Set<LocalDate> = emptySet(),
-        trackedExerciseDates: Set<LocalDate> = emptySet(),
-        userGoals: String? = null
+        trackedExerciseDates: Set<LocalDate> = emptySet()
     ): String {
         val dailySummaryContext = if (dailySummaries.isNotEmpty()) {
             val summaryLines = dailySummaries.mapNotNull { summary ->
@@ -454,9 +454,6 @@ Return ONLY the JSON object.
             )
         }
     }
-
-    /** Strips XML closing-tag sequences so user text cannot break prompt delimiters. */
-    private fun sanitizeForPrompt(text: String): String = text.replace("</", "< /")
 
     private fun extractJsonObject(content: String): String? {
         val start = content.indexOf('{')

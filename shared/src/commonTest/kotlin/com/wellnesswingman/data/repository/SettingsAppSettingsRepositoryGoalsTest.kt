@@ -6,6 +6,7 @@ import io.mockk.mockk
 import io.mockk.verify
 import kotlin.test.BeforeTest
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
 class SettingsAppSettingsRepositoryGoalsTest {
@@ -24,6 +25,13 @@ class SettingsAppSettingsRepositoryGoalsTest {
         every { settings.getStringOrNull("profile_goals_and_preferences") } returns "   "
 
         assertNull(repository.getGoalsAndPreferences())
+    }
+
+    @Test
+    fun `stored nonblank goals are returned`() {
+        every { settings.getStringOrNull("profile_goals_and_preferences") } returns "  build strength  "
+
+        assertEquals("  build strength  ", repository.getGoalsAndPreferences())
     }
 
     @Test
