@@ -8,6 +8,7 @@ import com.wellnesswingman.data.repository.LlmProvider
 import com.wellnesswingman.data.repository.TrackedEntryRepository
 import com.wellnesswingman.domain.analysis.BackgroundAnalysisService
 import com.wellnesswingman.domain.llm.LlmClientFactory
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
@@ -26,8 +27,13 @@ class TextEntryProcessorTest {
     private class FakeTrackedEntryRepository : TrackedEntryRepository {
         val inserted = mutableListOf<TrackedEntry>()
         private var nextId = 1L
+        var nextInsertFailure: Exception? = null
 
         override suspend fun insertEntry(entry: TrackedEntry): Long {
+            nextInsertFailure?.let { error ->
+                nextInsertFailure = null
+                throw error
+            }
             inserted.add(entry)
             return nextId++
         }
@@ -240,5 +246,48 @@ class TextEntryProcessorTest {
         // Deliberate: the guard covers overlapping calls only. Once the first save has finished,
         // an identical description is far more likely to be a real second coffee than a mistake.
         assertEquals(2, repository.inserted.size)
+    }
+
+    @Test
+    fun `failed save clears the in-flight guard so the text can be retried`() = runTest {
+        val repository = FakeTrackedEntryRepository().apply {
+            nextInsertFailure = IllegalStateException("database unavailable")
+        }
+        val subject = TextEntryProcessor(
+            trackedEntryRepository = repository,
+            backgroundAnalysisService = FakeBackgroundAnalysisService(),
+            llmClientFactory = FakeLlmClientFactory(hasKey = true),
+            scope = this
+        )
+
+        val error = assertFailsWith<IllegalStateException> {
+            subject.process("a bowl of soup")
+        }
+        assertEquals("database unavailable", error.message)
+
+        val retried = subject.process("a bowl of soup")
+        assertEquals(1L, retried.entryId)
+        assertEquals(1, repository.inserted.size)
+    }
+
+    @Test
+    fun `cancelled save cancels its waiter and clears the in-flight guard`() = runTest {
+        val repository = FakeTrackedEntryRepository().apply {
+            nextInsertFailure = CancellationException("cancelled")
+        }
+        val subject = TextEntryProcessor(
+            trackedEntryRepository = repository,
+            backgroundAnalysisService = FakeBackgroundAnalysisService(),
+            llmClientFactory = FakeLlmClientFactory(hasKey = true),
+            scope = this
+        )
+
+        assertFailsWith<CancellationException> {
+            subject.process("a bowl of soup")
+        }
+
+        val retried = subject.process("a bowl of soup")
+        assertEquals(1L, retried.entryId)
+        assertEquals(1, repository.inserted.size)
     }
 }

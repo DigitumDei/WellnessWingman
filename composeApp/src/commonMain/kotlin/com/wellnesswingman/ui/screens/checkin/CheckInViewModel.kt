@@ -389,4 +389,8 @@ class CheckInViewModel(
 
     private fun today(): LocalDate =
         Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date
+
+    override fun onDispose() {
+        commentsManager.dispose()
+    }
 }

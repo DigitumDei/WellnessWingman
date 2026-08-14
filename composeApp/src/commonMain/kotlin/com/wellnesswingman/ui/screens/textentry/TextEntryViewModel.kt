@@ -109,4 +109,8 @@ class TextEntryViewModel(
         _uiState.value = _uiState.value.copy(apiKeyMissing = false)
         onContinue(entryId)
     }
+
+    override fun onDispose() {
+        commentsManager.dispose()
+    }
 }

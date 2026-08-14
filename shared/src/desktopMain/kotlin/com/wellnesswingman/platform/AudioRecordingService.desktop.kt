@@ -27,4 +27,6 @@ actual class AudioRecordingService {
     }
 
     actual fun isRecording(): Boolean = false
+
+    actual fun cancelRecording() = Unit
 }

@@ -184,6 +184,10 @@ class DailySummaryViewModel(
     }
 
     suspend fun checkMicPermission(): Boolean = commentsManager.checkMicPermission()
+
+    override fun onDispose() {
+        commentsManager.dispose()
+    }
 }
 
 sealed class DailySummaryUiState {

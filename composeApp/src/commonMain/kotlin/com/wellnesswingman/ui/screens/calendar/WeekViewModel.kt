@@ -241,6 +241,10 @@ class WeekViewModel(
         loadWeek(weekStart)
     }
 
+    override fun onDispose() {
+        commentsManager.dispose()
+    }
+
     private fun getWeekStart(instant: Instant): LocalDate {
         val date = instant.toLocalDateTime(TimeZone.currentSystemDefault()).date
         val dayOfWeek = date.dayOfWeek.value % 7 // 0 = Sunday

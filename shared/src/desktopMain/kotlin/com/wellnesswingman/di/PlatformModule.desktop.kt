@@ -13,6 +13,8 @@ import com.wellnesswingman.platform.DesktopBackgroundExecutionService
 import com.wellnesswingman.platform.DiagnosticShare
 import com.wellnesswingman.platform.FileSystem
 import com.wellnesswingman.platform.FileSystemOperations
+import com.wellnesswingman.platform.DesktopOnDeviceTranscriptionService
+import com.wellnesswingman.platform.OnDeviceTranscriptionService
 import com.wellnesswingman.platform.ShareUtil
 import com.wellnesswingman.platform.ZipOperations
 import com.wellnesswingman.platform.ZipUtil
@@ -37,6 +39,7 @@ val platformModule = module {
     single { FileSystem() } bind FileSystemOperations::class
     single { CameraCaptureService() } bind CameraCaptureOperations::class
     single { AudioRecordingService() }
+    single<OnDeviceTranscriptionService> { DesktopOnDeviceTranscriptionService() }
     single { DiagnosticShare() }
     single { ZipUtil() } bind ZipOperations::class
     single { ShareUtil() }

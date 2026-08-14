@@ -3,6 +3,7 @@ package com.wellnesswingman.ui.common
 import com.wellnesswingman.domain.llm.LlmClientFactory
 import com.wellnesswingman.platform.AudioRecordingService
 import com.wellnesswingman.platform.FileSystem
+import com.wellnesswingman.platform.OnDeviceTranscriptionService
 import io.github.aakira.napier.Napier
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -40,18 +41,21 @@ class UserCommentsManager(
     private val llmClientFactory: LlmClientFactory,
     private val fileSystem: FileSystem,
     private val scope: CoroutineScope,
-    private val audioFilePrefix: String = "comment"
+    private val audioFilePrefix: String = "comment",
+    private val maxTextLength: Int? = null,
+    private val onDeviceTranscriptionService: OnDeviceTranscriptionService? = null
 ) {
     private val _commentsState = MutableStateFlow(CommentsState())
     val commentsState: StateFlow<CommentsState> = _commentsState.asStateFlow()
 
     private var recordingJob: Job? = null
+    private var onDeviceCompletionClaimed = false
 
     /**
      * Loads existing comments into state, marking them as saved.
      */
     fun loadComments(savedText: String?) {
-        val text = savedText ?: ""
+        val text = limitCommentText(savedText ?: "", maxTextLength)
         _commentsState.value = CommentsState(text = text, savedText = text)
     }
 
@@ -59,7 +63,7 @@ class UserCommentsManager(
      * Updates the comment text (unsaved).
      */
     fun updateText(text: String) {
-        _commentsState.update { it.copy(text = text) }
+        _commentsState.update { it.copy(text = limitCommentText(text, maxTextLength)) }
     }
 
     /**
@@ -72,18 +76,47 @@ class UserCommentsManager(
     /**
      * Checks microphone permission.
      */
-    suspend fun checkMicPermission(): Boolean = audioRecordingService.checkPermission()
+    suspend fun checkMicPermission(): Boolean = onDeviceTranscriptionService?.checkPermission()
+        ?: audioRecordingService.checkPermission()
 
     /**
      * Toggles audio recording on/off.
      */
     fun toggleRecording() {
+        val wasRecording = _commentsState.value.isRecording
         scope.launch {
-            if (_commentsState.value.isRecording) {
+            // Natural end-of-speech can update state between the tap and this coroutine running.
+            // In that case the user's original action is already complete, so do nothing.
+            if (_commentsState.value.isRecording != wasRecording) return@launch
+
+            if (onDeviceTranscriptionService != null) {
+                if (wasRecording) {
+                    stopOnDeviceRecording()
+                } else if (hasTextCapacity()) {
+                    startOnDeviceRecording()
+                } else {
+                    _commentsState.update { it.copy(transcriptionError = textCapacityReachedError()) }
+                }
+            } else if (wasRecording) {
                 stopRecording()
             } else {
                 startRecording()
             }
+        }
+    }
+
+    /**
+     * Releases platform recording resources when the owning screen model is disposed.
+     */
+    fun dispose() {
+        recordingJob?.cancel()
+        val state = _commentsState.value
+        if (!state.isRecording && !state.isTranscribing) return
+
+        if (onDeviceTranscriptionService != null) {
+            onDeviceTranscriptionService.cancel()
+        } else {
+            audioRecordingService.cancelRecording()
         }
     }
 
@@ -101,9 +134,49 @@ class UserCommentsManager(
             if (audioRecordingService.startRecording(audioPath)) {
                 _commentsState.update { it.copy(isRecording = true, recordingDurationSeconds = 0, transcriptionError = null) }
                 startDurationTimer()
+            } else {
+                _commentsState.update {
+                    it.copy(transcriptionError = "Could not start recording because the microphone is busy")
+                }
             }
         } catch (e: Exception) {
             Napier.e("Failed to start recording", e)
+        }
+    }
+
+    private suspend fun startOnDeviceRecording() {
+        val service = onDeviceTranscriptionService ?: return
+        try {
+            if (!service.checkPermission()) {
+                _commentsState.update {
+                    it.copy(transcriptionError = "Microphone permission not granted")
+                }
+                return
+            }
+
+            onDeviceCompletionClaimed = false
+            service.startListening { result ->
+                if (beginOnDeviceCompletion()) {
+                    scope.launch { completeOnDeviceRecording(result) }
+                }
+            }
+            _commentsState.update {
+                it.copy(
+                    isRecording = true,
+                    recordingDurationSeconds = 0,
+                    transcriptionError = null
+                )
+            }
+            startDurationTimer()
+        } catch (e: Exception) {
+            service.cancel()
+            Napier.e("Failed to start on-device transcription", e)
+            _commentsState.update {
+                it.copy(
+                    isRecording = false,
+                    transcriptionError = "Voice input unavailable: ${e.message ?: "Unknown error"}"
+                )
+            }
         }
     }
 
@@ -120,6 +193,40 @@ class UserCommentsManager(
             }
         } catch (e: Exception) {
             Napier.e("Failed to stop recording", e)
+        }
+    }
+
+    private suspend fun stopOnDeviceRecording() {
+        val service = onDeviceTranscriptionService ?: return
+        if (!beginOnDeviceCompletion()) return
+        completeOnDeviceRecording(runCatching { service.stopListening() })
+    }
+
+    private fun beginOnDeviceCompletion(): Boolean {
+        if (onDeviceCompletionClaimed) return false
+        onDeviceCompletionClaimed = true
+        recordingJob?.cancel()
+        _commentsState.update {
+            it.copy(isRecording = false, recordingDurationSeconds = 0, isTranscribing = true)
+        }
+        return true
+    }
+
+    private fun completeOnDeviceRecording(result: Result<String?>) {
+        try {
+            val transcription = result.getOrThrow()
+                ?: throw IllegalStateException("No speech was recognized")
+            applyTranscription(transcription)
+        } catch (e: Exception) {
+            Napier.e("Failed to transcribe on-device audio", e)
+            _commentsState.update {
+                it.copy(
+                    isTranscribing = false,
+                    transcriptionError = "Transcription failed: ${e.message ?: "Unknown error"}"
+                )
+            }
+        } finally {
+            onDeviceCompletionClaimed = false
         }
     }
 
@@ -140,18 +247,76 @@ class UserCommentsManager(
             val llmClient = llmClientFactory.createForCurrentProvider()
             val transcription = llmClient.transcribeAudio(audioBytes)
 
-            _commentsState.update { state ->
-                val newText = if (state.text.isBlank()) transcription
-                else "${state.text}\n$transcription"
-                state.copy(text = newText, isTranscribing = false)
-            }
-
-            fileSystem.delete(audioPath)
+            applyTranscription(transcription)
         } catch (e: Exception) {
             Napier.e("Failed to transcribe audio", e)
             _commentsState.update {
                 it.copy(isTranscribing = false, transcriptionError = "Transcription failed: ${e.message ?: "Unknown error"}")
             }
+        } finally {
+            try {
+                fileSystem.delete(audioPath)
+            } catch (e: Exception) {
+                Napier.w("Failed to delete temporary audio file", e)
+            }
         }
     }
+
+    private fun applyTranscription(transcription: String) {
+        _commentsState.update { state ->
+            val result = appendTranscriptionText(state.text, transcription, maxTextLength)
+            state.copy(
+                text = result.text,
+                isTranscribing = false,
+                transcriptionError = if (result.wasTruncated) {
+                    textCapacityTruncatedError()
+                } else {
+                    null
+                }
+            )
+        }
+    }
+
+    private fun hasTextCapacity(): Boolean =
+        maxTextLength == null || _commentsState.value.text.length < maxTextLength
+
+    private fun textCapacityReachedError(): String =
+        maxTextLength?.let { "Voice input is unavailable because the text limit is $it characters" }
+            ?: "Voice input is unavailable because the text limit has been reached"
+
+    private fun textCapacityTruncatedError(): String =
+        maxTextLength?.let { "Voice input was truncated at the $it-character limit" }
+            ?: "Voice input was truncated at the text limit"
+}
+
+internal fun limitCommentText(text: String, maxTextLength: Int?): String =
+    maxTextLength?.let(text::take) ?: text
+
+internal data class TranscriptionTextResult(
+    val text: String,
+    val wasTruncated: Boolean
+)
+
+internal fun appendTranscriptionText(
+    existingText: String,
+    transcription: String,
+    maxTextLength: Int?
+): TranscriptionTextResult {
+    val cleanedTranscription = transcription.trim()
+    if (cleanedTranscription.isBlank()) {
+        throw IllegalStateException("No speech was recognized")
+    }
+
+    val newText = if (existingText.isBlank()) cleanedTranscription
+    else "$existingText\n$cleanedTranscription"
+    val limitedText = limitCommentText(newText, maxTextLength)
+    val resultText = if (limitedText.length < newText.length && limitedText.endsWith('\n')) {
+        limitedText.dropLast(1)
+    } else {
+        limitedText
+    }
+    return TranscriptionTextResult(
+        text = resultText,
+        wasTruncated = resultText.length < newText.length
+    )
 }
