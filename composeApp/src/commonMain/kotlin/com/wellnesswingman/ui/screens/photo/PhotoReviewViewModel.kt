@@ -335,15 +335,6 @@ class PhotoReviewViewModel(
         }
     }
 
-    fun cancel() {
-        val path = copiedReviewPath
-        copiedReviewPath = null
-        screenModelScope.launch {
-            deleteCopiedReviewPhoto(path)
-            _uiState.value = PhotoReviewUiState.Cancelled
-        }
-    }
-
     /** Cancels the review and completes copied-photo cleanup before the caller navigates away. */
     suspend fun cancelAndCleanup() {
         val path = copiedReviewPath
