@@ -6,8 +6,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -41,13 +39,11 @@ import com.wellnesswingman.ui.components.ErrorMessage
 import com.wellnesswingman.ui.components.LoadingIndicator
 import com.wellnesswingman.ui.screens.detail.EntryDetailScreen
 import com.wellnesswingman.ui.screens.textentry.TextEntryScreen
-import com.wellnesswingman.util.DateTimeUtil
 import io.github.aakira.napier.Napier
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.datetime.TimeZone
 import org.koin.compose.koinInject
 import java.io.File
 
@@ -505,7 +501,7 @@ private class PhotoReviewScreen : Screen {
         if (showPreviousEntries) {
             PreviousEntriesDialog(
                 state = previousEntriesState,
-                isCopying = isCopyingPrevious,
+                isBusy = isCopyingPrevious,
                 onDismiss = { showPreviousEntries = false },
                 onSelect = onPreviousEntrySelected
             )
@@ -646,81 +642,6 @@ private fun CaptureOptions(
             }
         }
     }
-}
-
-@Composable
-private fun PreviousEntriesDialog(
-    state: PreviousEntriesState,
-    isCopying: Boolean,
-    onDismiss: () -> Unit,
-    onSelect: (TrackedEntry) -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = { if (!state.isLoading && !isCopying) onDismiss() },
-        title = { Text("Copy from previous") },
-        text = {
-            when {
-                state.isLoading || isCopying -> {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.Center
-                    ) {
-                        CircularProgressIndicator(modifier = Modifier.size(32.dp))
-                    }
-                }
-                state.error != null -> Text(
-                    text = state.error,
-                    color = MaterialTheme.colorScheme.error
-                )
-                state.entries.isEmpty() -> Text("No previous entries found.")
-                else -> LazyColumn(
-                    modifier = Modifier.heightIn(max = 420.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    items(state.entries, key = { it.entryId }) { entry ->
-                        val hasPhoto = entry.blobPath != null
-                        val hasText = !entry.userNotes.isNullOrBlank()
-                        TextButton(
-                            onClick = { onSelect(entry) },
-                            enabled = hasPhoto || hasText,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Column(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalAlignment = Alignment.Start
-                            ) {
-                                Text(
-                                    text = DateTimeUtil.formatDateTime(
-                                        entry.capturedAt,
-                                        TimeZone.currentSystemDefault()
-                                    ),
-                                    style = MaterialTheme.typography.titleSmall
-                                )
-                                Text(
-                                    text = entry.userNotes?.take(90)
-                                        ?.ifBlank { "No notes" }
-                                        ?: "No notes",
-                                    maxLines = 2,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Text(
-                                    text = if (hasPhoto) "Photo + notes" else "Text only",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss, enabled = !state.isLoading && !isCopying) {
-                Text("Cancel")
-            }
-        }
-    )
 }
 
 @Composable

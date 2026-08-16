@@ -76,6 +76,7 @@ kotlin {
                 implementation(libs.kotlin.test.junit)
                 implementation(libs.junit)
                 implementation(libs.coroutines.test)
+                implementation(libs.mockk)
                 @OptIn(org.jetbrains.compose.ExperimentalComposeLibrary::class)
                 implementation(compose.uiTest)
             }

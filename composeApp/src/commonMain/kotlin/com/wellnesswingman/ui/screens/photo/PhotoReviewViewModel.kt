@@ -323,22 +323,39 @@ class PhotoReviewViewModel(
     }
 
     fun retry() {
-        deleteCopiedReviewPhoto()
-        _uiState.value = PhotoReviewUiState.Initial
+        val path = copiedReviewPath
+        copiedReviewPath = null
+        if (path == null) {
+            _uiState.value = PhotoReviewUiState.Initial
+        } else {
+            screenModelScope.launch {
+                deleteCopiedReviewPhoto(path)
+                _uiState.value = PhotoReviewUiState.Initial
+            }
+        }
     }
 
     fun cancel() {
-        deleteCopiedReviewPhoto()
+        val path = copiedReviewPath
+        copiedReviewPath = null
+        screenModelScope.launch {
+            deleteCopiedReviewPhoto(path)
+            _uiState.value = PhotoReviewUiState.Cancelled
+        }
+    }
+
+    /** Cancels the review and completes copied-photo cleanup before the caller navigates away. */
+    suspend fun cancelAndCleanup() {
+        val path = copiedReviewPath
+        copiedReviewPath = null
+        deleteCopiedReviewPhoto(path)
         _uiState.value = PhotoReviewUiState.Cancelled
     }
 
-    private fun deleteCopiedReviewPhoto() {
-        val path = copiedReviewPath ?: return
-        copiedReviewPath = null
-        screenModelScope.launch {
-            runCatching { fileSystem.delete(path) }
-            runCatching { fileSystem.delete(getPreviewPath(path)) }
-        }
+    private suspend fun deleteCopiedReviewPhoto(path: String?) {
+        if (path == null) return
+        runCatching { fileSystem.delete(path) }
+        runCatching { fileSystem.delete(getPreviewPath(path)) }
     }
 
     /**
