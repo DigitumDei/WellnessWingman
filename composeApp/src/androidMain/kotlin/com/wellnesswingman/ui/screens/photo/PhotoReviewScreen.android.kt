@@ -33,6 +33,7 @@ import com.wellnesswingman.domain.capture.CaptureSource
 import com.wellnesswingman.domain.capture.PendingCapture
 import com.wellnesswingman.domain.capture.PendingCaptureStore
 import com.wellnesswingman.domain.capture.PhotoEntryProcessor
+import com.wellnesswingman.data.model.TrackedEntry
 import com.wellnesswingman.platform.decodeWithExifRotation
 import com.wellnesswingman.ui.components.ErrorMessage
 import com.wellnesswingman.ui.components.LoadingIndicator
@@ -87,6 +88,10 @@ private class PhotoReviewScreen : Screen {
         var resultEntryId by rememberSaveable { mutableStateOf(0L) }
         var apiKeyMissing by rememberSaveable { mutableStateOf(false) }
         var errorMessage by rememberSaveable { mutableStateOf("") }
+        var showPreviousEntries by remember { mutableStateOf(false) }
+        var isCopyingPrevious by remember { mutableStateOf(false) }
+        var previousCopyError by remember { mutableStateOf("") }
+        val previousEntriesState by viewModel.previousEntriesState.collectAsState()
 
         // Recomputed (not persisted) — loaded from the persisted file path.
         var imageBytes by remember { mutableStateOf<ByteArray?>(null) }
@@ -345,6 +350,54 @@ private class PhotoReviewScreen : Screen {
             workflowPhase = WORKFLOW_REVIEW
         }
 
+        val onCopyPreviousClick: () -> Unit = {
+            previousCopyError = ""
+            showPreviousEntries = true
+            viewModel.loadPreviousEntries()
+        }
+
+        val onPreviousEntrySelected: (TrackedEntry) -> Unit = { entry ->
+            val sourcePath = entry.blobPath
+            if (sourcePath == null) {
+                // Text-only entries still benefit from copying their description, but have no
+                // image to put into the photo review flow.
+                showPreviousEntries = false
+                navigator.replace(TextEntryScreen(entry.userNotes.orEmpty()))
+            } else if (!isCopyingPrevious) {
+                isCopyingPrevious = true
+                coroutineScope.launch {
+                    try {
+                        val pendingDir = pendingCaptureStore.getPendingPhotosDirectory()
+                        val copiedPath = "$pendingDir/copy_${System.currentTimeMillis()}.jpg"
+                        if (!viewModel.copyPreviousPhoto(entry, copiedPath)) {
+                            previousCopyError = "That previous photo is no longer available."
+                        } else {
+                            pendingCaptureStore.save(
+                                PendingCapture(
+                                    photoFilePath = copiedPath,
+                                    capturedAtMillis = System.currentTimeMillis(),
+                                    notes = entry.userNotes.orEmpty(),
+                                    source = CaptureSource.COPY
+                                )
+                            )
+                            photoFilePath = copiedPath
+                            notes = entry.userNotes.orEmpty()
+                            resultEntryId = 0L
+                            apiKeyMissing = false
+                            errorMessage = ""
+                            workflowPhase = WORKFLOW_REVIEW
+                        }
+                    } catch (e: Exception) {
+                        Napier.e("Failed to copy a previous entry", e)
+                        previousCopyError = e.message ?: "Could not copy that previous entry."
+                    } finally {
+                        isCopyingPrevious = false
+                        showPreviousEntries = false
+                    }
+                }
+            }
+        }
+
         Scaffold(
             topBar = {
                 TopAppBar(
@@ -362,6 +415,7 @@ private class PhotoReviewScreen : Screen {
                     CaptureOptions(
                         onCameraClick = onCameraClick,
                         onGalleryClick = onGalleryClick,
+                        onCopyPreviousClick = onCopyPreviousClick,
                         modifier = Modifier.padding(paddingValues),
                         // Replace, not push: this screen's job was to choose a source, and
                         // backing out of the description should return to the day, not here.
@@ -421,6 +475,7 @@ private class PhotoReviewScreen : Screen {
                     CaptureOptions(
                         onCameraClick = onCameraClick,
                         onGalleryClick = onGalleryClick,
+                        onCopyPreviousClick = onCopyPreviousClick,
                         modifier = Modifier.padding(paddingValues),
                         // Replace, not push: this screen's job was to choose a source, and
                         // backing out of the description should return to the day, not here.
@@ -442,6 +497,28 @@ private class PhotoReviewScreen : Screen {
                 }
             )
         }
+
+        if (showPreviousEntries) {
+            PreviousEntriesDialog(
+                state = previousEntriesState,
+                isBusy = isCopyingPrevious,
+                onDismiss = { showPreviousEntries = false },
+                onSelect = onPreviousEntrySelected
+            )
+        }
+
+        if (previousCopyError.isNotEmpty()) {
+            AlertDialog(
+                onDismissRequest = { previousCopyError = "" },
+                title = { Text("Could not copy entry") },
+                text = { Text(previousCopyError) },
+                confirmButton = {
+                    TextButton(onClick = { previousCopyError = "" }) {
+                        Text("OK")
+                    }
+                }
+            )
+        }
     }
 }
 
@@ -455,10 +532,11 @@ private const val WORKFLOW_ERROR = "error"
 private fun CaptureOptions(
     onCameraClick: () -> Unit,
     onGalleryClick: () -> Unit,
+    onCopyPreviousClick: () -> Unit,
     modifier: Modifier = Modifier,
     onDescribeClick: () -> Unit = {}
 ) {
-    // Scrollable since the third option: three 120dp buttons plus padding need roughly 400dp
+    // Scrollable since the four 136dp buttons plus padding need roughly 600dp
     // below the app bar, which a landscape phone does not have. Without this the column is
     // clipped and an option becomes unreachable rather than merely cramped.
     Column(
@@ -473,7 +551,7 @@ private fun CaptureOptions(
             onClick = onCameraClick,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(120.dp)
+                .height(136.dp)
                 .padding(bottom = 16.dp)
         ) {
             Column(
@@ -494,7 +572,7 @@ private fun CaptureOptions(
             onClick = onGalleryClick,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(120.dp)
+                .height(136.dp)
                 .padding(bottom = 16.dp)
         ) {
             Column(
@@ -511,13 +589,39 @@ private fun CaptureOptions(
             }
         }
 
+        OutlinedButton(
+            onClick = onCopyPreviousClick,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(136.dp)
+                .padding(bottom = 16.dp)
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Icon(
+                    Icons.Default.ContentCopy,
+                    contentDescription = null,
+                    modifier = Modifier.size(48.dp)
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("Copy from previous", style = MaterialTheme.typography.titleLarge)
+                Text(
+                    text = "Use one of your last ${PhotoReviewViewModel.DEFAULT_PREVIOUS_ENTRY_LIMIT} entries",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
         // For when the thing happened but the photo did not: a meal eaten out, a run whose
         // watch died. Deliberately last — a photo gives the analysis far more to work with.
         OutlinedButton(
             onClick = onDescribeClick,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(120.dp)
+                .height(136.dp)
         ) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,

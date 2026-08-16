@@ -34,6 +34,7 @@ import com.wellnesswingman.ui.components.ErrorMessage
 import com.wellnesswingman.ui.components.LoadingIndicator
 import com.wellnesswingman.ui.screens.detail.EntryDetailScreen
 import com.wellnesswingman.ui.screens.textentry.TextEntryScreen
+import kotlinx.coroutines.launch
 
 actual fun createPhotoReviewScreen(): Screen = DesktopPhotoReviewScreen()
 
@@ -43,6 +44,11 @@ private class DesktopPhotoReviewScreen : Screen {
         val navigator = LocalNavigator.currentOrThrow
         val viewModel = getScreenModel<PhotoReviewViewModel>()
         val uiState by viewModel.uiState.collectAsState()
+        val previousEntriesState by viewModel.previousEntriesState.collectAsState()
+        val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
+        var showPreviousEntries by remember { mutableStateOf(false) }
+        var isPreparingPrevious by remember { mutableStateOf(false) }
+        var previousCopyError by remember { mutableStateOf("") }
 
         Scaffold(
             topBar = {
@@ -56,6 +62,11 @@ private class DesktopPhotoReviewScreen : Screen {
                 is PhotoReviewUiState.Cancelled -> DesktopCaptureOptions(
                     onCameraClick = viewModel::captureFromCamera,
                     onGalleryClick = viewModel::pickFromGallery,
+                    onCopyPreviousClick = {
+                        showPreviousEntries = true
+                        previousCopyError = ""
+                        viewModel.loadPreviousEntries()
+                    },
                     modifier = Modifier.padding(paddingValues),
                     // Replace, not push: this screen's job was to choose a source, and backing
                     // out of the description should return to the day, not here.
@@ -68,11 +79,14 @@ private class DesktopPhotoReviewScreen : Screen {
 
                 is PhotoReviewUiState.Review -> DesktopPhotoReview(
                     imageBytes = state.photoBytes,
+                    initialNotes = state.initialNotes,
                     onConfirm = viewModel::confirmPhoto,
                     onRetake = viewModel::retry,
                     onCancel = {
-                        viewModel.cancel()
-                        navigator.pop()
+                        coroutineScope.launch {
+                            viewModel.cancelAndCleanup()
+                            navigator.pop()
+                        }
                     },
                     modifier = Modifier.padding(paddingValues)
                 )
@@ -111,6 +125,43 @@ private class DesktopPhotoReviewScreen : Screen {
                 )
             }
         }
+
+        if (showPreviousEntries) {
+            PreviousEntriesDialog(
+                state = previousEntriesState,
+                isBusy = isPreparingPrevious,
+                onDismiss = { showPreviousEntries = false },
+                onSelect = { entry ->
+                    if (entry.blobPath == null) {
+                        showPreviousEntries = false
+                        navigator.replace(TextEntryScreen(entry.userNotes.orEmpty()))
+                    } else if (!isPreparingPrevious) {
+                        isPreparingPrevious = true
+                        coroutineScope.launch {
+                            try {
+                                if (!viewModel.preparePreviousEntry(entry)) {
+                                    previousCopyError = "That previous photo is no longer available."
+                                }
+                            } finally {
+                                isPreparingPrevious = false
+                                showPreviousEntries = false
+                            }
+                        }
+                    }
+                }
+            )
+        }
+
+        if (previousCopyError.isNotEmpty()) {
+            AlertDialog(
+                onDismissRequest = { previousCopyError = "" },
+                title = { Text("Could not copy entry") },
+                text = { Text(previousCopyError) },
+                confirmButton = {
+                    TextButton(onClick = { previousCopyError = "" }) { Text("OK") }
+                }
+            )
+        }
     }
 }
 
@@ -118,6 +169,7 @@ private class DesktopPhotoReviewScreen : Screen {
 private fun DesktopCaptureOptions(
     onCameraClick: () -> Unit,
     onGalleryClick: () -> Unit,
+    onCopyPreviousClick: () -> Unit,
     modifier: Modifier = Modifier,
     onDescribeClick: () -> Unit = {}
 ) {
@@ -146,6 +198,15 @@ private fun DesktopCaptureOptions(
             Text("Choose from Gallery")
         }
         Spacer(modifier = Modifier.height(12.dp))
+        OutlinedButton(
+            onClick = onCopyPreviousClick,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(
+                "Copy from previous (last ${PhotoReviewViewModel.DEFAULT_PREVIOUS_ENTRY_LIMIT})"
+            )
+        }
+        Spacer(modifier = Modifier.height(12.dp))
         // For when the thing happened but the photo did not.
         OutlinedButton(
             onClick = onDescribeClick,
@@ -159,12 +220,13 @@ private fun DesktopCaptureOptions(
 @Composable
 private fun DesktopPhotoReview(
     imageBytes: ByteArray,
+    initialNotes: String,
     onConfirm: (String) -> Unit,
     onRetake: () -> Unit,
     onCancel: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var notes by remember { mutableStateOf("") }
+    var notes by remember(imageBytes, initialNotes) { mutableStateOf(initialNotes) }
 
     Column(
         modifier = modifier

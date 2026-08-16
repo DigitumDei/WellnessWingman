@@ -19,6 +19,9 @@ import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import com.wellnesswingman.ui.screens.detail.EntryDetailScreen
 import com.wellnesswingman.ui.screens.detail.VoiceRecordingButton
+import kotlin.uuid.ExperimentalUuidApi
+import kotlin.uuid.Uuid
+import org.koin.core.parameter.parametersOf
 
 /**
  * Adds an entry from a written or spoken description, with no photo.
@@ -27,14 +30,19 @@ import com.wellnesswingman.ui.screens.detail.VoiceRecordingButton
  * The description goes to the same analysis that reads photos, which decides for itself whether
  * it is a meal, exercise or something else.
  */
-class TextEntryScreen : Screen {
+@OptIn(ExperimentalUuidApi::class)
+class TextEntryScreen(private val initialText: String = "") : Screen {
 
-    override val key: ScreenKey get() = "TextEntryScreen"
+    private val screenKey = "TextEntryScreen:${Uuid.random()}"
+
+    override val key: ScreenKey get() = screenKey
 
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
-        val viewModel = getScreenModel<TextEntryViewModel>()
+        val viewModel = getScreenModel<TextEntryViewModel> {
+            parametersOf(initialText)
+        }
         val uiState by viewModel.uiState.collectAsState()
         val commentsState by viewModel.commentsState.collectAsState()
 
