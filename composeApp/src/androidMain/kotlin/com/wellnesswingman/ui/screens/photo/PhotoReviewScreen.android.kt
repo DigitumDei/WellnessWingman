@@ -536,7 +536,7 @@ private fun CaptureOptions(
     modifier: Modifier = Modifier,
     onDescribeClick: () -> Unit = {}
 ) {
-    // Scrollable since the third option: three 120dp buttons plus padding need roughly 400dp
+    // Scrollable since the four 136dp buttons plus padding need roughly 600dp
     // below the app bar, which a landscape phone does not have. Without this the column is
     // clipped and an option becomes unreachable rather than merely cramped.
     Column(
@@ -551,7 +551,7 @@ private fun CaptureOptions(
             onClick = onCameraClick,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(120.dp)
+                .height(136.dp)
                 .padding(bottom = 16.dp)
         ) {
             Column(
@@ -572,7 +572,7 @@ private fun CaptureOptions(
             onClick = onGalleryClick,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(120.dp)
+                .height(136.dp)
                 .padding(bottom = 16.dp)
         ) {
             Column(
@@ -593,7 +593,7 @@ private fun CaptureOptions(
             onClick = onCopyPreviousClick,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(120.dp)
+                .height(136.dp)
                 .padding(bottom = 16.dp)
         ) {
             Column(
@@ -621,7 +621,7 @@ private fun CaptureOptions(
             onClick = onDescribeClick,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(120.dp)
+                .height(136.dp)
         ) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
