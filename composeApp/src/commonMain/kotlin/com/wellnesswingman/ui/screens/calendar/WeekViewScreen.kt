@@ -158,11 +158,13 @@ fun WeekContent(
         }
 
         // Days of the week
-        items(7) { dayOffset ->
-            val date = weekStart.plus(dayOffset, DateTimeUnit.DAY)
+        val today = Clock.System.now()
+            .toLocalDateTime(TimeZone.currentSystemDefault()).date
+        val visibleDates = visibleWeekDates(weekStart, today)
+
+        items(visibleDates) { date ->
             val entries = entriesByDate[date] ?: emptyList()
-            val isToday = date == Clock.System.now()
-                .toLocalDateTime(TimeZone.currentSystemDefault()).date
+            val isToday = date == today
 
             DaySection(
                 date = date,

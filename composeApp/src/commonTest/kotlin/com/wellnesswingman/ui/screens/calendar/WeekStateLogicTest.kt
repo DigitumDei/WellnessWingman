@@ -22,6 +22,69 @@ import kotlin.test.assertEquals
 class WeekStateLogicTest {
 
     @Test
+    fun `current week shows dates from weekStart through today in descending order`() {
+        val weekStart = LocalDate(2025, 3, 2) // Sunday
+        val today = LocalDate(2025, 3, 5)      // Wednesday
+
+        val dates = visibleWeekDates(weekStart, today)
+
+        assertEquals(listOf(
+            LocalDate(2025, 3, 5), // Wednesday
+            LocalDate(2025, 3, 4), // Tuesday
+            LocalDate(2025, 3, 3), // Monday
+            LocalDate(2025, 3, 2)  // Sunday
+        ), dates)
+    }
+
+    @Test
+    fun `current week when today is Sunday shows only that date`() {
+        val weekStart = LocalDate(2025, 3, 2) // Sunday
+        val today = LocalDate(2025, 3, 2)      // Sunday
+
+        val dates = visibleWeekDates(weekStart, today)
+
+        assertEquals(listOf(
+            LocalDate(2025, 3, 2)
+        ), dates)
+    }
+
+    @Test
+    fun `past week shows all seven dates from Saturday down to Sunday`() {
+        val weekStart = LocalDate(2025, 2, 23) // Sunday
+        val today = LocalDate(2025, 3, 5)       // Wednesday (well after that week)
+
+        val dates = visibleWeekDates(weekStart, today)
+
+        assertEquals(listOf(
+            LocalDate(2025, 3, 1), // Saturday
+            LocalDate(2025, 2, 28), // Friday
+            LocalDate(2025, 2, 27), // Thursday
+            LocalDate(2025, 2, 26), // Wednesday
+            LocalDate(2025, 2, 25), // Tuesday
+            LocalDate(2025, 2, 24), // Monday
+            LocalDate(2025, 2, 23)  // Sunday
+        ), dates)
+    }
+
+    @Test
+    fun `future week shows all seven dates from Saturday down to Sunday`() {
+        val weekStart = LocalDate(2025, 3, 16) // Sunday
+        val today = LocalDate(2025, 3, 5)       // Wednesday (well before that week)
+
+        val dates = visibleWeekDates(weekStart, today)
+
+        assertEquals(listOf(
+            LocalDate(2025, 3, 22), // Saturday
+            LocalDate(2025, 3, 21), // Friday
+            LocalDate(2025, 3, 20), // Thursday
+            LocalDate(2025, 3, 19), // Wednesday
+            LocalDate(2025, 3, 18), // Tuesday
+            LocalDate(2025, 3, 17), // Monday
+            LocalDate(2025, 3, 16)  // Sunday
+        ), dates)
+    }
+
+    @Test
     fun `week counts include supplemental Polar sleep and exercise without double counting tracked days`() {
         val timeZone = TimeZone.UTC
         val trackedExerciseDate = LocalDate(2025, 3, 4)
