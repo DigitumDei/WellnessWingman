@@ -282,6 +282,19 @@ data class EntryCounts(
     val totalEntries: Int = 0
 )
 
+internal fun visibleWeekDates(weekStart: LocalDate, today: LocalDate): List<LocalDate> {
+    val weekEnd = weekStart.plus(6, DateTimeUnit.DAY)
+    return if (today in weekStart..weekEnd) {
+        generateSequence(today) { it.minus(1, DateTimeUnit.DAY) }
+            .takeWhile { it >= weekStart }
+            .toList()
+    } else {
+        generateSequence(weekEnd) { it.minus(1, DateTimeUnit.DAY) }
+            .take(7)
+            .toList()
+    }
+}
+
 internal fun calculateWeekEntryCounts(
     completedEntries: List<TrackedEntry>,
     polarContexts: List<PolarDayContext>,

@@ -30,6 +30,7 @@ import com.wellnesswingman.ui.screens.calendar.day.DayDetailScreen
 import com.wellnesswingman.ui.screens.detail.VoiceRecordingButton
 import com.wellnesswingman.ui.screens.main.EntryCard
 import com.wellnesswingman.util.DateTimeUtil
+import kotlinx.coroutines.delay
 import kotlinx.datetime.*
 
 class WeekViewScreen : Screen {
@@ -128,6 +129,21 @@ fun WeekContent(
     onSaveComments: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    // Days of the week
+    val today by produceState(
+        initialValue = Clock.System.now()
+            .toLocalDateTime(TimeZone.currentSystemDefault()).date
+    ) {
+        while (true) {
+            val timeZone = TimeZone.currentSystemDefault()
+            val now = Clock.System.now().toLocalDateTime(timeZone)
+            val nextDate = now.date.plus(1, DateTimeUnit.DAY)
+            delay(nextDate.atStartOfDayIn(timeZone) - now.toInstant(timeZone))
+            value = nextDate
+        }
+    }
+    val visibleDates = visibleWeekDates(weekStart, today)
+
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
@@ -158,11 +174,9 @@ fun WeekContent(
         }
 
         // Days of the week
-        items(7) { dayOffset ->
-            val date = weekStart.plus(dayOffset, DateTimeUnit.DAY)
+        items(visibleDates) { date ->
             val entries = entriesByDate[date] ?: emptyList()
-            val isToday = date == Clock.System.now()
-                .toLocalDateTime(TimeZone.currentSystemDefault()).date
+            val isToday = date == today
 
             DaySection(
                 date = date,
