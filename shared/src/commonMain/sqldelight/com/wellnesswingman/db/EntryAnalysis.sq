@@ -45,6 +45,27 @@ WHERE entryId = ?
 ORDER BY capturedAt DESC
 LIMIT 1;
 
+-- Latest analysis per parent entry captured in the half-open range
+-- (start inclusive, end exclusive on TrackedEntry.capturedAt).
+-- The outer query drives from the in-range parent entries so the
+-- correlated latest-analysis subquery runs once per selected entry,
+-- not once per analysis row. Ties resolved by later capturedAt, then
+-- later analysisId. Entries without an analysis are omitted by the
+-- inner join. Membership is decided by the parent entry's capturedAt,
+-- never by the analysis's own capturedAt.
+getLatestAnalysesForEntries:
+SELECT ea.analysisId, ea.entryId, ea.externalId, ea.providerId, ea.model, ea.capturedAt, ea.insightsJson, ea.schemaVersion
+FROM TrackedEntry t
+JOIN EntryAnalysis ea ON ea.analysisId = (
+    SELECT e2.analysisId
+    FROM EntryAnalysis e2
+    WHERE e2.entryId = t.entryId
+    ORDER BY e2.capturedAt DESC, e2.analysisId DESC
+    LIMIT 1
+)
+WHERE t.capturedAt >= ? AND t.capturedAt < ?
+ORDER BY t.capturedAt ASC, t.entryId ASC;
+
 -- Get analyses by provider
 getAnalysesByProvider:
 SELECT * FROM EntryAnalysis

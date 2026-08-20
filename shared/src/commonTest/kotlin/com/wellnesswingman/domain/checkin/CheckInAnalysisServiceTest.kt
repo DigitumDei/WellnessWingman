@@ -26,9 +26,13 @@ import com.wellnesswingman.data.model.llm.ToolDefinition
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.test.runTest
+import kotlinx.datetime.Clock
+import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.minus
+import kotlinx.datetime.toLocalDateTime
 import kotlin.test.*
 
 /**
@@ -141,8 +145,6 @@ class CheckInAnalysisServiceTest {
         override suspend fun getEntryByExternalId(externalId: String): TrackedEntry? = null
         override suspend fun getEntryByBlobPath(blobPath: String): TrackedEntry? = null
         override fun observeEntriesForDay(date: LocalDate): Flow<List<TrackedEntry>> = emptyFlow()
-        override suspend fun getEntriesForWeek(startMillis: Long, endMillis: Long) = entries
-        override suspend fun getEntriesForMonth(startMillis: Long, endMillis: Long) = entries
         override suspend fun getEntriesByStatus(status: ProcessingStatus) = entries
         override suspend fun getPendingEntries() = emptyList<TrackedEntry>()
         override suspend fun insertEntry(entry: TrackedEntry) = 1L
@@ -604,12 +606,19 @@ class CheckInAnalysisServiceTest {
     @Test
     fun `recovery re-runs an analysis left pending by process death`() = runTest {
         val repository = FakeCheckInAnalysisRepository()
-        val stored = mutableListOf(checkIn)
+        // Seed the stranded analysis on a date inside the seven-day recovery window
+        // relative to the clock the service reads, instead of a fixed date that
+        // eventually ages out of the window.
+        val recentDate = Clock.System.now()
+            .toLocalDateTime(TimeZone.UTC)
+            .date
+            .minus(1, DateTimeUnit.DAY)
+        val stored = mutableListOf(checkIn.copy(checkInDate = recentDate))
         val subject = service(repository, FakeLlmClient(fullResponse), checkIns = stored)
 
         repository.saveAnalysis(
             CheckInAnalysis(
-                checkInDate = date,
+                checkInDate = recentDate,
                 slot = CheckInSlot.EVENING,
                 status = CheckInAnalysisStatus.PENDING,
                 analyzedAt = Instant.fromEpochMilliseconds(1_785_000_000_000)
@@ -622,7 +631,7 @@ class CheckInAnalysisServiceTest {
         // pending row at startup is orphaned — and pending shows no retry control.
         assertEquals(
             CheckInAnalysisStatus.COMPLETED,
-            assertNotNull(repository.getAnalysis(date, CheckInSlot.EVENING)).status
+            assertNotNull(repository.getAnalysis(recentDate, CheckInSlot.EVENING)).status
         )
     }
 

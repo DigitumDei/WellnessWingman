@@ -147,8 +147,6 @@ class PhotoReviewViewModelTest {
         override suspend fun getEntriesForDay(startMillis: Long, endMillis: Long) = recentEntries
         override suspend fun getEntriesForDay(date: LocalDate) = recentEntries
         override fun observeEntriesForDay(date: LocalDate): Flow<List<TrackedEntry>> = emptyFlow()
-        override suspend fun getEntriesForWeek(startMillis: Long, endMillis: Long) = recentEntries
-        override suspend fun getEntriesForMonth(startMillis: Long, endMillis: Long) = recentEntries
         override suspend fun getEntriesByStatus(status: ProcessingStatus) = recentEntries
         override suspend fun getPendingEntries() = emptyList<TrackedEntry>()
         override suspend fun insertEntry(entry: TrackedEntry) = entry.entryId

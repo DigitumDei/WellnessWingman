@@ -427,8 +427,6 @@ class AnalysisOrchestratorTest {
         override suspend fun getEntriesForDay(startMillis: Long, endMillis: Long): List<TrackedEntry> = emptyList()
         override suspend fun getEntriesForDay(date: LocalDate): List<TrackedEntry> = emptyList()
         override fun observeEntriesForDay(date: LocalDate): Flow<List<TrackedEntry>> = emptyFlow()
-        override suspend fun getEntriesForWeek(startMillis: Long, endMillis: Long): List<TrackedEntry> = emptyList()
-        override suspend fun getEntriesForMonth(startMillis: Long, endMillis: Long): List<TrackedEntry> = emptyList()
         override suspend fun getEntriesByStatus(status: ProcessingStatus): List<TrackedEntry> = emptyList()
         override suspend fun getPendingEntries(): List<TrackedEntry> = emptyList()
         override suspend fun insertEntry(entry: TrackedEntry): Long = 0L

@@ -93,22 +93,14 @@ class SqlDelightTrackedEntryRepository(
             .map { list -> list.map { it.toTrackedEntry() } }
     }
 
-    override suspend fun getEntriesForWeek(
-        startMillis: Long,
-        endMillis: Long
+    override suspend fun getEntriesInRange(
+        startInclusive: Instant,
+        endExclusive: Instant
     ): List<TrackedEntry> = withContext(Dispatchers.IO) {
-        queries.getEntriesForWeek(startMillis, endMillis)
-            .executeAsList()
-            .map { it.toTrackedEntry() }
-    }
-
-    override suspend fun getEntriesForMonth(
-        startMillis: Long,
-        endMillis: Long
-    ): List<TrackedEntry> = withContext(Dispatchers.IO) {
-        queries.getEntriesForMonth(startMillis, endMillis)
-            .executeAsList()
-            .map { it.toTrackedEntry() }
+        queries.getEntriesInRange(
+            startInclusive.toEpochMilliseconds(),
+            endExclusive.toEpochMilliseconds()
+        ).executeAsList().map { it.toTrackedEntry() }
     }
 
     override suspend fun getEntriesByStatus(status: ProcessingStatus): List<TrackedEntry> =

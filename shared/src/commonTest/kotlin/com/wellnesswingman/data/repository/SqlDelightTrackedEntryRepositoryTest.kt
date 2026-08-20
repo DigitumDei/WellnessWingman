@@ -8,6 +8,7 @@ import com.wellnesswingman.data.model.TrackedEntry
 import com.wellnesswingman.db.WellnessWingmanDatabase
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 import kotlin.test.*
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.hours
@@ -150,6 +151,60 @@ class SqlDelightTrackedEntryRepositoryTest {
         assertTrue(inRange.all {
             it.capturedAt >= dayStart && it.capturedAt <= dayEnd
         })
+    }
+
+    @Test
+    fun `getEntriesInRange includes exact start and excludes exact end`() = runTest {
+        val rangeStart = Instant.parse("2024-01-10T00:00:00Z")
+        val rangeEnd = Instant.parse("2024-01-12T00:00:00Z")
+
+        repository.insertEntry(
+            TrackedEntry(entryType = EntryType.MEAL, capturedAt = rangeStart)
+        )
+        repository.insertEntry(
+            TrackedEntry(entryType = EntryType.MEAL, capturedAt = Instant.parse("2024-01-11T12:00:00Z"))
+        )
+        repository.insertEntry(
+            TrackedEntry(entryType = EntryType.SLEEP, capturedAt = rangeEnd)
+        )
+        repository.insertEntry(
+            TrackedEntry(entryType = EntryType.EXERCISE, capturedAt = Instant.parse("2024-01-09T23:59:00Z"))
+        )
+
+        val inRange = repository.getEntriesInRange(rangeStart, rangeEnd)
+
+        assertEquals(2, inRange.size)
+        assertTrue(inRange.all { it.capturedAt >= rangeStart && it.capturedAt < rangeEnd })
+    }
+
+    @Test
+    fun `getEntriesInRange orders chronologically with entryId tie-break`() = runTest {
+        val rangeStart = Instant.parse("2024-01-10T00:00:00Z")
+        val rangeEnd = Instant.parse("2024-01-12T00:00:00Z")
+        val early = Instant.parse("2024-01-10T20:00:00Z")
+        val tie = Instant.parse("2024-01-11T08:00:00Z")
+
+        val id3 = repository.insertEntry(TrackedEntry(entryType = EntryType.SLEEP, capturedAt = early))
+        val id1 = repository.insertEntry(TrackedEntry(entryType = EntryType.MEAL, capturedAt = tie))
+        val id2 = repository.insertEntry(TrackedEntry(entryType = EntryType.MEAL, capturedAt = tie))
+
+        val inRange = repository.getEntriesInRange(rangeStart, rangeEnd)
+
+        assertEquals(listOf(id3, id1, id2), inRange.map { it.entryId })
+    }
+
+    @Test
+    fun `getEntriesInRange returns empty for an empty range`() = runTest {
+        val rangeStart = Instant.parse("2024-01-10T00:00:00Z")
+        val rangeEnd = Instant.parse("2024-01-10T00:00:00Z")
+
+        repository.insertEntry(
+            TrackedEntry(entryType = EntryType.MEAL, capturedAt = rangeStart)
+        )
+
+        val inRange = repository.getEntriesInRange(rangeStart, rangeEnd)
+
+        assertTrue(inRange.isEmpty())
     }
 
     @Test

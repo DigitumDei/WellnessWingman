@@ -1451,10 +1451,6 @@ class ToolRegistryTest {
             }.sortedByDescending { it.capturedAt }
         override suspend fun getEntriesForDay(date: LocalDate): List<TrackedEntry> = entries
         override fun observeEntriesForDay(date: LocalDate): Flow<List<TrackedEntry>> = emptyFlow()
-        override suspend fun getEntriesForWeek(startMillis: Long, endMillis: Long): List<TrackedEntry> =
-            getEntriesForDay(startMillis, endMillis)
-        override suspend fun getEntriesForMonth(startMillis: Long, endMillis: Long): List<TrackedEntry> =
-            getEntriesForDay(startMillis, endMillis)
         override suspend fun getEntriesByStatus(status: ProcessingStatus): List<TrackedEntry> =
             entries.filter { it.processingStatus == status }
         override suspend fun getPendingEntries(): List<TrackedEntry> =
@@ -1511,8 +1507,6 @@ class ToolRegistryTest {
         override suspend fun getEntriesForDay(startMillis: Long, endMillis: Long): List<TrackedEntry> = entries
         override suspend fun getEntriesForDay(date: LocalDate): List<TrackedEntry> = entries
         override fun observeEntriesForDay(date: LocalDate): Flow<List<TrackedEntry>> = emptyFlow()
-        override suspend fun getEntriesForWeek(startMillis: Long, endMillis: Long): List<TrackedEntry> = entries
-        override suspend fun getEntriesForMonth(startMillis: Long, endMillis: Long): List<TrackedEntry> = entries
         override suspend fun getEntriesByStatus(status: ProcessingStatus): List<TrackedEntry> = entries.filter { it.processingStatus == status }
         override suspend fun getPendingEntries(): List<TrackedEntry> = entries.filter { it.processingStatus == ProcessingStatus.PENDING }
         override suspend fun insertEntry(entry: TrackedEntry): Long = 0L
