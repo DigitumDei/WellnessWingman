@@ -145,8 +145,6 @@ class CheckInAnalysisServiceTest {
         override suspend fun getEntryByExternalId(externalId: String): TrackedEntry? = null
         override suspend fun getEntryByBlobPath(blobPath: String): TrackedEntry? = null
         override fun observeEntriesForDay(date: LocalDate): Flow<List<TrackedEntry>> = emptyFlow()
-        override suspend fun getEntriesForWeek(startMillis: Long, endMillis: Long) = entries
-        override suspend fun getEntriesForMonth(startMillis: Long, endMillis: Long) = entries
         override suspend fun getEntriesByStatus(status: ProcessingStatus) = entries
         override suspend fun getPendingEntries() = emptyList<TrackedEntry>()
         override suspend fun insertEntry(entry: TrackedEntry) = 1L

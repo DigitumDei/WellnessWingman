@@ -70,8 +70,6 @@ class WeeklySummaryServiceTest {
         override suspend fun getEntryByExternalId(externalId: String) = null
         override suspend fun getEntryByBlobPath(blobPath: String): TrackedEntry? = null
         override fun observeEntriesForDay(date: LocalDate): Flow<List<TrackedEntry>> = emptyFlow()
-        override suspend fun getEntriesForWeek(startMillis: Long, endMillis: Long) = entriesToReturn
-        override suspend fun getEntriesForMonth(startMillis: Long, endMillis: Long) = entriesToReturn
         override suspend fun getEntriesByStatus(status: ProcessingStatus) = entriesToReturn.filter { it.processingStatus == status }
         override suspend fun getPendingEntries() = entriesToReturn.filter { it.processingStatus == ProcessingStatus.PENDING }
         override suspend fun insertEntry(entry: TrackedEntry) = 1L

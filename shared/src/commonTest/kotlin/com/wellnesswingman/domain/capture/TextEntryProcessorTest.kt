@@ -47,8 +47,6 @@ class TextEntryProcessorTest {
         override suspend fun getEntryByExternalId(externalId: String): TrackedEntry? = null
         override suspend fun getEntryByBlobPath(blobPath: String): TrackedEntry? = null
         override fun observeEntriesForDay(date: LocalDate): Flow<List<TrackedEntry>> = emptyFlow()
-        override suspend fun getEntriesForWeek(startMillis: Long, endMillis: Long) = inserted
-        override suspend fun getEntriesForMonth(startMillis: Long, endMillis: Long) = inserted
         override suspend fun getEntriesByStatus(status: ProcessingStatus) = inserted
         override suspend fun getPendingEntries() = emptyList<TrackedEntry>()
         override suspend fun updateEntryStatus(id: Long, status: ProcessingStatus) = Unit

@@ -1,10 +1,10 @@
 package com.wellnesswingman.domain.common
 
+import com.wellnesswingman.util.DateTimeConverter
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
-import kotlinx.datetime.atStartOfDayIn
 import kotlinx.datetime.plus
 
 /**
@@ -38,10 +38,13 @@ data class DateRange private constructor(
      *
      * The time zone is an explicit parameter because the caller decides how
      * the range is interpreted; DST transitions legitimately produce 23- or
-     * 25-hour spans.
+     * 25-hour spans. Day-boundary conversion is delegated to
+     * [DateTimeConverter.getLocalDayBounds] so there is a single owner of the
+     * "start of day in a time zone" semantics.
      */
     fun toInstantBounds(timeZone: TimeZone): Pair<Instant, Instant> =
-        start.atStartOfDayIn(timeZone) to endExclusive.atStartOfDayIn(timeZone)
+        DateTimeConverter.getLocalDayBounds(start, timeZone).first to
+            DateTimeConverter.getLocalDayBounds(end, timeZone).second
 
     companion object {
         /**
