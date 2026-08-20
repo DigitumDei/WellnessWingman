@@ -39,6 +39,16 @@ class SqlDelightEntryAnalysisRepository(
             queries.getLatestAnalysisForEntry(entryId).executeAsOneOrNull()?.toEntryAnalysis()
         }
 
+    override suspend fun getLatestAnalysesForEntries(
+        startInclusive: Instant,
+        endExclusive: Instant
+    ): List<EntryAnalysis> = withContext(Dispatchers.IO) {
+        queries.getLatestAnalysesForEntries(
+            startInclusive.toEpochMilliseconds(),
+            endExclusive.toEpochMilliseconds()
+        ).executeAsList().map { it.toEntryAnalysis() }
+    }
+
     override suspend fun insertAnalysis(analysis: EntryAnalysis): Long =
         withContext(Dispatchers.IO) {
             queries.insertAnalysis(

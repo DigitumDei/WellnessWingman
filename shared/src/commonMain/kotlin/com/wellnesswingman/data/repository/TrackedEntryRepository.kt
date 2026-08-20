@@ -32,6 +32,20 @@ interface TrackedEntryRepository {
     fun observeEntriesForDay(date: LocalDate): Flow<List<TrackedEntry>>
     suspend fun getEntriesForWeek(startMillis: Long, endMillis: Long): List<TrackedEntry>
     suspend fun getEntriesForMonth(startMillis: Long, endMillis: Long): List<TrackedEntry>
+
+    /**
+     * Returns entries captured in the half-open range
+     * [startInclusive, endExclusive), ordered chronologically (capturedAt
+     * ascending, then entryId ascending for deterministic ties).
+     *
+     * Default returns an empty list so test fakes that do not exercise this
+     * path keep compiling without an override.
+     */
+    suspend fun getEntriesInRange(
+        startInclusive: Instant,
+        endExclusive: Instant
+    ): List<TrackedEntry> = emptyList()
+
     suspend fun getEntriesByStatus(status: ProcessingStatus): List<TrackedEntry>
     suspend fun getPendingEntries(): List<TrackedEntry>
     suspend fun insertEntry(entry: TrackedEntry): Long

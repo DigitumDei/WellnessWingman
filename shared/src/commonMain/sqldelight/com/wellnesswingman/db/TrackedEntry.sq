@@ -62,6 +62,13 @@ SELECT * FROM TrackedEntry
 WHERE capturedAt >= ? AND capturedAt < ?
 ORDER BY capturedAt DESC;
 
+-- Get entries in a half-open range (start inclusive, end exclusive on
+-- capturedAt), ordered chronologically with a deterministic tie-break.
+getEntriesInRange:
+SELECT * FROM TrackedEntry
+WHERE capturedAt >= ? AND capturedAt < ?
+ORDER BY capturedAt ASC, entryId ASC;
+
 -- Get entries by type
 getEntriesByType:
 SELECT * FROM TrackedEntry

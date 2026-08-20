@@ -111,6 +111,16 @@ class SqlDelightTrackedEntryRepository(
             .map { it.toTrackedEntry() }
     }
 
+    override suspend fun getEntriesInRange(
+        startInclusive: Instant,
+        endExclusive: Instant
+    ): List<TrackedEntry> = withContext(Dispatchers.IO) {
+        queries.getEntriesInRange(
+            startInclusive.toEpochMilliseconds(),
+            endExclusive.toEpochMilliseconds()
+        ).executeAsList().map { it.toTrackedEntry() }
+    }
+
     override suspend fun getEntriesByStatus(status: ProcessingStatus): List<TrackedEntry> =
         withContext(Dispatchers.IO) {
             queries.getEntriesByStatus(status.toStorageString())
