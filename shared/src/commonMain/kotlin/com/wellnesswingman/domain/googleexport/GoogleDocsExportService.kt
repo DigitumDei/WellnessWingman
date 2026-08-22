@@ -5,6 +5,8 @@ import com.wellnesswingman.data.googleexport.GoogleDocsBatchBuilder
 import com.wellnesswingman.data.googleexport.GoogleDocsError
 import com.wellnesswingman.domain.report.HealthReportDocument
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 
 /**
  * Creates, populates, and cleans up a Google Doc, mapping the underlying API
@@ -36,7 +38,17 @@ class GoogleDocsExportService(
         onDocumentCreated(documentId)
 
         val batch = batchBuilder.build(document)
-        val populateResult = apiClient.batchUpdate(accessToken, documentId, batch.requests)
+        val populateResult = try {
+            apiClient.batchUpdate(accessToken, documentId, batch.requests)
+        } catch (e: CancellationException) {
+            // The document already exists, so cancellation would otherwise
+            // orphan an empty app-created Doc. Attempt best-effort cleanup
+            // outside the cancelled context before propagating.
+            withContext(NonCancellable) {
+                runCatching { deletePartialDocument(accessToken, documentId) }
+            }
+            throw e
+        }
         if (populateResult.isSuccess) {
             return Result.success(
                 GoogleDocsExportResult(

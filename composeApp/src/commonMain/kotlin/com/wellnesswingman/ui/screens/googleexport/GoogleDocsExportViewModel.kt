@@ -83,12 +83,12 @@ class GoogleDocsExportViewModel(
                 exportService.createAndPopulate(auth.accessToken, "WellnessWingman health report", document)
                     .onSuccess { result -> _uiState.update { it.copy(isExporting = false, resultUrl = result.url) } }
                     .onFailure { failure ->
-                        val message = if (failure is GoogleExportError.ApiFailure &&
-                            failure.partialDocumentId != null && !failure.cleanupDeleted
-                        ) {
-                            "Google Docs export failed and the incomplete document could not be removed. Check Google Drive before retrying."
-                        } else {
-                            "Google Docs export failed. You can retry safely."
+                        val message = when {
+                            failure is GoogleExportError.ApiFailure &&
+                                failure.partialDocumentId != null && !failure.cleanupDeleted ->
+                                "Google Docs export failed and the incomplete document could not be removed. Check Google Drive before retrying."
+                            failure is GoogleExportError -> failure.toUserMessage()
+                            else -> "Google Docs export failed. You can retry safely."
                         }
                         _uiState.update { it.copy(isExporting = false, error = message) }
                     }
@@ -96,17 +96,23 @@ class GoogleDocsExportViewModel(
             GoogleAuthResult.ConsentRequired -> _uiState.update { it.copy(isExporting = false, awaitingConsent = true) }
             GoogleAuthResult.Cancelled -> _uiState.update { it.copy(isExporting = false, error = "Google authorization was cancelled.") }
             GoogleAuthResult.Denied -> _uiState.update { it.copy(isExporting = false, error = "Google authorization was denied.") }
+            GoogleAuthResult.Failed -> _uiState.update { it.copy(isExporting = false, error = "Google authorization failed. You can retry.") }
             GoogleAuthResult.Unavailable -> _uiState.update { it.copy(isExporting = false, error = "Google Docs export is available on Android only.") }
         }
     }
 
-    private fun requestOrError(): HealthReportRequest? = try {
+    private fun requestOrError(): HealthReportRequest? {
         val selected = _uiState.value.selectedSections
-        require(selected.isNotEmpty()) { "Select at least one report section." }
-        HealthReportRequest(DateRange.of(LocalDate.parse(_uiState.value.startDate), LocalDate.parse(_uiState.value.endDate)), zone, _uiState.value.preset, selected)
-    } catch (e: Exception) {
-        _uiState.update { it.copy(error = "Use ISO dates (YYYY-MM-DD), with an end date on or after the start date.") }
-        null
+        if (selected.isEmpty()) {
+            _uiState.update { it.copy(error = "Select at least one report section.") }
+            return null
+        }
+        return try {
+            HealthReportRequest(DateRange.of(LocalDate.parse(_uiState.value.startDate), LocalDate.parse(_uiState.value.endDate)), zone, _uiState.value.preset, selected)
+        } catch (e: Exception) {
+            _uiState.update { it.copy(error = "Use ISO dates (YYYY-MM-DD), with an end date on or after the start date.") }
+            null
+        }
     }
 }
 
