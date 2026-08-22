@@ -1,7 +1,6 @@
 package com.wellnesswingman.domain.googleexport
 
 import com.wellnesswingman.data.googleexport.GoogleDocsError
-import kotlinx.datetime.Instant
 
 /**
  * Just-in-time result of requesting a Google access token for `drive.file`.
@@ -26,6 +25,13 @@ sealed interface GoogleAuthResult {
 
     /** The user denied the requested scopes. */
     data object Denied : GoogleAuthResult
+
+    /**
+     * Authorization failed for a local/transient reason (for example a Play
+     * services hiccup) that is not a scope denial and not a platform-support
+     * problem. The user may retry; details are deliberately not surfaced.
+     */
+    data object Failed : GoogleAuthResult
 
     /** Authorization is not possible on this platform / Google Play services unavailable. */
     data object Unavailable : GoogleAuthResult
@@ -72,11 +78,7 @@ interface GoogleAuthService {
 data class GoogleDocsExportResult(
     val title: String,
     val documentId: String,
-    val url: String,
-    /** When the document was successfully created but population failed or was cancelled. */
-    val documentIdOfPartialDocument: String? = null,
-    /** True when a partial document was created and cleanup (Drive delete) was attempted. */
-    val cleanupAttempted: Boolean = false
+    val url: String
 ) {
     companion object {
         fun urlOf(documentId: String): String = "https://docs.google.com/document/d/$documentId/edit"
@@ -138,6 +140,6 @@ sealed class GoogleExportError(
         failure
     )
 
-    fun toUserMessage(generatedAt: Instant? = null): String =
+    fun toUserMessage(): String =
         message ?: "Google Docs export failed"
 }

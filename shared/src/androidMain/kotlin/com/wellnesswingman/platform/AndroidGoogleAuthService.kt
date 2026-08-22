@@ -99,7 +99,14 @@ class AndroidGoogleAuthService(
     }
 
     override fun deliverConsentResult(intentData: Any?) {
-        val intent = intentData as? Intent ?: return
+        val intent = intentData as? Intent
+        if (intent == null) {
+            // Backing out of the consent screen yields a null result intent.
+            // Record the cancellation so the next requestAccess surfaces it
+            // instead of reopening the consent flow.
+            deliveredResult = GoogleAuthResult.Cancelled
+            return
+        }
         try {
             val result = authorizationClient.getAuthorizationResultFromIntent(intent)
             val token = result.accessToken
@@ -134,11 +141,8 @@ class AndroidGoogleAuthService(
             ?.statusCode
         return when (statusCode) {
             CommonStatusCodes.CANCELED -> GoogleAuthResult.Cancelled
-            else -> if (statusCode != null) {
-                GoogleAuthResult.Denied
-            } else {
-                GoogleAuthResult.Unavailable
-            }
+            null -> GoogleAuthResult.Failed
+            else -> GoogleAuthResult.Denied
         }
     }
 }
