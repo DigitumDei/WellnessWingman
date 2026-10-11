@@ -20,6 +20,7 @@ import com.wellnesswingman.platform.LogBuffer
 import com.wellnesswingman.ui.di.viewModelModule
 import com.wellnesswingman.workers.ImageRetentionWorker
 import com.wellnesswingman.workers.PolarSyncWorker
+import com.wellnesswingman.workers.PolarSyncRetryPolicy
 import io.github.aakira.napier.Napier
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -131,13 +132,12 @@ class WellnessWingmanApp : Application() {
             .setRequiredNetworkType(androidx.work.NetworkType.CONNECTED)
             .build()
 
-        val polarSyncRequest = PeriodicWorkRequestBuilder<PolarSyncWorker>(12, TimeUnit.HOURS)
-            .setConstraints(polarSyncConstraints)
-            .build()
+        val polarSyncRequest = PolarSyncRetryPolicy.createRequest(polarSyncConstraints)
 
         WorkManager.getInstance(this).enqueueUniquePeriodicWork(
             PolarSyncWorker.WORK_NAME,
-            ExistingPeriodicWorkPolicy.KEEP,
+            // Apply the backoff policy to jobs already scheduled by earlier app versions.
+            ExistingPeriodicWorkPolicy.UPDATE,
             polarSyncRequest
         )
     }
