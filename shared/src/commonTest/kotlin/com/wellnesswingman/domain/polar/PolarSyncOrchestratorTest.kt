@@ -7,10 +7,12 @@ import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.client.request.HttpRequestData
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
+import io.ktor.http.content.TextContent
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
@@ -191,14 +193,150 @@ class PolarSyncOrchestratorTest {
         assertTrue(secondResult.metricResults.isEmpty())
     }
 
+    @Test
+    fun `automatic sync retries a failed metric even when other metrics just succeeded`() = runTest {
+        val settings = FakeAppSettingsRepository().apply {
+            setPolarAccessToken("token")
+            setPolarRefreshToken("refresh")
+            setPolarTokenExpiresAt(Long.MAX_VALUE)
+        }
+        val syncRepository = InMemoryPolarSyncRepository()
+        val orchestrator = PolarSyncOrchestrator(
+            settings,
+            PolarOAuthRepository(settings, PolarOAuthConfig("client", "https://broker.test"), createNoOpHttpClient()),
+            PolarApiClient(createPartialFailureHttpClient()),
+            syncRepository
+        )
+
+        val initial = orchestrator.sync(PolarSyncTrigger.MANUAL_REFRESH)
+        val retry = orchestrator.syncIfStale(PolarSyncTrigger.ANDROID_BACKGROUND)
+
+        assertEquals(PolarSyncOutcome.PARTIAL_FAILURE, initial.outcome)
+        assertEquals(PolarSyncOutcome.PARTIAL_FAILURE, retry.outcome)
+        assertNotNull(retry.metricResults.first { it.metricFamily == PolarMetricFamily.ACTIVITY }.failureMessage)
+    }
+
+    @Test
+    fun `automatic sync retries a recent checkpoint with a recorded failure`() = runTest {
+        val settings = FakeAppSettingsRepository().apply {
+            setPolarAccessToken("token")
+            setPolarRefreshToken("refresh")
+            setPolarTokenExpiresAt(Long.MAX_VALUE)
+        }
+        val syncRepository = InMemoryPolarSyncRepository()
+        val now = Clock.System.now()
+        val today = now.toLocalDateTime(TimeZone.currentSystemDefault()).date
+        PolarMetricFamily.entries.forEach { family ->
+            syncRepository.updateCheckpoint(
+                PolarSyncCheckpoint(
+                    metricFamily = family,
+                    lastSyncCursor = today.toString(),
+                    lastSuccessfulSyncAt = now,
+                    lastFailureMessage = if (family == PolarMetricFamily.ACTIVITY) "Temporary failure" else null
+                )
+            )
+        }
+        val orchestrator = PolarSyncOrchestrator(
+            settings,
+            PolarOAuthRepository(settings, PolarOAuthConfig("client", "https://broker.test"), createNoOpHttpClient()),
+            PolarApiClient(createSyncHttpClient(activityDate = today)),
+            syncRepository
+        )
+
+        val retry = orchestrator.syncIfStale(PolarSyncTrigger.ANDROID_BACKGROUND)
+
+        assertEquals(PolarSyncOutcome.SUCCESS, retry.outcome)
+        assertEquals(null, syncRepository.getCheckpoint(PolarMetricFamily.ACTIVITY)?.lastFailureMessage)
+    }
+
+    @Test
+    fun `successive expired sessions sync automatically using the latest rotated refresh token`() = runTest {
+        val settings = FakeAppSettingsRepository().apply {
+            setPolarAccessToken("token-0")
+            setPolarRefreshToken("refresh-0")
+        }
+        var refreshCount = 0
+        val oauthClient = HttpClient(MockEngine { request ->
+            assertTrue((request.body as TextContent).text.contains("refresh-$refreshCount"))
+            refreshCount += 1
+            respond(
+                """{"access_token":"token-$refreshCount","refresh_token":"refresh-$refreshCount","expires_in":43200}""",
+                HttpStatusCode.OK,
+                jsonHeaders
+            )
+        }) {
+            install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
+        }
+        val today = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date
+        val orchestrator = PolarSyncOrchestrator(
+            settings,
+            PolarOAuthRepository(settings, PolarOAuthConfig("client", "https://broker.test"), oauthClient),
+            PolarApiClient(createSyncHttpClient(activityDate = today, onRequest = { request ->
+                assertEquals("Bearer token-$refreshCount", request.headers[HttpHeaders.Authorization])
+            })),
+            InMemoryPolarSyncRepository()
+        )
+
+        repeat(3) {
+            settings.setPolarTokenExpiresAt(0)
+            val result = orchestrator.syncIfStale(PolarSyncTrigger.ANDROID_BACKGROUND, kotlin.time.Duration.ZERO)
+            assertEquals(PolarSyncOutcome.SUCCESS, result.outcome)
+        }
+
+        assertEquals(3, refreshCount)
+        assertEquals("refresh-3", settings.getPolarRefreshToken())
+    }
+
+    @Test
+    fun `unauthorized API response renews the session and retries with the replacement token`() = runTest {
+        val settings = FakeAppSettingsRepository().apply {
+            setPolarAccessToken("rejected-token")
+            setPolarRefreshToken("refresh")
+            setPolarTokenExpiresAt(Long.MAX_VALUE)
+        }
+        var refreshCount = 0
+        var rejectedRequestCount = 0
+        val oauthClient = HttpClient(MockEngine {
+            refreshCount += 1
+            respond(
+                """{"access_token":"renewed-token","refresh_token":"renewed-refresh","expires_in":43200}""",
+                HttpStatusCode.OK,
+                jsonHeaders
+            )
+        }) {
+            install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
+        }
+        val orchestrator = PolarSyncOrchestrator(
+            settings,
+            PolarOAuthRepository(settings, PolarOAuthConfig("client", "https://broker.test"), oauthClient),
+            PolarApiClient(createSyncHttpClient(rejectAccessToken = "rejected-token", onRequest = { request ->
+                if (request.headers[HttpHeaders.Authorization] == "Bearer rejected-token") rejectedRequestCount += 1
+            })),
+            InMemoryPolarSyncRepository()
+        )
+
+        val result = orchestrator.sync(PolarSyncTrigger.ANDROID_BACKGROUND)
+
+        assertEquals(PolarSyncOutcome.SUCCESS, result.outcome)
+        assertEquals(1, rejectedRequestCount)
+        assertEquals(1, refreshCount)
+        assertEquals("renewed-token", settings.getPolarAccessToken())
+    }
+
     private fun createSyncHttpClient(
         activityDate: LocalDate = LocalDate.parse("2026-03-23"),
         sleepDate: LocalDate = activityDate,
         trainingDate: LocalDate = activityDate,
         nightlyRechargeDate: LocalDate = activityDate,
-        onActivityRequest: (suspend (from: String, to: String) -> Unit)? = null
+        onActivityRequest: (suspend (from: String, to: String) -> Unit)? = null,
+        rejectAccessToken: String? = null,
+        onRequest: (HttpRequestData) -> Unit = {}
     ): HttpClient {
         return HttpClient(MockEngine { request ->
+            onRequest(request)
+            if (rejectAccessToken != null && request.headers[HttpHeaders.Authorization] == "Bearer $rejectAccessToken") {
+                return@MockEngine respond("{}", HttpStatusCode.Unauthorized, jsonHeaders)
+            }
             when {
                 request.url.encodedPath.endsWith("/activity/list") -> {
                     onActivityRequest?.invoke(

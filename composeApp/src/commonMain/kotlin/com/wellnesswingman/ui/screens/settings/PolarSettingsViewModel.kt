@@ -112,6 +112,8 @@ class PolarSettingsViewModel(
                     ?.joinToString(separator = "\n") { "${it.metricFamily.name}: ${it.failureMessage}" }
 
                 _uiState.value = _uiState.value.copy(
+                    isConnected = appSettingsRepository.isPolarConnected(),
+                    polarUserId = appSettingsRepository.getPolarUserId().orEmpty(),
                     isSyncing = status.isRunning,
                     syncSummary = lastResult?.message,
                     syncFailureSummary = failureSummary,
@@ -143,13 +145,15 @@ class PolarSettingsViewModel(
     }
 
     fun onDisconnectClicked() {
-        polarOAuthRepository.disconnect()
-        _uiState.value = _uiState.value.copy(
-            isConnected = false,
-            polarUserId = "",
-            error = null,
-            isSyncing = false
-        )
+        screenModelScope.launch {
+            polarOAuthRepository.disconnect()
+            _uiState.value = _uiState.value.copy(
+                isConnected = false,
+                polarUserId = "",
+                error = null,
+                isSyncing = false
+            )
+        }
     }
 
     fun onManualSyncClicked() {
