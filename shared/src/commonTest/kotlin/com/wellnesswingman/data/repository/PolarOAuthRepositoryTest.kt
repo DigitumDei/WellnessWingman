@@ -13,6 +13,13 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import io.ktor.serialization.kotlinx.json.json
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.currentTime
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlin.test.BeforeTest
@@ -22,6 +29,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class PolarOAuthRepositoryTest {
 
     private lateinit var fakeSettings: FakePolarSettings
@@ -249,10 +257,273 @@ class PolarOAuthRepositoryTest {
         assertNull(fakeSettings.getPolarRefreshToken())
     }
 
+    @Test
+    fun `refresh persists replacement tokens even when the calling sync is cancelled`() = runTest {
+        val requestStarted = CompletableDeferred<Unit>()
+        val allowResponse = CompletableDeferred<Unit>()
+        val client = createClient {
+            requestStarted.complete(Unit)
+            allowResponse.await()
+            respond(
+                """{"access_token":"new-at","refresh_token":"new-rt","expires_in":43200}""",
+                HttpStatusCode.OK,
+                jsonHeaders
+            )
+        }
+        fakeSettings.setPolarAccessToken("old-at")
+        fakeSettings.setPolarRefreshToken("old-rt")
+        val repo = PolarOAuthRepository(fakeSettings, config, client)
+
+        val refresh = async { repo.refreshTokens() }
+        requestStarted.await()
+        refresh.cancel()
+        allowResponse.complete(Unit)
+        refresh.join()
+
+        assertTrue(refresh.isCancelled)
+        assertEquals("new-at", fakeSettings.getPolarAccessToken())
+        assertEquals("new-rt", fakeSettings.getPolarRefreshToken())
+        assertTrue(fakeSettings.getPolarTokenExpiresAt() > 0)
+    }
+
+    @Test
+    fun `overlapping refreshes share replacement tokens instead of reusing the old refresh token`() = runTest {
+        val requestStarted = CompletableDeferred<Unit>()
+        val allowResponse = CompletableDeferred<Unit>()
+        var requestCount = 0
+        val client = createClient {
+            requestCount += 1
+            val thisRequest = requestCount
+            requestStarted.complete(Unit)
+            allowResponse.await()
+            if (thisRequest == 1) {
+                respond(
+                    """{"access_token":"new-at","refresh_token":"new-rt","expires_in":43200}""",
+                    HttpStatusCode.OK,
+                    jsonHeaders
+                )
+            } else {
+                respond("""{"error":"invalid_grant"}""", HttpStatusCode.BadRequest, jsonHeaders)
+            }
+        }
+        fakeSettings.setPolarAccessToken("old-at")
+        fakeSettings.setPolarRefreshToken("old-rt")
+        val repo = PolarOAuthRepository(fakeSettings, config, client)
+
+        val first = async { repo.refreshTokens() }
+        requestStarted.await()
+        val second = async { repo.refreshTokens() }
+        runCurrent()
+        allowResponse.complete(Unit)
+
+        assertTrue(first.await().isSuccess)
+        assertTrue(second.await().isSuccess)
+        assertEquals(1, requestCount)
+        assertEquals("new-at", fakeSettings.getPolarAccessToken())
+        assertEquals("new-rt", fakeSettings.getPolarRefreshToken())
+    }
+
+    @Test
+    fun `refresh response cannot reconnect an account disconnected while the request was running`() = runTest {
+        val requestStarted = CompletableDeferred<Unit>()
+        val allowResponse = CompletableDeferred<Unit>()
+        val client = createClient {
+            requestStarted.complete(Unit)
+            allowResponse.await()
+            respond(
+                """{"access_token":"new-at","refresh_token":"new-rt","expires_in":43200}""",
+                HttpStatusCode.OK,
+                jsonHeaders
+            )
+        }
+        fakeSettings.setPolarAccessToken("old-at")
+        fakeSettings.setPolarRefreshToken("old-rt")
+        val repo = PolarOAuthRepository(fakeSettings, config, client)
+
+        val refresh = async { repo.refreshTokens() }
+        requestStarted.await()
+        repo.disconnect()
+        allowResponse.complete(Unit)
+
+        assertTrue(refresh.await().isFailure)
+        assertNull(fakeSettings.getPolarAccessToken())
+        assertNull(fakeSettings.getPolarRefreshToken())
+    }
+
+    @Test
+    fun `late invalid grant cannot clear a newly connected session`() = runTest {
+        val requestStarted = CompletableDeferred<Unit>()
+        val allowResponse = CompletableDeferred<Unit>()
+        val client = createClient {
+            requestStarted.complete(Unit)
+            allowResponse.await()
+            respond("""{"error":"invalid_grant"}""", HttpStatusCode.BadRequest, jsonHeaders)
+        }
+        fakeSettings.setPolarAccessToken("old-at")
+        fakeSettings.setPolarRefreshToken("old-rt")
+        val repo = PolarOAuthRepository(fakeSettings, config, client)
+
+        val refresh = async { repo.refreshTokens() }
+        requestStarted.await()
+        fakeSettings.setPolarAccessToken("reconnected-at")
+        fakeSettings.setPolarRefreshToken("reconnected-rt")
+        allowResponse.complete(Unit)
+
+        assertTrue(refresh.await().isFailure)
+        assertEquals("reconnected-at", fakeSettings.getPolarAccessToken())
+        assertEquals("reconnected-rt", fakeSettings.getPolarRefreshToken())
+    }
+
+    @Test
+    fun `server failure mentioning invalid grant preserves the connection for a later retry`() = runTest {
+        val client = createClient {
+            respond("""{"error":"invalid_grant"}""", HttpStatusCode.ServiceUnavailable, jsonHeaders)
+        }
+        fakeSettings.setPolarAccessToken("old-at")
+        fakeSettings.setPolarRefreshToken("old-rt")
+
+        val result = PolarOAuthRepository(fakeSettings, config, client).refreshTokens()
+
+        assertTrue(result.isFailure)
+        assertEquals("old-at", fakeSettings.getPolarAccessToken())
+        assertEquals("old-rt", fakeSettings.getPolarRefreshToken())
+    }
+
+    @Test
+    fun `invalid grant mentioned in an error description does not disconnect the account`() = runTest {
+        val client = createClient {
+            respond(
+                """{"error":"temporarily_unavailable","error_description":"Retry later; this is not invalid_grant"}""",
+                HttpStatusCode.BadRequest,
+                jsonHeaders
+            )
+        }
+        fakeSettings.setPolarAccessToken("old-at")
+        fakeSettings.setPolarRefreshToken("old-rt")
+
+        val result = PolarOAuthRepository(fakeSettings, config, client).refreshTokens()
+
+        assertTrue(result.isFailure)
+        assertEquals("old-at", fakeSettings.getPolarAccessToken())
+        assertEquals("old-rt", fakeSettings.getPolarRefreshToken())
+    }
+
+    @Test
+    fun `hung refresh times out without disconnecting and releases the refresh lock`() = runTest {
+        val client = createClient { awaitCancellation() }
+        fakeSettings.setPolarAccessToken("old-at")
+        fakeSettings.setPolarRefreshToken("old-rt")
+        val repo = PolarOAuthRepository(fakeSettings, config, client, StandardTestDispatcher(testScheduler))
+
+        repeat(2) {
+            val result = repo.refreshTokens()
+            assertTrue(result.isFailure)
+            assertTrue(result.exceptionOrNull()?.message?.contains("timed out") == true)
+        }
+
+        assertEquals(60_000L, currentTime)
+        assertEquals("old-at", fakeSettings.getPolarAccessToken())
+        assertEquals("old-rt", fakeSettings.getPolarRefreshToken())
+    }
+
+    @Test
+    fun `refresh retains the current refresh token when Polar does not replace it`() = runTest {
+        val client = createClient {
+            respond(
+                """{"access_token":"new-at","refresh_token":null,"expires_in":43200}""",
+                HttpStatusCode.OK,
+                jsonHeaders
+            )
+        }
+        fakeSettings.setPolarAccessToken("old-at")
+        fakeSettings.setPolarRefreshToken("old-rt")
+
+        val result = PolarOAuthRepository(fakeSettings, config, client).refreshTokens()
+
+        assertTrue(result.isSuccess)
+        assertEquals("new-at", fakeSettings.getPolarAccessToken())
+        assertEquals("old-rt", fakeSettings.getPolarRefreshToken())
+    }
+
+    @Test
+    fun `malformed token response preserves credentials and does not expose response contents`() = runTest {
+        val client = createClient {
+            respond(
+                """{"access_token":"sensitive-access","refresh_token":"sensitive-refresh","expires_in":"not-a-number"}""",
+                HttpStatusCode.OK,
+                jsonHeaders
+            )
+        }
+        fakeSettings.setPolarAccessToken("old-at")
+        fakeSettings.setPolarRefreshToken("old-rt")
+
+        val result = PolarOAuthRepository(fakeSettings, config, client).refreshTokens()
+
+        assertTrue(result.isFailure)
+        assertEquals("old-at", fakeSettings.getPolarAccessToken())
+        assertEquals("old-rt", fakeSettings.getPolarRefreshToken())
+        assertTrue(result.exceptionOrNull()?.message?.contains("sensitive") == false)
+        assertNull(result.exceptionOrNull()?.cause)
+    }
+
+    @Test
+    fun `disconnect during redemption prevents the late response from reconnecting`() = runTest {
+        val requestStarted = CompletableDeferred<Unit>()
+        val allowResponse = CompletableDeferred<Unit>()
+        val client = createClient {
+            requestStarted.complete(Unit)
+            allowResponse.await()
+            respond(
+                """{"tokens":{"access_token":"new-at","refresh_token":"new-rt","expires_in":43200}}""",
+                HttpStatusCode.OK,
+                jsonHeaders
+            )
+        }
+        fakeSettings.setPendingOAuthState("test-state")
+        val repo = PolarOAuthRepository(fakeSettings, config, client)
+
+        val redeem = async { repo.redeemSession("test-session", "test-state") }
+        requestStarted.await()
+        repo.disconnect()
+        allowResponse.complete(Unit)
+
+        assertTrue(redeem.await().isFailure)
+        assertNull(fakeSettings.getPolarAccessToken())
+        assertNull(fakeSettings.getPolarRefreshToken())
+    }
+
+    @Test
+    fun `waiting refresh does not reuse credentials after the first confirms revocation`() = runTest {
+        val requestStarted = CompletableDeferred<Unit>()
+        val allowResponse = CompletableDeferred<Unit>()
+        var requestCount = 0
+        val client = createClient {
+            requestCount += 1
+            requestStarted.complete(Unit)
+            allowResponse.await()
+            respond("""{"error":"invalid_grant"}""", HttpStatusCode.BadRequest, jsonHeaders)
+        }
+        fakeSettings.setPolarAccessToken("old-at")
+        fakeSettings.setPolarRefreshToken("old-rt")
+        val repo = PolarOAuthRepository(fakeSettings, config, client)
+
+        val first = async { repo.refreshTokens() }
+        requestStarted.await()
+        val second = async { repo.refreshTokens() }
+        runCurrent()
+        allowResponse.complete(Unit)
+
+        assertTrue(first.await().isFailure)
+        assertTrue(second.await().isFailure)
+        assertEquals(1, requestCount)
+        assertNull(fakeSettings.getPolarAccessToken())
+        assertNull(fakeSettings.getPolarRefreshToken())
+    }
+
     // --- disconnect ---
 
     @Test
-    fun `disconnect clears all polar tokens`() {
+    fun `disconnect clears all polar tokens`() = runTest {
         fakeSettings.setPolarAccessToken("access")
         fakeSettings.setPolarRefreshToken("refresh")
         fakeSettings.setPolarUserId("user")

@@ -81,12 +81,23 @@ python3 -c "import os; print(os.urandom(32).hex())" | gcloud secrets versions ad
 
 ## Sync Behavior
 
-Current shipped behavior:
+Current implementation:
 
 - Polar data is stored in dedicated SQLDelight tables, not in `TrackedEntry`
 - checkpoint state is tracked independently for each sync domain
 - the app performs a foreground refresh when the latest successful sync is stale
 - Android also schedules a periodic background refresh every 12 hours when connected to the network
+
+Token renewal and recovery:
+
+- [Polar's v4 access tokens last 12 hours](https://www.polar.com/polar-api-v4/#token-endpoint). Sync renews them before expiry and retries an API request once after a 401.
+- Overlapping refresh calls share the renewed credentials. Once a refresh request starts, it has up to 30 seconds to save replacement tokens even if its calling sync is cancelled; cancellation then propagates normally.
+- A late refresh response cannot restore a disconnected account or clear credentials from a newly connected session. Network failures, server failures, and malformed errors preserve the connection for a later retry. Only an explicit OAuth `invalid_grant` on HTTP 400/401 clears the rejected session.
+- Background sync retries partial failures and exceptions at most ten times after the initial attempt per periodic cycle. Exponential backoff starts at about 49 seconds; WorkManager caps individual delays at five hours, placing the tenth retry roughly 12 hours after the initial failure, excluding sync execution time and Android scheduling delays. Exhaustion ends that cycle without clearing the recorded sync failure or credentials; the next regular 12-hour cycle gets a fresh retry budget. App upgrades update existing scheduled jobs with this policy. Foreground and manual sync remain available independently.
+- Automatic sync skips only when every metric has a recent successful checkpoint without a recorded failure.
+- Refresh diagnostics omit response bodies and exception details that could contain credentials. Tokens continue to use the existing platform settings storage (encrypted preferences on Android).
+
+A revoked or expired refresh token still requires reconnecting in settings. Protecting an in-flight refresh from coroutine cancellation does not guarantee recovery if the OS kills the process or the network loses the response after Polar issues replacement credentials.
 
 Non-Android platforms do not currently ship an equivalent background scheduler in this repo.
 
@@ -118,3 +129,5 @@ Earlier documentation that said there was no sync orchestrator or no Android bac
 - confirm sync data persists across app restarts
 - verify `PolarSyncWorker` is scheduled after app launch
 - verify disconnect clears local Polar token state
+- interrupt a sync during token renewal, then verify the next sync can use the replacement credentials
+- temporarily interrupt network access and verify background sync retries after connectivity returns

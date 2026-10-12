@@ -130,11 +130,12 @@ class PolarSyncOrchestrator(
             return false
         }
 
-        val latestSuccessfulSync = polarSyncRepository.getAllCheckpoints()
-            .maxByOrNull { it.lastSuccessfulSyncAt }
-            ?.lastSuccessfulSyncAt
-
-        return latestSuccessfulSync != null && now - latestSuccessfulSync < maxAge
+        val checkpoints = polarSyncRepository.getAllCheckpoints().associateBy { it.metricFamily }
+        return PolarMetricFamily.entries.all { family ->
+            val checkpoint = checkpoints[family]
+            checkpoint != null && checkpoint.lastFailureMessage == null &&
+                now - checkpoint.lastSuccessfulSyncAt < maxAge
+        }
     }
 
     private suspend fun runSync(trigger: PolarSyncTrigger, startedAt: Instant): PolarSyncRunResult {
