@@ -621,6 +621,116 @@ class HealthReportGathererTest {
         assertEquals(false, data.toPreview().profileIncluded)
     }
 
+    @Test
+    fun `training sessions drop unrecorded zero metrics instead of reporting measured zeros`() = runTest {
+        val date = LocalDate(2024, 1, 11)
+        val polar = FakePolarSyncRepository().apply {
+            trainings = listOf(
+                StoredPolarTrainingSession(
+                    recordId = 1, externalId = "t1", source = "Polar", localDate = date,
+                    startedAt = "10:00", syncedAt = Instant.parse("2024-01-11T12:00:00Z"),
+                    data = PolarTrainingSession(
+                        id = "polar-session-123", startTime = "10:00", durationSeconds = 1_800,
+                        sportId = "YOGA", calories = 0, distanceMeters = 0.0,
+                        averageHeartRate = 0, maxHeartRate = 0, trainingBenefit = ""
+                    )
+                )
+            )
+        }
+
+        val data = gathererWith(FakeTrackedEntryRepository(), FakeEntryAnalysisRepository(), polar = polar)
+            .gather(request(sections = setOf(HealthReportSection.POLAR_METRICS)))
+
+        val session = data.polarDays.single().trainingSessions.single()
+        assertEquals("YOGA", session.sportId)
+        assertEquals(1_800, session.durationSeconds)
+        assertNull(session.calories)
+        assertNull(session.distanceMeters)
+        assertNull(session.averageHeartRate)
+        assertNull(session.maxHeartRate)
+        assertNull(session.trainingBenefit)
+        // The provider-side id has no field to live in on the report type.
+        assertTrue("polar-session-123" !in session.toString())
+    }
+
+    @Test
+    fun `weekly summaries are disclosed only when their whole week is in range`() = runTest {
+        val twoWeeks = DateRange.of(LocalDate(2024, 1, 8), LocalDate(2024, 1, 21))
+        val weekly = FakeWeeklySummaryRepository().apply {
+            summaries = listOf(
+                // Fully inside: Jan 8-14 and Jan 15-21.
+                WeeklySummary(summaryId = 1, weekStartDate = LocalDate(2024, 1, 8), highlights = "Week one"),
+                WeeklySummary(summaryId = 2, weekStartDate = LocalDate(2024, 1, 15), highlights = "Week two"),
+                // Starts in range but runs to Jan 23: built partly from undisclosed days.
+                WeeklySummary(summaryId = 3, weekStartDate = LocalDate(2024, 1, 17), highlights = "Spills over")
+            )
+        }
+
+        val data = gathererWith(FakeTrackedEntryRepository(), FakeEntryAnalysisRepository(), weeklySummaries = weekly)
+            .gather(request(sections = setOf(HealthReportSection.DAILY_AND_WEEKLY_SUMMARIES), range = twoWeeks))
+
+        assertEquals(
+            listOf(LocalDate(2024, 1, 8), LocalDate(2024, 1, 15)),
+            data.weeklySummaries.map { it.weekStartDate }
+        )
+        assertTrue(data.weeklySummaries.none { it.highlights == "Spills over" })
+    }
+
+    @Test
+    fun `a range shorter than a week discloses no weekly summary`() = runTest {
+        val weekly = FakeWeeklySummaryRepository().apply {
+            summaries = listOf(
+                WeeklySummary(summaryId = 1, weekStartDate = LocalDate(2024, 1, 10), highlights = "Whole week")
+            )
+        }
+
+        // Default range is Jan 10-12: the summary's week starts inside it but ends Jan 16.
+        val data = gathererWith(FakeTrackedEntryRepository(), FakeEntryAnalysisRepository(), weeklySummaries = weekly)
+            .gather(request(sections = setOf(HealthReportSection.DAILY_AND_WEEKLY_SUMMARIES)))
+
+        assertTrue(data.weeklySummaries.isEmpty())
+    }
+
+    @Test
+    fun `preview total counts summary-only reports as non-empty`() = runTest {
+        val twoWeeks = DateRange.of(LocalDate(2024, 1, 8), LocalDate(2024, 1, 21))
+        val daily = FakeDailySummaryRepository().apply {
+            summaries = listOf(DailySummary(summaryId = 1, summaryDate = LocalDate(2024, 1, 10)))
+        }
+        val weekly = FakeWeeklySummaryRepository().apply {
+            summaries = listOf(WeeklySummary(summaryId = 1, weekStartDate = LocalDate(2024, 1, 8)))
+        }
+
+        val preview = gathererWith(
+            FakeTrackedEntryRepository(),
+            FakeEntryAnalysisRepository(),
+            dailySummaries = daily,
+            weeklySummaries = weekly
+        )
+            .gather(request(sections = setOf(HealthReportSection.DAILY_AND_WEEKLY_SUMMARIES), range = twoWeeks))
+            .toPreview()
+
+        assertEquals(1, preview.dailySummaryCount)
+        assertEquals(1, preview.weeklySummaryCount)
+        assertEquals(2, preview.totalEntries)
+    }
+
+    @Test
+    fun `check-ins on the same day are ordered morning before evening`() = runTest {
+        val date = LocalDate(2024, 1, 11)
+        val checkIns = FakeDailyCheckInRepository().apply {
+            checkIns = listOf(
+                checkIn(date).copy(checkInId = 2, slot = CheckInSlot.EVENING, responseText = "Evening words"),
+                checkIn(date).copy(checkInId = 1, slot = CheckInSlot.MORNING, responseText = "Morning words")
+            )
+        }
+
+        val data = gathererWith(FakeTrackedEntryRepository(), FakeEntryAnalysisRepository(), checkIns)
+            .gather(request(sections = setOf(HealthReportSection.CHECK_INS)))
+
+        assertEquals(listOf("Morning words", "Evening words"), data.checkIns.map { it.responseText })
+    }
+
     private fun checkIn(date: LocalDate) = DailyCheckIn(
         checkInId = 1,
         checkInDate = date,

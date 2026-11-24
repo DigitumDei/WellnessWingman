@@ -1,5 +1,6 @@
 package com.wellnesswingman.domain.report
 
+import com.wellnesswingman.data.model.CheckInSlot
 import com.wellnesswingman.data.model.NutritionTotals
 import com.wellnesswingman.data.model.NutritionalBalance
 import com.wellnesswingman.data.model.analysis.MentionedFood
@@ -219,7 +220,19 @@ data class ReportCheckIn(
     val mentionedFood: List<MentionedFood> = emptyList(),
     val goodFactors: List<CheckInFactor> = emptyList(),
     val badFactors: List<CheckInFactor> = emptyList()
-)
+) {
+    /**
+     * Chronological rank of [slot] within a day (morning before evening).
+     * Sorting on the display string would put "Evening" before "Morning".
+     * An unrecognized slot sorts last rather than failing.
+     */
+    val slotOrder: Int
+        get() = CheckInSlot.fromString(slot)?.ordinal ?: Int.MAX_VALUE
+}
+
+/** Day-then-slot chronological order shared by the gatherer and the builder. */
+internal val reportCheckInOrder: Comparator<ReportCheckIn> =
+    compareBy<ReportCheckIn> { it.date }.thenBy { it.slotOrder }
 
 data class ReportWeightRecord(
     val date: LocalDate,
@@ -270,8 +283,30 @@ data class ReportPolarDay(
     val date: LocalDate,
     val activity: PolarDailyActivity? = null,
     val sleep: PolarSleepResult? = null,
-    val trainingSessions: List<PolarTrainingSession> = emptyList(),
+    val trainingSessions: List<ReportPolarTrainingSession> = emptyList(),
     val nightlyRecharge: PolarNightlyRecharge? = null
+)
+
+/**
+ * The renderable subset of a Polar training session.
+ *
+ * Deliberately omits the provider-side session `id`, so the redaction
+ * guarantee on [HealthReportData] holds at the type level rather than by
+ * convention in the builder.
+ *
+ * The optional metrics are null when Polar did not record them. The Polar
+ * client substitutes `0` for missing fields, and a reported "0 kcal" or
+ * "avg HR 0 bpm" would misstate an absent measurement as a measured zero.
+ */
+data class ReportPolarTrainingSession(
+    val startTime: String,
+    val durationSeconds: Long,
+    val sportId: String,
+    val calories: Int? = null,
+    val distanceMeters: Double? = null,
+    val averageHeartRate: Int? = null,
+    val maxHeartRate: Int? = null,
+    val trainingBenefit: String? = null
 )
 
 /**
@@ -288,9 +323,14 @@ data class HealthReportPreview(
     val weeklySummaryCount: Int,
     val polarDayCount: Int
 ) {
+    /**
+     * Every record the report will disclose. Summaries count too: a report
+     * holding only daily or weekly summaries is not empty.
+     */
     val totalEntries: Int
         get() = mealCount + exerciseCount + sleepCount +
-            checkInCount + weightCount + polarDayCount
+            checkInCount + weightCount + polarDayCount +
+            dailySummaryCount + weeklySummaryCount
 }
 
 /**
@@ -391,5 +431,17 @@ internal fun com.wellnesswingman.data.model.analysis.ExerciseInsights?.toReportE
         recommendations = recommendations
     )
 }
+
+internal fun PolarTrainingSession.toReportPolarTrainingSession(): ReportPolarTrainingSession =
+    ReportPolarTrainingSession(
+        startTime = startTime,
+        durationSeconds = durationSeconds,
+        sportId = sportId,
+        calories = calories.takeIf { it > 0 },
+        distanceMeters = distanceMeters.takeIf { it > 0.0 },
+        averageHeartRate = averageHeartRate.takeIf { it > 0 },
+        maxHeartRate = maxHeartRate.takeIf { it > 0 },
+        trainingBenefit = trainingBenefit.takeIf { it.isNotBlank() }
+    )
 
 internal fun Instant.toLocalDateTimeIn(zone: TimeZone): LocalDateTime = toLocalDateTime(zone)

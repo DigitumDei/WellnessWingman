@@ -10,10 +10,6 @@ import com.wellnesswingman.data.model.WeeklySummary
 import com.wellnesswingman.data.model.WeightRecord
 import com.wellnesswingman.data.model.WeightSource
 import com.wellnesswingman.data.model.analysis.UnifiedAnalysisResult
-import com.wellnesswingman.data.model.polar.StoredPolarActivity
-import com.wellnesswingman.data.model.polar.StoredPolarNightlyRecharge
-import com.wellnesswingman.data.model.polar.StoredPolarSleepResult
-import com.wellnesswingman.data.model.polar.StoredPolarTrainingSession
 import com.wellnesswingman.data.repository.AppSettingsRepository
 import com.wellnesswingman.data.repository.CheckInAnalysisRepository
 import com.wellnesswingman.data.repository.DailyCheckInRepository
@@ -23,8 +19,10 @@ import com.wellnesswingman.data.repository.PolarSyncRepository
 import com.wellnesswingman.data.repository.TrackedEntryRepository
 import com.wellnesswingman.data.repository.WeeklySummaryRepository
 import com.wellnesswingman.data.repository.WeightHistoryRepository
+import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.plus
 import kotlinx.serialization.json.Json
 
 /**
@@ -130,6 +128,7 @@ class HealthReportGatherer(
         val weeklySummaries = if (HealthReportSection.DAILY_AND_WEEKLY_SUMMARIES in sections) {
             weeklySummaryRepository
                 .getSummariesForDateRange(range.start, range.end)
+                .filter { it.coversOnlyDaysIn(range) }
                 .map { it.toReportWeeklySummary() }
                 .sortedBy { it.weekStartDate }
         } else {
@@ -188,39 +187,52 @@ class HealthReportGatherer(
 
         return checkIns
             .map { checkIn -> checkIn.toReportCheckIn(analyses[checkIn.checkInDate to checkIn.slot]) }
-            .sortedWith(compareBy<ReportCheckIn> { it.date }.thenBy { it.slot })
+            .sortedWith(reportCheckInOrder)
     }
 
     private suspend fun gatherPolar(
         range: com.wellnesswingman.domain.common.DateRange
     ): List<ReportPolarDay> {
-        val activities = polarSyncRepository.getActivities(range.start, range.endExclusive)
-        val sleeps = polarSyncRepository.getSleepResults(range.start, range.endExclusive)
-        val trainings = polarSyncRepository.getTrainingSessions(range.start, range.endExclusive)
-        val recharges = polarSyncRepository.getNightlyRecharge(range.start, range.endExclusive)
+        // One typed lookup per family, keyed by local date.
+        val activityByDay = polarSyncRepository
+            .getActivities(range.start, range.endExclusive)
+            .groupBy { it.localDate }
+        val sleepByDay = polarSyncRepository
+            .getSleepResults(range.start, range.endExclusive)
+            .groupBy { it.localDate }
+        val trainingsByDay = polarSyncRepository
+            .getTrainingSessions(range.start, range.endExclusive)
+            .groupBy { it.localDate }
+        val rechargeByDay = polarSyncRepository
+            .getNightlyRecharge(range.start, range.endExclusive)
+            .groupBy { it.localDate }
 
-        val days = sortedMapOf<LocalDate, MutableList<Any?>>()
+        val days: Set<LocalDate> =
+            activityByDay.keys + sleepByDay.keys + trainingsByDay.keys + rechargeByDay.keys
 
-        activities.forEach { dayBy(it.localDate, days).add(it) }
-        sleeps.forEach { dayBy(it.localDate, days).add(it) }
-        trainings.forEach { dayBy(it.localDate, days).add(it) }
-        recharges.forEach { dayBy(it.localDate, days).add(it) }
-
-        return days.map { (date, items) ->
+        return days.sorted().map { date ->
             ReportPolarDay(
                 date = date,
-                activity = items.filterIsInstance<StoredPolarActivity>().firstOrNull()?.data,
-                sleep = items.filterIsInstance<StoredPolarSleepResult>().firstOrNull()?.data,
-                trainingSessions = items.filterIsInstance<StoredPolarTrainingSession>()
-                    .map { it.data }
+                activity = activityByDay[date]?.firstOrNull()?.data,
+                sleep = sleepByDay[date]?.firstOrNull()?.data,
+                trainingSessions = trainingsByDay[date].orEmpty()
+                    .map { it.data.toReportPolarTrainingSession() }
                     .sortedBy { it.startTime },
-                nightlyRecharge = items.filterIsInstance<StoredPolarNightlyRecharge>().firstOrNull()?.data
+                nightlyRecharge = rechargeByDay[date]?.firstOrNull()?.data
             )
         }
     }
 
-    private fun dayBy(date: LocalDate, days: MutableMap<LocalDate, MutableList<Any?>>): MutableList<Any?> =
-        days.getOrPut(date) { mutableListOf() }
+    /**
+     * A weekly summary is generated from all seven days starting at its
+     * [WeeklySummary.weekStartDate]. It may only be disclosed when that whole
+     * week lies inside the requested range: otherwise its highlights and
+     * counts would describe days the user did not choose to share.
+     */
+    private fun WeeklySummary.coversOnlyDaysIn(range: com.wellnesswingman.domain.common.DateRange): Boolean {
+        val weekEnd = weekStartDate.plus(DAYS_IN_WEEK - 1, DateTimeUnit.DAY)
+        return weekStartDate >= range.start && weekEnd <= range.end
+    }
 
     // --- Entry mapping ---
 
@@ -326,4 +338,8 @@ class HealthReportGatherer(
 
     private fun EntryAnalysis.unified(): UnifiedAnalysisResult? =
         runCatching { json.decodeFromString<UnifiedAnalysisResult>(insightsJson) }.getOrNull()
+
+    private companion object {
+        const val DAYS_IN_WEEK = 7
+    }
 }

@@ -466,4 +466,116 @@ class HealthReportBuilderTest {
         assertTrue(text.contains("Highlights: Good week (AI-estimated)"))
         assertTrue(text.contains("User comments: Felt great (user-entered)"))
     }
+
+    @Test
+    fun `same-day check-ins render morning before evening`() {
+        val date = LocalDate(2024, 1, 11)
+        val data = sampleData.copy(
+            meals = emptyList(),
+            weightRecords = emptyList(),
+            checkIns = listOf(
+                ReportCheckIn(date = date, slot = "Evening", responseText = "Evening words", inputSource = "Typed"),
+                ReportCheckIn(date = date, slot = "Morning", responseText = "Morning words", inputSource = "Typed")
+            )
+        )
+
+        val text = render(data)
+
+        assertTrue(text.indexOf("Morning words") in 0 until text.indexOf("Evening words"))
+    }
+
+    @Test
+    fun `exercise insight lists render even without a summary`() {
+        val data = sampleData.copy(
+            meals = emptyList(),
+            weightRecords = emptyList(),
+            exercise = listOf(
+                ReportExerciseEntry(
+                    date = LocalDate(2024, 1, 11),
+                    localTime = LocalDateTime(2024, 1, 11, 7, 0),
+                    insights = ReportExerciseInsights(
+                        summary = null,
+                        positives = listOf("Steady pacing"),
+                        recommendations = listOf("Add a cool-down")
+                    )
+                )
+            )
+        )
+
+        val text = render(data)
+
+        assertTrue(text.contains("Positive: Steady pacing (AI-estimated)"))
+        assertTrue(text.contains("Recommendation: Add a cool-down (AI-estimated)"))
+        assertTrue(!text.contains("Summary:"))
+    }
+
+    @Test
+    fun `polar training omits unrecorded metrics rather than printing zeros`() {
+        val data = sampleData.copy(
+            meals = emptyList(),
+            weightRecords = emptyList(),
+            polarDays = listOf(
+                ReportPolarDay(
+                    date = LocalDate(2024, 1, 11),
+                    trainingSessions = listOf(
+                        ReportPolarTrainingSession(
+                            startTime = "10:00",
+                            durationSeconds = 1_800,
+                            sportId = "YOGA"
+                        ),
+                        ReportPolarTrainingSession(
+                            startTime = "18:00",
+                            durationSeconds = 2_400,
+                            sportId = "RUNNING",
+                            calories = 320,
+                            distanceMeters = 6_000.0,
+                            averageHeartRate = 150,
+                            maxHeartRate = 172
+                        )
+                    ),
+                    nightlyRecharge = PolarNightlyRecharge(
+                        date = "2024-01-11", ansStatus = 62.0, ansRate = 3, recoveryIndicator = 62,
+                        recoveryIndicatorSubLevel = 2, hrvRmssd = 55, hrvMeanRri = 950,
+                        baselineRmssd = 0, baselineRmssdSd = 0, baselineRri = 0, baselineRriSd = 0
+                    )
+                )
+            )
+        )
+
+        val text = render(data)
+
+        // YOGA is followed by the RUNNING bullet, so its line ends at a newline.
+        assertTrue(text.contains("Training: YOGA, 30 min\n"))
+        assertTrue(text.contains("Training: RUNNING, 40 min, 320 kcal, avg HR 150 bpm, max HR 172 bpm, 6 km"))
+        // Word boundary so "320 kcal" does not count as a match for "0 kcal".
+        assertTrue(!Regex("""\b0 kcal""").containsMatchIn(text))
+        assertTrue(!text.contains("HR 0 bpm"))
+        assertTrue(!text.contains("no distance"))
+        // A not-yet-established baseline is omitted, not shown as 0 ms.
+        assertTrue(text.contains("(HRV RMSSD 55 ms)"))
+        assertTrue(!text.contains("baseline 0 ms"))
+    }
+
+    @Test
+    fun `daily nutrition totals carry an aggregate provenance label`() {
+        val data = sampleData.copy(
+            meals = emptyList(),
+            weightRecords = emptyList(),
+            dailySummaries = listOf(
+                ReportDailySummary(
+                    date = LocalDate(2024, 1, 11),
+                    totals = ReportNutritionTotals(calories = 2_000.0, protein = 100.0)
+                )
+            )
+        )
+
+        val text = render(data)
+
+        assertTrue(
+            text.contains(
+                "2000 kcal, 100 g protein, 0 g carbs, 0 g fat, 0 g fiber, 0 g sugar, 0 mg sodium " +
+                    "(${HealthReportBuilder.DAILY_TOTALS_PROVENANCE})"
+            )
+        )
+    }
 }

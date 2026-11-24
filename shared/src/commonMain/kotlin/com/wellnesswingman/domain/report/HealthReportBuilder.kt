@@ -29,6 +29,7 @@ class HealthReportBuilder {
                 "generated: ${generatedAt.toLocalDateTime(TimeZone.of(data.timeZoneId))}"
         )
         blocks += HealthReportBlock.Divider
+        val headerBlockCount = blocks.size
 
         data.profile?.let { appendProfile(blocks, it) }
 
@@ -74,7 +75,7 @@ class HealthReportBuilder {
                 "Responses are the user's own words; extracted food and factors are AI-estimated."
             )
             data.checkIns
-                .sortedWith(compareBy<ReportCheckIn> { it.date }.thenBy { it.slot })
+                .sortedWith(reportCheckInOrder)
                 .forEach { checkIn ->
                     appendCheckIn(blocks, checkIn)
                 }
@@ -122,7 +123,10 @@ class HealthReportBuilder {
             blocks += HealthReportBlock.Divider
         }
 
-        if (blocks.size <= 3) {
+        // Compared against the recorded header size rather than a literal, so
+        // adding a header block later cannot silently break empty detection.
+        val anySectionRendered = blocks.size > headerBlockCount
+        if (!anySectionRendered) {
             blocks += HealthReportBlock.Paragraph("No data was found in the selected range.")
         }
 
@@ -218,8 +222,20 @@ class HealthReportBuilder {
             }
         }
 
-        entry.insights?.summary?.takeIf { it.isNotBlank() }?.let {
-            blocks += HealthReportBlock.Paragraph("Summary: $it (AI-estimated)")
+        entry.insights?.let { insights ->
+            insights.summary?.takeIf { it.isNotBlank() }?.let {
+                blocks += HealthReportBlock.Paragraph("Summary: $it (AI-estimated)")
+            }
+            if (insights.positives.isNotEmpty()) {
+                blocks += HealthReportBlock.BulletList(
+                    insights.positives.map { "Positive: $it (AI-estimated)" }
+                )
+            }
+            if (insights.recommendations.isNotEmpty()) {
+                blocks += HealthReportBlock.BulletList(
+                    insights.recommendations.map { "Recommendation: $it (AI-estimated)" }
+                )
+            }
         }
     }
 
@@ -289,13 +305,26 @@ class HealthReportBuilder {
                 "score ${formatNumber(sleep.sleepScore)}/100"
         }
         day.nightlyRecharge?.let { recharge ->
+            // Polar reports a 0 baseline until ~28 days of data exist; that is
+            // "not yet established", not a measured 0 ms.
+            val baseline = recharge.baselineRmssd
+                .takeIf { it > 0 }
+                ?.let { ", baseline $it ms" }
+                ?: ""
             lines += "Nightly recharge: ANS ${formatNumber(recharge.ansStatus)} " +
-                "(HRV RMSSD ${recharge.hrvRmssd} ms, baseline ${recharge.baselineRmssd} ms)"
+                "(HRV RMSSD ${recharge.hrvRmssd} ms$baseline)"
         }
         day.trainingSessions.forEach { session ->
-            lines += "Training: ${session.sportId}, ${formatNumber(session.durationSeconds / 60.0)} min, " +
-                "${session.calories} kcal, avg HR ${session.averageHeartRate} bpm, " +
-                (if (session.distanceMeters > 0) "${formatNumber(session.distanceMeters / 1000.0)} km" else "no distance")
+            // Unrecorded metrics are null in the snapshot and simply omitted.
+            val parts = buildList {
+                add(session.sportId)
+                add("${formatNumber(session.durationSeconds / 60.0)} min")
+                session.calories?.let { add("$it kcal") }
+                session.averageHeartRate?.let { add("avg HR $it bpm") }
+                session.maxHeartRate?.let { add("max HR $it bpm") }
+                session.distanceMeters?.let { add("${formatNumber(it / 1000.0)} km") }
+            }
+            lines += "Training: ${parts.joinToString(", ")}"
         }
 
         if (lines.isNotEmpty()) {
@@ -323,7 +352,11 @@ class HealthReportBuilder {
             if (totals.mentionedItemCount > 0) {
                 parts += "${totals.mentionedItemCount} item(s) from check-in text (${formatNumber(totals.mentionedCalories)} kcal)"
             }
-            blocks += HealthReportBlock.BulletList(listOf("Daily totals: ${parts.joinToString(", ")}"))
+            // Stored totals are a merged sum and do not record which items were
+            // exact, so the label states that the figure may mix both kinds.
+            blocks += HealthReportBlock.BulletList(
+                listOf("Daily totals: ${parts.joinToString(", ")} ($DAILY_TOTALS_PROVENANCE)")
+            )
         }
         summary.balance?.let { balance ->
             val parts = listOfNotNull(
@@ -374,4 +407,9 @@ class HealthReportBuilder {
 
     private fun kotlinx.datetime.LocalDateTime.toTimeString(): String =
         "${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}"
+
+    internal companion object {
+        const val DAILY_TOTALS_PROVENANCE =
+            "aggregated; may combine AI estimates and exact nutritional profile values"
+    }
 }
