@@ -2,7 +2,6 @@ package com.wellnesswingman.data.googleexport
 
 import io.github.aakira.napier.Napier
 import io.ktor.client.HttpClient
-import io.ktor.client.call.body
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.delete
@@ -20,6 +19,7 @@ import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonArray
@@ -49,6 +49,7 @@ class GoogleDocsApiClient(
         private const val DRIVE_FILES_URL = "https://www.googleapis.com/drive/v3/files"
         private const val MAX_REQUESTS_PER_BATCH = 500
         private const val MAX_ERROR_DETAIL_LENGTH = 500
+        private val responseJson = Json { ignoreUnknownKeys = true }
 
         fun createDefaultHttpClient(): HttpClient = HttpClient {
             install(ContentNegotiation) {
@@ -66,11 +67,19 @@ class GoogleDocsApiClient(
             jsonBody(buildJsonObject { put("title", title) }.toString())
         }
         if (response.status.isSuccess()) {
-            val dto: CreateDocumentResponse = response.body()
-            if (dto.documentId.isBlank()) {
+            // Read the body as text first so a transport failure while reading
+            // stays a NetworkError (outer catch), while a 2xx body that cannot
+            // be decoded is a protocol problem, i.e. InvalidResponse.
+            val raw = response.bodyAsText()
+            val documentId = try {
+                responseJson.decodeFromString<CreateDocumentResponse>(raw).documentId
+            } catch (e: SerializationException) {
+                null
+            }
+            if (documentId.isNullOrBlank()) {
                 failure("createDocument response had no document id")
             } else {
-                Result.success(dto.documentId)
+                Result.success(documentId)
             }
         } else {
             failure(response, "createDocument")

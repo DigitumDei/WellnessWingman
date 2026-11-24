@@ -44,7 +44,10 @@ class GoogleDocsExportScreen : Screen {
                 Button(onClick = viewModel::gatherPreview, enabled = !state.isGathering && !state.isExporting, modifier = Modifier.fillMaxWidth()) { Text(if (state.isGathering) "Preparing preview…" else "Prepare local preview") }
                 state.preview?.let { preview -> Card(Modifier.fillMaxWidth()) { Text("Preview: ${preview.totalEntries} records selected. This exact local snapshot will be exported.", Modifier.padding(16.dp)) } }
                 if (!state.isAuthorizationAvailable) Text("Google Docs authorization is unavailable on this platform.", color = MaterialTheme.colorScheme.error)
-                Button(onClick = viewModel::requestConfirmation, enabled = state.snapshot?.isEmpty == false && !state.isExporting && state.isAuthorizationAvailable, modifier = Modifier.fillMaxWidth()) { Text(if (state.isExporting) "Creating document…" else "Create Google Doc") }
+                Button(onClick = viewModel::requestConfirmation, enabled = state.snapshot?.isEmpty == false && !state.isExporting && !state.awaitingConsent && state.isAuthorizationAvailable, modifier = Modifier.fillMaxWidth()) { Text(if (state.isExporting) "Creating document…" else "Create Google Doc") }
+                // isExporting is false while the system consent sheet is up, so
+                // this flag both explains the pause and blocks a second request.
+                if (state.awaitingConsent) Text("Waiting for you to confirm access in the Google consent screen…", style = MaterialTheme.typography.bodySmall)
                 state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 state.resultUrl?.let { url ->
                     Card(Modifier.fillMaxWidth()) {

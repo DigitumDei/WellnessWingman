@@ -83,9 +83,7 @@ class AndroidGoogleAuthService(
             }
             task.addOnFailureListener { e ->
                 val mapped = mapFailure(e)
-                if (mapped != GoogleAuthResult.ConsentRequired) {
-                    Napier.w("Google authorization failed (status redacted): $mapped")
-                }
+                Napier.w("Google authorization failed (status redacted): $mapped")
                 continuation.resume(mapped)
             }
         }
@@ -110,22 +108,28 @@ class AndroidGoogleAuthService(
         try {
             val result = authorizationClient.getAuthorizationResultFromIntent(intent)
             val token = result.accessToken
-            if (token.isNullOrBlank()) {
-                deliveredResult = GoogleAuthResult.Denied
+            // Store the outcome in one place only. requestAccess() consumes
+            // deliveredResult and promotes a Granted token to
+            // inMemoryAccessToken itself. Writing the token to both fields here
+            // left a copy in deliveredResult that clearAccessToken() never
+            // reached, so a later export could reuse an expired token.
+            deliveredResult = if (token.isNullOrBlank()) {
+                GoogleAuthResult.Denied
             } else {
-                inMemoryAccessToken = token
-                deliveredResult = GoogleAuthResult.Granted(token)
+                GoogleAuthResult.Granted(token)
             }
         } catch (t: Throwable) {
-            val mapped = mapFailure(t).takeIf { it != GoogleAuthResult.ConsentRequired }
-                ?: GoogleAuthResult.Denied
-            deliveredResult = mapped
+            deliveredResult = mapFailure(t)
         }
     }
 
-    /** Discards the in-memory token once the export is finished. */
+    /**
+     * Discards every copy of the token once the export is finished, including
+     * any consent outcome that was delivered but never consumed.
+     */
     fun clearInMemoryToken() {
         inMemoryAccessToken = null
+        deliveredResult = null
     }
 
     override fun clearAccessToken() {
@@ -136,13 +140,22 @@ class AndroidGoogleAuthService(
         .setRequestedScopes(listOf(Scope("https://www.googleapis.com/auth/drive.file")))
         .build()
 
+    /**
+     * Maps a thrown authorization failure to a result.
+     *
+     * Only an explicit cancellation is special-cased. Every other failure
+     * (network error, timeout, internal error, Play services problems) is
+     * retryable [GoogleAuthResult.Failed]. [GoogleAuthResult.Denied] is never
+     * produced here: a denial means authorization *completed* without a
+     * token, which the success paths above already report.
+     */
     private fun mapFailure(t: Throwable): GoogleAuthResult {
         val statusCode = (t as? com.google.android.gms.common.api.ApiException)
             ?.statusCode
-        return when (statusCode) {
-            CommonStatusCodes.CANCELED -> GoogleAuthResult.Cancelled
-            null -> GoogleAuthResult.Failed
-            else -> GoogleAuthResult.Denied
+        return if (statusCode == CommonStatusCodes.CANCELED) {
+            GoogleAuthResult.Cancelled
+        } else {
+            GoogleAuthResult.Failed
         }
     }
 }
