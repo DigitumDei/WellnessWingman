@@ -5,8 +5,11 @@ import com.wellnesswingman.data.googleexport.GoogleDocsBatchBuilder
 import com.wellnesswingman.data.googleexport.GoogleDocsError
 import com.wellnesswingman.domain.report.HealthReportDocument
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * Creates, populates, and cleans up a Google Doc, mapping the underlying API
@@ -42,11 +45,8 @@ class GoogleDocsExportService(
             apiClient.batchUpdate(accessToken, documentId, batch.requests)
         } catch (e: CancellationException) {
             // The document already exists, so cancellation would otherwise
-            // orphan an empty app-created Doc. Attempt best-effort cleanup
-            // outside the cancelled context before propagating.
-            withContext(NonCancellable) {
-                runCatching { deletePartialDocument(accessToken, documentId) }
-            }
+            // orphan an app-created Doc. Clean up before propagating.
+            deleteShieldedFromCancellation(accessToken, documentId)
             throw e
         }
         if (populateResult.isSuccess) {
@@ -88,18 +88,38 @@ class GoogleDocsExportService(
         documentId: String,
         cause: GoogleDocsError
     ): GoogleExportError {
-        val deleted = try {
-            deletePartialDocument(accessToken, documentId)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (_: Exception) {
-            false
-        }
+        // Shielded like the cancellation path: the first batch already holds
+        // the full report text, so an orphan here can contain health data.
+        val deleted = deleteShieldedFromCancellation(accessToken, documentId)
         return GoogleExportError.ApiFailure(
             failure = cause,
             partialDocumentId = documentId,
             cleanupDeleted = deleted
         )
+    }
+
+    /**
+     * Best-effort deletion of an app-created document that the caller's
+     * cancellation cannot interrupt (e.g. the user leaving the screen, which
+     * cancels `screenModelScope`), bounded by [CLEANUP_TIMEOUT] so a hung
+     * request cannot pin the coroutine. Returns true when the document is gone.
+     */
+    private suspend fun deleteShieldedFromCancellation(accessToken: String, documentId: String): Boolean =
+        // Dispatchers.Default pins the timeout to the wall clock. A timeout
+        // otherwise uses the caller's dispatcher clock, which in a virtual-time
+        // test scheduler jumps ahead while the network call is still running.
+        withContext(NonCancellable + Dispatchers.Default) {
+            try {
+                withTimeoutOrNull(CLEANUP_TIMEOUT) {
+                    deletePartialDocument(accessToken, documentId)
+                } ?: false
+            } catch (_: Exception) {
+                false
+            }
+        }
+
+    private companion object {
+        val CLEANUP_TIMEOUT = 10.seconds
     }
 
     private fun Throwable.toExportError(): GoogleExportError {

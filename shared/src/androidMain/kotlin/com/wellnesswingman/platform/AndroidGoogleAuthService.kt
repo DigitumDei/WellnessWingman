@@ -64,30 +64,50 @@ class AndroidGoogleAuthService(
             return result
         }
 
-        return suspendCancellableCoroutine { continuation ->
+        // The Play services listeners only *report* the outcome; they never
+        // touch service state. State is written below, after the coroutine
+        // resumes. suspendCancellableCoroutine guarantees prompt cancellation:
+        // if the caller was cancelled (e.g. the user left the screen), it
+        // throws instead of returning even when a listener fires later, so a
+        // late token from an abandoned request is simply dropped.
+        val outcome = suspendCancellableCoroutine { continuation ->
             val task = authorizationClient.authorize(buildRequest())
             task.addOnSuccessListener { resultBlocks ->
                 if (resultBlocks.hasResolution()) {
-                    _consentIntent.value = resultBlocks.pendingIntent?.intentSender
-                    continuation.resume(GoogleAuthResult.ConsentRequired)
+                    continuation.resume(
+                        AuthorizeOutcome(GoogleAuthResult.ConsentRequired, resultBlocks.pendingIntent?.intentSender)
+                    )
                 } else {
                     val token = resultBlocks.accessToken
                     if (token.isNullOrBlank()) {
                         Napier.w("Google authorization returned no access token")
-                        continuation.resume(GoogleAuthResult.Denied)
+                        continuation.resume(AuthorizeOutcome(GoogleAuthResult.Denied))
                     } else {
-                        inMemoryAccessToken = token
-                        continuation.resume(GoogleAuthResult.Granted(token))
+                        continuation.resume(AuthorizeOutcome(GoogleAuthResult.Granted(token)))
                     }
                 }
             }
             task.addOnFailureListener { e ->
                 val mapped = mapFailure(e)
                 Napier.w("Google authorization failed (status redacted): $mapped")
-                continuation.resume(mapped)
+                continuation.resume(AuthorizeOutcome(mapped))
             }
         }
+
+        // Reached only by a caller that is still active.
+        when (val result = outcome.result) {
+            is GoogleAuthResult.Granted -> inMemoryAccessToken = result.accessToken
+            GoogleAuthResult.ConsentRequired -> _consentIntent.value = outcome.consentIntent
+            else -> Unit
+        }
+        return outcome.result
     }
+
+    /** What one `authorize()` call produced, carried out of the listener untouched. */
+    private class AuthorizeOutcome(
+        val result: GoogleAuthResult,
+        val consentIntent: IntentSender? = null
+    )
 
     /** Launches the stored consent screen (hosted by the Activity). */
     fun consumeConsentIntent(): IntentSender? {

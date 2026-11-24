@@ -19,6 +19,9 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlin.test.Test
@@ -151,6 +154,37 @@ class GoogleDocsExportServiceTest {
         val failure = result.exceptionOrNull() as GoogleExportError.ApiFailure
         assertEquals("doc-1", failure.partialDocumentId)
         assertFalse(failure.cleanupDeleted)
+    }
+
+    @Test
+    fun `failure cleanup still deletes the document when the caller is cancelled mid-delete`() = runTest {
+        val deleteStarted = CompletableDeferred<Unit>()
+        val releaseDelete = CompletableDeferred<Unit>()
+        var deleteFinished = false
+        val client = createClient { request ->
+            when {
+                request.method == HttpMethod.Post && request.url.encodedPath == "/v1/documents" ->
+                    respond("""{"documentId":"doc-1"}""", HttpStatusCode.OK, jsonHeaders)
+                request.method == HttpMethod.Delete -> {
+                    deleteStarted.complete(Unit)
+                    releaseDelete.await()
+                    deleteFinished = true
+                    respond("", HttpStatusCode.OK)
+                }
+                else -> respond("""{"error":"rate limited"}""", HttpStatusCode.TooManyRequests, jsonHeaders)
+            }
+        }
+
+        // Stands in for screenModelScope: the user leaves while cleanup runs.
+        val export = launch(Dispatchers.Default) {
+            service(client).createAndPopulate("token", "Report", document)
+        }
+        deleteStarted.await()
+        export.cancel()
+        releaseDelete.complete(Unit)
+        export.join()
+
+        assertTrue(deleteFinished, "the DELETE must run to completion despite the cancellation")
     }
 
     @Test

@@ -15,6 +15,8 @@ import com.wellnesswingman.domain.report.HealthReportPreview
 import com.wellnesswingman.domain.report.HealthReportRequest
 import com.wellnesswingman.domain.report.HealthReportSection
 import com.wellnesswingman.domain.report.toPreview
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -40,35 +42,75 @@ class GoogleDocsExportViewModel(
     ))
     val uiState: StateFlow<GoogleDocsExportUiState> = _uiState.asStateFlow()
 
-    fun updateStartDate(value: String) = _uiState.update { it.copy(startDate = value).withParametersChanged() }
-    fun updateEndDate(value: String) = _uiState.update { it.copy(endDate = value).withParametersChanged() }
-    fun selectPreset(preset: HealthReportPreset) = _uiState.update {
-        it.copy(preset = preset, selectedSections = preset.defaultSections()).withParametersChanged()
+    /** The in-flight preview gather, if any. */
+    private var gatherJob: Job? = null
+
+    /**
+     * Bumped on every parameter edit. A gather records the revision it started
+     * under and publishes only if it still matches, so a result gathered for
+     * old parameters can never become the exportable snapshot.
+     */
+    private var parametersRevision = 0
+
+    fun updateStartDate(value: String) = changeParameters { it.copy(startDate = value) }
+    fun updateEndDate(value: String) = changeParameters { it.copy(endDate = value) }
+    fun selectPreset(preset: HealthReportPreset) = changeParameters {
+        it.copy(preset = preset, selectedSections = preset.defaultSections())
     }
-    fun toggleSection(section: HealthReportSection) = _uiState.update {
+    fun toggleSection(section: HealthReportSection) = changeParameters {
         val next = it.selectedSections.toMutableSet().apply { if (!add(section)) remove(section) }
-        it.copy(preset = HealthReportPreset.CUSTOM, selectedSections = next).withParametersChanged()
+        it.copy(preset = HealthReportPreset.CUSTOM, selectedSections = next)
     }
 
     /**
      * Editing any report parameter invalidates everything derived from the old
-     * ones, including the previous export's link: leaving it visible would
-     * suggest the new parameters already produced that document.
+     * ones: an in-flight gather is cancelled and its result discarded, and the
+     * previous export's link is cleared so it can't be mistaken for output of
+     * the new parameters.
      */
-    private fun GoogleDocsExportUiState.withParametersChanged() =
-        copy(error = null, preview = null, snapshot = null, resultUrl = null)
+    private fun changeParameters(edit: (GoogleDocsExportUiState) -> GoogleDocsExportUiState) {
+        parametersRevision++
+        gatherJob?.cancel()
+        gatherJob = null
+        _uiState.update {
+            edit(it).copy(
+                error = null,
+                preview = null,
+                snapshot = null,
+                resultUrl = null,
+                isGathering = false
+            )
+        }
+    }
     fun dismissConfirmation() = _uiState.update { it.copy(showConfirmation = false) }
     fun clearResult() = _uiState.update { it.copy(resultUrl = null, error = null) }
 
-    fun gatherPreview() = screenModelScope.launch {
-        val request = requestOrError() ?: return@launch
+    fun gatherPreview() {
+        val request = requestOrError() ?: return
+        val revision = parametersRevision
+        gatherJob?.cancel()
         _uiState.update { it.copy(isGathering = true, error = null, resultUrl = null) }
-        runCatching { gatherer.gather(request) }
-            .onSuccess { data ->
-                if (data.isEmpty) _uiState.update { it.copy(isGathering = false, snapshot = data, preview = data.toPreview(), error = "No selected data was found. Google authorization was not started.") }
-                else _uiState.update { it.copy(isGathering = false, snapshot = data, preview = data.toPreview()) }
+        gatherJob = screenModelScope.launch {
+            // Not runCatching: it would swallow the CancellationException from
+            // a parameter edit and report it as a gather failure.
+            val outcome = try {
+                Result.success(gatherer.gather(request))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Result.failure(e)
             }
-            .onFailure { _uiState.update { state -> state.copy(isGathering = false, error = "Unable to prepare the local preview.") } }
+            // The parameters moved on while this gather ran; its data
+            // describes a selection the user no longer wants to share.
+            if (revision != parametersRevision) return@launch
+
+            outcome
+                .onSuccess { data ->
+                    if (data.isEmpty) _uiState.update { it.copy(isGathering = false, snapshot = data, preview = data.toPreview(), error = "No selected data was found. Google authorization was not started.") }
+                    else _uiState.update { it.copy(isGathering = false, snapshot = data, preview = data.toPreview()) }
+                }
+                .onFailure { _uiState.update { state -> state.copy(isGathering = false, error = "Unable to prepare the local preview.") } }
+        }
     }
 
     fun requestConfirmation() = _uiState.update {

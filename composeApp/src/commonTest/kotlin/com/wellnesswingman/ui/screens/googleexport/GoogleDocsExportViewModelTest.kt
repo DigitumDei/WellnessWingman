@@ -19,8 +19,11 @@ import io.mockk.every
 import io.mockk.just
 import io.mockk.mockk
 import io.mockk.verify
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
 import kotlinx.datetime.LocalDate
@@ -183,6 +186,52 @@ class GoogleDocsExportViewModelTest {
         coVerify(exactly = 0) { export.createAndPopulate(any(), any(), any(), any()) }
         // The token is still released on the early return.
         verify(exactly = 1) { auth.clearAccessToken() }
+    }
+
+    private fun viewModelWithGatherer(gatherer: HealthReportGatherer) = GoogleDocsExportViewModel(
+        gatherer = gatherer,
+        builder = HealthReportBuilder(),
+        authService = grantingAuth(),
+        exportService = mockk(relaxed = true)
+    )
+
+    @Test
+    fun `editing parameters during a gather cancels it without a false error`() {
+        val gate = CompletableDeferred<HealthReportData>()
+        val gatherer = mockk<HealthReportGatherer>()
+        coEvery { gatherer.gather(any()) } coAnswers { gate.await() }
+        val vm = viewModelWithGatherer(gatherer)
+
+        vm.gatherPreview()
+        assertTrue(vm.uiState.value.isGathering)
+        vm.toggleSection(HealthReportSection.CHECK_INS)
+        gate.complete(nonEmptyData())
+
+        val state = vm.uiState.value
+        assertNull(state.snapshot)
+        assertNull(state.preview)
+        assertFalse(state.isGathering)
+        // The cancellation must not surface as "Unable to prepare the local preview."
+        assertNull(state.error)
+    }
+
+    @Test
+    fun `a gather that finishes after parameters change never becomes the snapshot`() {
+        val gate = CompletableDeferred<HealthReportData>()
+        val gatherer = mockk<HealthReportGatherer>()
+        // Ignores cancellation and returns anyway, so only the revision check
+        // stands between this stale data and the export button.
+        coEvery { gatherer.gather(any()) } coAnswers { withContext(NonCancellable) { gate.await() } }
+        val vm = viewModelWithGatherer(gatherer)
+
+        vm.gatherPreview()
+        vm.updateEndDate("2024-01-11")
+        gate.complete(nonEmptyData())
+
+        val state = vm.uiState.value
+        assertNull(state.snapshot)
+        assertNull(state.preview)
+        assertFalse(state.isGathering)
     }
 
     @Test
