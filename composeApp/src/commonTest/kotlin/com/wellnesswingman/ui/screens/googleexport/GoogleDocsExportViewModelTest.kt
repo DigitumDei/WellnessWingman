@@ -3,17 +3,22 @@ package com.wellnesswingman.ui.screens.googleexport
 import com.wellnesswingman.data.googleexport.GoogleDocsError
 import com.wellnesswingman.domain.googleexport.GoogleAuthResult
 import com.wellnesswingman.domain.googleexport.GoogleAuthService
+import com.wellnesswingman.domain.googleexport.GoogleDocsExportResult
 import com.wellnesswingman.domain.googleexport.GoogleDocsExportService
 import com.wellnesswingman.domain.googleexport.GoogleExportError
 import com.wellnesswingman.domain.report.HealthReportBuilder
 import com.wellnesswingman.domain.report.HealthReportData
 import com.wellnesswingman.domain.report.HealthReportGatherer
+import com.wellnesswingman.domain.report.HealthReportPreset
+import com.wellnesswingman.domain.report.HealthReportSection
 import com.wellnesswingman.domain.report.ReportMealEntry
 import io.mockk.Runs
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.just
 import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.resetMain
@@ -24,6 +29,9 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -41,10 +49,11 @@ class GoogleDocsExportViewModelTest {
 
     private fun viewModel(
         auth: GoogleAuthService,
-        export: GoogleDocsExportService = mockk(relaxed = true)
+        export: GoogleDocsExportService = mockk(relaxed = true),
+        snapshot: HealthReportData = nonEmptyData()
     ): GoogleDocsExportViewModel {
         val gatherer = mockk<HealthReportGatherer>(relaxed = true)
-        coEvery { gatherer.gather(any()) } returns nonEmptyData()
+        coEvery { gatherer.gather(any()) } returns snapshot
         return GoogleDocsExportViewModel(
             gatherer = gatherer,
             builder = HealthReportBuilder(),
@@ -156,5 +165,48 @@ class GoogleDocsExportViewModelTest {
         vm.resumeAfterConsent()
 
         assertEquals("Google authorization was cancelled.", vm.uiState.value.error)
+    }
+
+    @Test
+    fun `a report build failure is surfaced as an error, not thrown`() {
+        val export = mockk<GoogleDocsExportService>(relaxed = true)
+        val auth = grantingAuth()
+        // An unknown zone id makes the builder's TimeZone.of(...) throw.
+        val vm = viewModel(auth = auth, export = export, snapshot = nonEmptyData().copy(timeZoneId = "Not/AZone"))
+        prepareSnapshot(vm)
+
+        vm.createGoogleDocument()
+
+        val state = vm.uiState.value
+        assertEquals("Unable to build the report document.", state.error)
+        assertFalse(state.isExporting)
+        coVerify(exactly = 0) { export.createAndPopulate(any(), any(), any(), any()) }
+        // The token is still released on the early return.
+        verify(exactly = 1) { auth.clearAccessToken() }
+    }
+
+    @Test
+    fun `editing report parameters clears the previous export link`() {
+        val export = mockk<GoogleDocsExportService>(relaxed = true)
+        coEvery { export.createAndPopulate(any(), any(), any(), any()) } returns Result.success(
+            GoogleDocsExportResult(title = "Report", documentId = "doc-1", url = GoogleDocsExportResult.urlOf("doc-1"))
+        )
+        val vm = viewModel(auth = grantingAuth(), export = export)
+
+        val edits: List<(GoogleDocsExportViewModel) -> Unit> = listOf(
+            { it.updateStartDate("2024-01-09") },
+            { it.updateEndDate("2024-01-11") },
+            { it.selectPreset(HealthReportPreset.COMPLETE_HEALTH_RECORD) },
+            { it.toggleSection(HealthReportSection.WEIGHT_HISTORY) }
+        )
+        edits.forEach { edit ->
+            prepareSnapshot(vm)
+            vm.createGoogleDocument()
+            assertNotNull(vm.uiState.value.resultUrl)
+
+            edit(vm)
+
+            assertNull(vm.uiState.value.resultUrl)
+        }
     }
 }

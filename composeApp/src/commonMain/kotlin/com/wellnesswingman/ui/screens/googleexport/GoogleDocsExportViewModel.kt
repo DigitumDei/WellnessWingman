@@ -40,15 +40,23 @@ class GoogleDocsExportViewModel(
     ))
     val uiState: StateFlow<GoogleDocsExportUiState> = _uiState.asStateFlow()
 
-    fun updateStartDate(value: String) = _uiState.update { it.copy(startDate = value, error = null, preview = null, snapshot = null) }
-    fun updateEndDate(value: String) = _uiState.update { it.copy(endDate = value, error = null, preview = null, snapshot = null) }
+    fun updateStartDate(value: String) = _uiState.update { it.copy(startDate = value).withParametersChanged() }
+    fun updateEndDate(value: String) = _uiState.update { it.copy(endDate = value).withParametersChanged() }
     fun selectPreset(preset: HealthReportPreset) = _uiState.update {
-        it.copy(preset = preset, selectedSections = preset.defaultSections(), error = null, preview = null, snapshot = null)
+        it.copy(preset = preset, selectedSections = preset.defaultSections()).withParametersChanged()
     }
     fun toggleSection(section: HealthReportSection) = _uiState.update {
         val next = it.selectedSections.toMutableSet().apply { if (!add(section)) remove(section) }
-        it.copy(preset = HealthReportPreset.CUSTOM, selectedSections = next, error = null, preview = null, snapshot = null)
+        it.copy(preset = HealthReportPreset.CUSTOM, selectedSections = next).withParametersChanged()
     }
+
+    /**
+     * Editing any report parameter invalidates everything derived from the old
+     * ones, including the previous export's link: leaving it visible would
+     * suggest the new parameters already produced that document.
+     */
+    private fun GoogleDocsExportUiState.withParametersChanged() =
+        copy(error = null, preview = null, snapshot = null, resultUrl = null)
     fun dismissConfirmation() = _uiState.update { it.copy(showConfirmation = false) }
     fun clearResult() = _uiState.update { it.copy(resultUrl = null, error = null) }
 
@@ -79,7 +87,13 @@ class GoogleDocsExportViewModel(
         _uiState.update { it.copy(isExporting = true, awaitingConsent = false, error = null) }
         when (val auth = authService.requestAccess()) {
             is GoogleAuthResult.Granted -> try {
-                val document = builder.build(snapshot, Clock.System.now())
+                // build() is pure, but guard it like every other step so an
+                // unexpected failure becomes a friendly error, not a crash.
+                val document = runCatching { builder.build(snapshot, Clock.System.now()) }
+                    .getOrElse {
+                        _uiState.update { it.copy(isExporting = false, error = "Unable to build the report document.") }
+                        return@launch
+                    }
                 exportService.createAndPopulate(auth.accessToken, "WellnessWingman health report", document)
                     .onSuccess { result -> _uiState.update { it.copy(isExporting = false, resultUrl = result.url) } }
                     .onFailure { failure ->

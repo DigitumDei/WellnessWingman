@@ -88,35 +88,16 @@ data class GoogleDocsExportResult(
 /**
  * Error carrying the reason and, when applicable, whether a partially-populated
  * app-created document exists so the UI can surface it clearly.
+ *
+ * Authorization outcomes (cancelled, denied, unavailable) are modelled by
+ * [GoogleAuthResult] and never reach this type; API failures are categorized
+ * by the wrapped [GoogleDocsError]. Kept sealed so a future category is an
+ * exhaustive-`when` compile error rather than a silent fallthrough.
  */
 sealed class GoogleExportError(
     message: String,
     cause: Throwable? = null
 ) : Exception(message, cause) {
-
-    /** No data was selected/gathered, so authorization and upload are skipped. */
-    data object EmptySelection : GoogleExportError("Nothing was selected to export")
-
-    /** Authorization is not available on this platform. */
-    data object UnsupportedPlatform : GoogleExportError("Exporting to Google Docs is not supported on this platform")
-
-    /** The user cancelled the consent screen. */
-    data object Cancelled : GoogleExportError("Google authorization was cancelled")
-
-    /** The user denied the requested scopes. */
-    data object Denied : GoogleExportError("Google authorization was denied")
-
-    /** Network-level failure reaching Google (offline, timeout, DNS). */
-    data class Offline(override val cause: Throwable) : GoogleExportError("No network connection while reaching Google", cause)
-
-    /** A transient server-side failure (rate limit, 5xx) that the user may retry. */
-    data class Transient(val detail: String) : GoogleExportError("Google is temporarily unavailable: $detail")
-
-    /** The request was refused (expired/invalid token, 401/403). */
-    data class NotAuthorized(val detail: String) : GoogleExportError("Google rejected the authorization: $detail")
-
-    /** The server returned an unexpected response. */
-    data class InvalidResponse(val detail: String) : GoogleExportError("Google returned an unexpected response: $detail")
 
     /**
      * A categorized failure that wraps an underlying [GoogleDocsError]. When a

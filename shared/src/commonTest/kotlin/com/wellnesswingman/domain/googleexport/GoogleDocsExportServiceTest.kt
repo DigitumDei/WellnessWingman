@@ -154,6 +154,41 @@ class GoogleDocsExportServiceTest {
     }
 
     @Test
+    fun `malformed 2xx create response is an invalid response, not a network error`() = runTest {
+        var batchCalls = 0
+        val client = createClient { request ->
+            when {
+                request.method == HttpMethod.Post && request.url.encodedPath == "/v1/documents" ->
+                    respond("""{"documentId": """, HttpStatusCode.OK, jsonHeaders)
+                else -> {
+                    batchCalls += 1
+                    respond("", HttpStatusCode.OK)
+                }
+            }
+        }
+
+        val result = service(client).createAndPopulate("token", "Report", document)
+
+        val failure = result.exceptionOrNull() as GoogleExportError.ApiFailure
+        assertIs<GoogleDocsError.InvalidResponse>(failure.failure)
+        assertFalse(failure.toUserMessage().contains("network", ignoreCase = true))
+        // No document id was ever obtained, so nothing is populated or cleaned up.
+        assertEquals(0, batchCalls)
+    }
+
+    @Test
+    fun `2xx create response missing the document id is an invalid response`() = runTest {
+        val client = createClient { request ->
+            respond("""{"title":"Report"}""", HttpStatusCode.OK, jsonHeaders)
+        }
+
+        val result = service(client).createAndPopulate("token", "Report", document)
+
+        val failure = result.exceptionOrNull() as GoogleExportError.ApiFailure
+        assertIs<GoogleDocsError.InvalidResponse>(failure.failure)
+    }
+
+    @Test
     fun `cancelled delete during cleanup rethrows cancellation without a result`() = runTest {
         val client = createClient { request ->
             when {
